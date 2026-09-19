@@ -858,14 +858,16 @@ export class GroupDO extends DurableObject<Env> {
     const snapshot = this.getGroupSnapshot();
     this.send(ws, WsServerEvents.SNAPSHOT, snapshot);
 
-    // Send active voice participants across channels
-    for (const [chanId, room] of this.voiceRooms.entries()) {
-      if (room.size > 0) {
-        this.send(ws, WsServerEvents.VOICE_PARTICIPANTS, {
-          channelId: chanId,
-          participants: Array.from(room.values()),
-        });
-      }
+    // Send active voice participants across all voice channels (including empty ones to clear stale client state)
+    const voiceChanRows = [
+      ...this.sql.exec(`SELECT id FROM channels WHERE type = 'voice'`),
+    ] as { id: string }[];
+    for (const chan of voiceChanRows) {
+      const room = this.voiceRooms.get(chan.id);
+      this.send(ws, WsServerEvents.VOICE_PARTICIPANTS, {
+        channelId: chan.id,
+        participants: room ? Array.from(room.values()) : [],
+      });
     }
 
     // Broadcast presence changed to online

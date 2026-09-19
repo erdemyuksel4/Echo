@@ -249,6 +249,11 @@ Bu dosya her faz ve görev sonunda güncellenir.
   - Masaüstü konfigürasyonu (`config.ts`): Canlı Cloudflare Workers uç noktasına bağlandı.
   - Windows Kurulum Paketi: Canlı sunucu adresi gömülü olarak `Echo Setup 0.1.0.exe` derlendi.
   - GitHub: Proje tüm dallarıyla `https://github.com/erdemyuksel4/Echo` deposuna yüklendi ve `v0.1.0` release etiketi açıldı.
+- [x] **Ses Kanalı Kalıcılığı ve Katılımcı Senkronizasyonu İyileştirmeleri:**
+  - **Arka Planda Kesintisiz Ses (Discord Davranışı):** Kullanıcı bir sunucuda ses kanalındayken başka sunuculara veya Direkt Mesajlara (DM) geçtiğinde ses bağlantısının kesilmesini önlemek amacıyla çift soket / arka plan ses soketi mimarisi (`websocket.ts`) kuruldu. Kullanıcı başka sunucudayken ses sinyalleşmesi ve WebRTC mesh iletişimi kesintisiz devam eder.
+  - **Global Ses Paneli Bilgilendirmesi:** `VoicePanel` başka sunucularda veya DM'deyken de sol altta bağlı kalır; kullanıcının hangi sunucu ve kanalda olduğunu açıkça belirtir (`{channelName} / {groupName}`).
+  - **Katılımcı Senkronizasyonu & Boş Oda Temizliği:** `GroupDO.handleAuth` metodunda tüm ses kanallarının katılımcı listeleri (boş odalar için `[]` dahil) gönderilerek istemcideki eski/yetim katılımcı listeleri temizlendi.
+  - **Anında Çıkış ve Kolaylık (Toggle):** `webrtcService.leave()` çağrıldığında kullanıcının kendi kaydı yerel Zustand store'dan anında silinir; `ChannelList` üzerinde aktif ses kanalına tekrar tıklandığında kolayca bağlantıyı kesme (toggle leave) özelliği eklendi.
 
 
 

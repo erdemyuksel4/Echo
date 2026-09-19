@@ -86,7 +86,7 @@ describe('Live Group Creation & Join Flow', () => {
         reject(new Error(`WebSocket timeout. authOk=${authOk}, snapshotReceived=${snapshotReceived}`));
       }, 10000);
 
-      ws.onopen = () => {
+      ws.addEventListener('open', () => {
         console.log('WS OPEN, sending auth...');
         const authTs = Date.now();
         const authPayload = `echo-auth|${createData.groupId}|${authTs}`;
@@ -105,9 +105,9 @@ describe('Live Group Creation & Join Flow', () => {
             },
           }),
         );
-      };
+      });
 
-      ws.onmessage = (event) => {
+      ws.addEventListener('message', (event: MessageEvent) => {
         console.log('WS MSG:', event.data);
         try {
           const msg = JSON.parse(event.data as string);
@@ -121,19 +121,19 @@ describe('Live Group Creation & Join Flow', () => {
         } catch (e) {
           console.error('Parse error:', e);
         }
-      };
+      });
 
-      ws.onerror = (err) => {
+      ws.addEventListener('error', (err: Event) => {
         console.error('WS ERR:', err);
-      };
+      });
 
-      ws.onclose = (event) => {
+      ws.addEventListener('close', (event: CloseEvent) => {
         console.log('WS CLOSE:', event.code, event.reason);
         clearTimeout(timeout);
         if (!authOk || !snapshotReceived) {
           reject(new Error(`WS closed early with code ${event.code}: ${event.reason}`));
         }
-      };
+      });
     });
 
     const wsResult = await wsPromise;

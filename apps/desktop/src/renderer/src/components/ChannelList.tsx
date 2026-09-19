@@ -479,8 +479,15 @@ export const ChannelList: React.FC = () => {
                 <div key={channel.id} className="space-y-0.5">
                   <button
                     onClick={() => {
-                      if (!isVoiceActive) {
-                        void webrtcService.join(channel.id, channel.name);
+                      if (!isVoiceActive && activeGroupMeta) {
+                        void webrtcService.join(
+                          activeGroupMeta.id,
+                          activeGroupMeta.name,
+                          channel.id,
+                          channel.name,
+                        );
+                      } else if (isVoiceActive) {
+                        webrtcService.leave();
                       }
                     }}
                     className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs font-medium transition group ${

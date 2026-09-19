@@ -4,6 +4,8 @@ import type { VoiceParticipant, PeerDiagnosticsStats } from '@echo/shared';
 export type VoiceInputMode = 'vad' | 'ptt';
 
 export interface VoiceState {
+  currentGroupId: string | null;
+  currentGroupName: string | null;
   currentChannelId: string | null;
   currentChannelName: string | null;
   connectionStatus: 'disconnected' | 'connecting' | 'connected';
@@ -27,7 +29,12 @@ export interface VoiceState {
   isDiagnosticsOpen: boolean;
 
   // Actions
-  setConnecting: (channelId: string, channelName: string) => void;
+  setConnecting: (
+    groupId: string,
+    groupName: string,
+    channelId: string,
+    channelName: string,
+  ) => void;
   setConnected: (channelId: string) => void;
   setDisconnected: () => void;
   setMuted: (muted: boolean) => void;
@@ -88,6 +95,8 @@ const getInitialPttReleaseDelay = (): number => {
 };
 
 export const useVoiceStore = create<VoiceState>((set) => ({
+  currentGroupId: null,
+  currentGroupName: null,
   currentChannelId: null,
   currentChannelName: null,
   connectionStatus: 'disconnected',
@@ -106,8 +115,10 @@ export const useVoiceStore = create<VoiceState>((set) => ({
   diagnostics: {},
   isDiagnosticsOpen: false,
 
-  setConnecting: (channelId, channelName) =>
+  setConnecting: (groupId, groupName, channelId, channelName) =>
     set({
+      currentGroupId: groupId,
+      currentGroupName: groupName,
       currentChannelId: channelId,
       currentChannelName: channelName,
       connectionStatus: 'connecting',
@@ -122,6 +133,8 @@ export const useVoiceStore = create<VoiceState>((set) => ({
 
   setDisconnected: () =>
     set({
+      currentGroupId: null,
+      currentGroupName: null,
       currentChannelId: null,
       currentChannelName: null,
       connectionStatus: 'disconnected',

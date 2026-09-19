@@ -31,6 +31,7 @@ class WebRTCVoiceService {
     { urls: 'stun:stun.l.google.com:19302' },
   ];
 
+  private currentGroupId: string | null = null;
   private currentChannelId: string | null = null;
   private lastSpeakingState = false;
   private speakingSilenceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -53,7 +54,12 @@ class WebRTCVoiceService {
     }
   }
 
-  async join(channelId: string, channelName: string): Promise<void> {
+  async join(
+    groupId: string,
+    groupName: string,
+    channelId: string,
+    channelName: string,
+  ): Promise<void> {
     const voiceStore = useVoiceStore.getState();
 
     // If already in a channel, leave first
@@ -61,8 +67,9 @@ class WebRTCVoiceService {
       this.leave();
     }
 
+    this.currentGroupId = groupId;
     this.currentChannelId = channelId;
-    voiceStore.setConnecting(channelId, channelName);
+    voiceStore.setConnecting(groupId, groupName, channelId, channelName);
 
     try {
       // 1. Get microphone stream with Echo cancellation & Noise suppression
@@ -88,7 +95,7 @@ class WebRTCVoiceService {
       this.setupVAD(this.localStream);
 
       // 3. Inform server via WS
-      wsService.joinVoice(channelId);
+      wsService.joinVoice(groupId, channelId);
 
       // 4. Start diagnostics polling
       this.startDiagnostics();
@@ -101,11 +108,18 @@ class WebRTCVoiceService {
   }
 
   leave(): void {
+    const voiceStore = useVoiceStore.getState();
+    const myUserId = useAuthStore.getState().identity?.userId;
+
     if (this.currentChannelId) {
-      wsService.leaveVoice(this.currentChannelId);
+      if (myUserId) {
+        voiceStore.removeChannelParticipant(this.currentChannelId, myUserId);
+      }
+      wsService.leaveVoice(this.currentChannelId, this.currentGroupId ?? undefined);
     }
 
     this.currentChannelId = null;
+    this.currentGroupId = null;
 
     // Stop VAD
     if (this.vadInterval) {

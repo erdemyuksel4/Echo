@@ -22,48 +22,85 @@ import { webrtcService } from './webrtc';
 import { p2pFileTransferService } from './p2pFileTransfer';
 import { screenShareTransport } from './screenShare/transport';
 
+interface ManagedSocket {
+  groupId: string;
+  ws: WebSocket;
+  pingInterval: ReturnType<typeof setInterval> | null;
+  reconnectTimeout: ReturnType<typeof setTimeout> | null;
+  reconnectAttempt: number;
+  isIntentionallyClosed: boolean;
+}
+
 class EchoWebSocketService {
-  private ws: WebSocket | null = null;
-  private currentGroupId: string | null = null;
-  private reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
-  private pingInterval: ReturnType<typeof setInterval> | null = null;
-  private reconnectAttempt = 0;
-  private isIntentionallyClosed = false;
+  private activeGroupId: string | null = null;
+  private sockets: Map<string, ManagedSocket> = new Map();
+  private lastTypingSentTime = 0;
 
   connect(groupId: string): void {
-    if (this.currentGroupId === groupId && this.ws && this.ws.readyState === WebSocket.OPEN) {
+    const prevActiveId = this.activeGroupId;
+    this.activeGroupId = groupId;
+
+    // If previous active group is NOT where we are in a voice channel, close its socket
+    const voiceGroupId = useVoiceStore.getState().currentGroupId;
+    if (prevActiveId && prevActiveId !== groupId && prevActiveId !== voiceGroupId) {
+      this.closeSocket(prevActiveId);
+    }
+
+    const existing = this.sockets.get(groupId);
+    if (existing && existing.ws.readyState === WebSocket.OPEN) {
+      useChatStore.getState().setConnectionStatus('connected');
       return;
     }
 
-    this.disconnect();
-    this.currentGroupId = groupId;
-    this.isIntentionallyClosed = false;
-
-    this.initSocket();
+    if (!existing || existing.ws.readyState >= WebSocket.CLOSING) {
+      this.initSocket(groupId);
+    }
   }
 
-  private initSocket(): void {
-    if (!this.currentGroupId) return;
+  private initSocket(groupId: string): ManagedSocket {
+    const prev = this.sockets.get(groupId);
+    if (prev) {
+      this.cleanupSocketTimers(prev);
+      if (prev.ws.readyState === WebSocket.OPEN || prev.ws.readyState === WebSocket.CONNECTING) {
+        prev.isIntentionallyClosed = true;
+        try {
+          prev.ws.close(1000, 'Re-initializing');
+        } catch {
+          // ignore
+        }
+      }
+    }
 
-    useChatStore.getState().setConnectionStatus('connecting');
+    if (groupId === this.activeGroupId) {
+      useChatStore.getState().setConnectionStatus('connecting');
+    }
 
-    const wsUrl = `${SERVER_WS_URL}/ws/group/${this.currentGroupId}`;
+    const wsUrl = `${SERVER_WS_URL}/ws/group/${groupId}`;
     const socket = new WebSocket(wsUrl);
-    this.ws = socket;
+
+    const managed: ManagedSocket = {
+      groupId,
+      ws: socket,
+      pingInterval: null,
+      reconnectTimeout: null,
+      reconnectAttempt: prev ? prev.reconnectAttempt : 0,
+      isIntentionallyClosed: false,
+    };
+    this.sockets.set(groupId, managed);
 
     socket.onopen = async () => {
-      if (this.ws !== socket) return;
-      this.reconnectAttempt = 0;
+      if (managed.ws !== socket) return;
+      managed.reconnectAttempt = 0;
 
       // Perform auth signature immediately
       try {
         const timestamp = Date.now();
-        const signed = await window.echoApi?.signAuth(this.currentGroupId!, timestamp);
+        const signed = await window.echoApi?.signAuth(groupId, timestamp);
         if (!signed) {
           throw new Error('İmzalama başarısız');
         }
 
-        this.send(WsClientEvents.AUTH, {
+        this.sendToGroup(groupId, WsClientEvents.AUTH, {
           userId: signed.userId,
           pubkey: signed.pubkey,
           ts: timestamp,
@@ -71,73 +108,86 @@ class EchoWebSocketService {
         });
 
         // Setup 30s ping
-        this.pingInterval = setInterval(() => {
-          if (this.ws?.readyState === WebSocket.OPEN) {
-            this.ws.send('ping');
+        managed.pingInterval = setInterval(() => {
+          if (managed.ws?.readyState === WebSocket.OPEN) {
+            managed.ws.send('ping');
           }
         }, 30_000);
       } catch (err) {
-        console.error('Failed to sign auth for WebSocket:', err);
+        console.error(`Failed to sign auth for WebSocket (${groupId}):`, err);
         socket.close(4001, 'Auth sign failed');
       }
     };
 
     socket.onmessage = (event) => {
-      if (this.ws !== socket) return;
+      if (managed.ws !== socket) return;
       if (event.data === 'pong') return; // Pong reply from DO hibernation auto-response
 
       try {
         const envelope: WsEnvelope = JSON.parse(event.data);
-        this.handleEvent(envelope);
+        this.handleEvent(groupId, envelope);
       } catch (err) {
-        console.warn('Failed to parse incoming WS message:', err);
+        console.warn(`Failed to parse incoming WS message (${groupId}):`, err);
       }
     };
 
     socket.onclose = (event) => {
-      if (this.ws !== socket) return;
-      this.cleanupSocket();
+      if (managed.ws !== socket) return;
+      this.cleanupSocketTimers(managed);
 
-      useChatStore.getState().setConnectionStatus('disconnected');
+      if (groupId === this.activeGroupId) {
+        useChatStore.getState().setConnectionStatus('disconnected');
+      }
 
-      if (!this.isIntentionallyClosed && event.code !== 4001 && event.code !== 4003) {
-        this.scheduleReconnect();
+      if (!managed.isIntentionallyClosed && event.code !== 4001 && event.code !== 4003) {
+        this.scheduleReconnect(groupId);
+      } else {
+        this.sockets.delete(groupId);
       }
     };
 
     socket.onerror = (err) => {
-      console.warn('WebSocket error:', err);
+      console.warn(`WebSocket error (${groupId}):`, err);
     };
+
+    return managed;
   }
 
-  private handleEvent(envelope: WsEnvelope): void {
+  private handleEvent(groupId: string, envelope: WsEnvelope): void {
     const chatStore = useChatStore.getState();
+    const isActive = groupId === this.activeGroupId;
 
     switch (envelope.t) {
       case WsServerEvents.AUTH_OK:
-        chatStore.setConnectionStatus('connected');
+        if (isActive) {
+          chatStore.setConnectionStatus('connected');
+        }
         break;
 
       case WsServerEvents.SNAPSHOT: {
-        const snapshot = envelope.d as GroupSnapshot;
-        chatStore.setSnapshot(
-          snapshot.group,
-          snapshot.channels,
-          snapshot.members,
-          snapshot.inviteCode,
-        );
+        if (isActive) {
+          const snapshot = envelope.d as GroupSnapshot;
+          chatStore.setSnapshot(
+            snapshot.group,
+            snapshot.channels,
+            snapshot.members,
+            snapshot.inviteCode,
+          );
 
-        // Fetch history for first active channel
-        const activeChanId = chatStore.activeChannelId;
-        if (activeChanId) {
-          this.fetchHistory(activeChanId);
+          // Fetch history for first active channel
+          const activeChanId = chatStore.activeChannelId;
+          if (activeChanId) {
+            this.fetchHistory(activeChanId);
+          }
         }
         break;
       }
 
       case WsServerEvents.MSG_NEW: {
         const message = envelope.d as Message;
-        chatStore.addMessage(message.channelId, message);
+        if (isActive) {
+          chatStore.addMessage(message.channelId, message);
+        }
 
         const currentUserId = useAuthStore.getState().identity?.userId;
         const currentUserName = useAuthStore.getState().identity?.displayName;
@@ -152,7 +202,7 @@ class EchoWebSocketService {
             currentUserName &&
             (message.content.includes(`@${currentUserName}`) || message.content.includes('@everyone'));
 
-          if (document.hidden || chatStore.activeChannelId !== message.channelId || isMentioned) {
+          if (document.hidden || !isActive || chatStore.activeChannelId !== message.channelId || isMentioned) {
             void window.echoApi?.showNotification({
               title: `${message.authorName} (${chanName})`,
               body: message.content.slice(0, 120),
@@ -167,87 +217,110 @@ class EchoWebSocketService {
       }
 
       case WsServerEvents.MSG_UPDATED: {
-        const data = envelope.d as {
-          channelId: string;
-          messageId: string;
-          content: string;
-          editedAt: number;
-        };
-        chatStore.updateMessage(data.channelId, data.messageId, data.content, data.editedAt);
+        if (isActive) {
+          const data = envelope.d as {
+            channelId: string;
+            messageId: string;
+            content: string;
+            editedAt: number;
+          };
+          chatStore.updateMessage(data.channelId, data.messageId, data.content, data.editedAt);
+        }
         break;
       }
 
       case WsServerEvents.MSG_DELETED: {
-        const data = envelope.d as { channelId: string; messageId: string };
-        chatStore.deleteMessage(data.channelId, data.messageId);
+        if (isActive) {
+          const data = envelope.d as { channelId: string; messageId: string };
+          chatStore.deleteMessage(data.channelId, data.messageId);
+        }
         break;
       }
 
       case WsServerEvents.REACT_UPDATED: {
-        const data = envelope.d as {
-          channelId: string;
-          messageId: string;
-          emoji: string;
-          reactions: Record<string, string[]>;
-        };
-        chatStore.updateReactions(data.channelId, data.messageId, data.reactions);
+        if (isActive) {
+          const data = envelope.d as {
+            channelId: string;
+            messageId: string;
+            emoji: string;
+            reactions: Record<string, string[]>;
+          };
+          chatStore.updateReactions(data.channelId, data.messageId, data.reactions);
+        }
         break;
       }
 
       case WsServerEvents.HISTORY_DATA: {
-        const data = envelope.d as { channelId: string; messages: Message[] };
-        chatStore.setHistory(data.channelId, data.messages);
+        if (isActive) {
+          const data = envelope.d as { channelId: string; messages: Message[] };
+          chatStore.setHistory(data.channelId, data.messages);
+        }
         break;
       }
 
       case WsServerEvents.TYPING_USER: {
-        const data = envelope.d as { channelId: string; displayName: string };
-        chatStore.setTypingUser(data.channelId, data.displayName);
+        if (isActive) {
+          const data = envelope.d as { channelId: string; displayName: string };
+          chatStore.setTypingUser(data.channelId, data.displayName);
+        }
         break;
       }
 
       case WsServerEvents.PRESENCE_CHANGED: {
-        const data = envelope.d as { userId: string; status: 'online' | 'idle' | 'offline' };
-        chatStore.setMemberPresence(data.userId, data.status);
+        if (isActive) {
+          const data = envelope.d as { userId: string; status: 'online' | 'idle' | 'offline' };
+          chatStore.setMemberPresence(data.userId, data.status);
+        }
         break;
       }
 
       case WsServerEvents.CHANNEL_CREATED: {
-        const channel = envelope.d as Channel;
-        chatStore.addChannel(channel);
+        if (isActive) {
+          const channel = envelope.d as Channel;
+          chatStore.addChannel(channel);
+        }
         break;
       }
 
       case WsServerEvents.CHANNEL_UPDATED: {
-        const data = envelope.d as { channelId: string; name: string };
-        chatStore.updateChannel(data.channelId, data.name);
+        if (isActive) {
+          const data = envelope.d as { channelId: string; name: string };
+          chatStore.updateChannel(data.channelId, data.name);
+        }
         break;
       }
 
       case WsServerEvents.CHANNEL_DELETED: {
-        const data = envelope.d as { channelId: string };
-        chatStore.removeChannel(data.channelId);
+        if (isActive) {
+          const data = envelope.d as { channelId: string };
+          chatStore.removeChannel(data.channelId);
+        }
         break;
       }
 
       case WsServerEvents.MEMBER_JOINED: {
-        const member = envelope.d as GroupMember;
-        chatStore.addMember(member);
+        if (isActive) {
+          const member = envelope.d as GroupMember;
+          chatStore.addMember(member);
+        }
         break;
       }
 
       case WsServerEvents.MEMBER_LEFT: {
-        const data = envelope.d as { groupId: string; userId: string };
-        chatStore.removeMember(data.userId);
+        if (isActive) {
+          const data = envelope.d as { groupId: string; userId: string };
+          chatStore.removeMember(data.userId);
+        }
         break;
       }
 
       case WsServerEvents.GROUP_DELETED: {
         const data = envelope.d as { groupId: string };
         chatStore.removeGroup(data.groupId);
-        if (useVoiceStore.getState().currentChannelId) {
+        if (useVoiceStore.getState().currentGroupId === data.groupId) {
           webrtcService.leave();
         }
+        this.closeSocket(data.groupId);
         break;
       }
 
@@ -285,12 +358,14 @@ class EchoWebSocketService {
           });
         }
 
-        webrtcService.handleUserJoined(
-          data.channelId,
-          data.userId,
-          data.displayName,
-          data.currentParticipants,
-        );
+        if (data.channelId === voiceStore.currentChannelId) {
+          webrtcService.handleUserJoined(
+            data.channelId,
+            data.userId,
+            data.displayName,
+            data.currentParticipants,
+          );
+        }
         break;
       }
 
@@ -371,7 +446,7 @@ class EchoWebSocketService {
 
       case WsServerEvents.ERROR: {
         const data = envelope.d as { code: string; message: string };
-        console.error('Server error:', data.code, data.message);
+        console.error(`Server error (${groupId}):`, data.code, data.message);
         break;
       }
     }
@@ -425,8 +500,6 @@ class EchoWebSocketService {
     });
   }
 
-  private lastTypingSentTime = 0;
-
   sendTyping(channelId: string): void {
     const now = Date.now();
     if (now - this.lastTypingSentTime < 3000) return; // En fazla 3 saniyede bir
@@ -453,16 +526,31 @@ class EchoWebSocketService {
     this.send(WsClientEvents.CHANNEL_DELETE, { channelId });
   }
 
-  joinVoice(channelId: string): void {
-    this.send(WsClientEvents.VOICE_JOIN, { channelId });
+  joinVoice(groupId: string, channelId: string): void {
+    let managed = this.sockets.get(groupId);
+    if (!managed || managed.ws.readyState !== WebSocket.OPEN) {
+      managed = this.initSocket(groupId);
+    }
+    this.sendToGroup(groupId, WsClientEvents.VOICE_JOIN, { channelId });
   }
 
-  leaveVoice(channelId: string): void {
-    this.send(WsClientEvents.VOICE_LEAVE, { channelId });
+  leaveVoice(channelId: string, targetGroupId?: string): void {
+    const gId = targetGroupId ?? useVoiceStore.getState().currentGroupId ?? this.activeGroupId;
+    if (gId) {
+      this.sendToGroup(gId, WsClientEvents.VOICE_LEAVE, { channelId });
+      // If user is currently browsing another group or DM, close this background voice socket
+      if (gId !== this.activeGroupId) {
+        setTimeout(() => {
+          this.closeSocket(gId);
+        }, 300);
+      }
+    }
   }
 
   sendVoiceSignal(channelId: string, targetUserId: string, signal: VoiceSignalData): void {
-    this.send(WsClientEvents.VOICE_SIGNAL, {
+    const gId = useVoiceStore.getState().currentGroupId ?? this.activeGroupId;
+    if (!gId) return;
+    this.sendToGroup(gId, WsClientEvents.VOICE_SIGNAL, {
       channelId,
       targetUserId,
       signal,
@@ -473,7 +561,9 @@ class EchoWebSocketService {
     channelId: string,
     state: { muted: boolean; deafened: boolean; speaking: boolean },
   ): void {
-    this.send(WsClientEvents.VOICE_STATE, {
+    const gId = useVoiceStore.getState().currentGroupId ?? this.activeGroupId;
+    if (!gId) return;
+    this.sendToGroup(gId, WsClientEvents.VOICE_STATE, {
       channelId,
       ...state,
     });
@@ -492,7 +582,9 @@ class EchoWebSocketService {
     mode: 'motion' | 'detail',
     hasAudio: boolean,
   ): void {
-    this.send(WsClientEvents.SHARE_START, {
+    const gId = useVoiceStore.getState().currentGroupId ?? this.activeGroupId;
+    if (!gId) return;
+    this.sendToGroup(gId, WsClientEvents.SHARE_START, {
       channelId,
       quality,
       mode,
@@ -501,11 +593,15 @@ class EchoWebSocketService {
   }
 
   sendShareStop(channelId: string): void {
-    this.send(WsClientEvents.SHARE_STOP, { channelId });
+    const gId = useVoiceStore.getState().currentGroupId ?? this.activeGroupId;
+    if (!gId) return;
+    this.sendToGroup(gId, WsClientEvents.SHARE_STOP, { channelId });
   }
 
   sendShareSignal(channelId: string, targetUserId: string, signal: unknown): void {
-    this.send(WsClientEvents.SHARE_SIGNAL, {
+    const gId = useVoiceStore.getState().currentGroupId ?? this.activeGroupId;
+    if (!gId) return;
+    this.sendToGroup(gId, WsClientEvents.SHARE_SIGNAL, {
       channelId,
       targetUserId,
       signal,
@@ -513,45 +609,80 @@ class EchoWebSocketService {
   }
 
   private send(type: string, data: unknown): void {
-    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+    if (this.activeGroupId) {
+      this.sendToGroup(this.activeGroupId, type, data);
+    }
+  }
+
+  private sendToGroup(groupId: string, type: string, data: unknown): void {
+    const managed = this.sockets.get(groupId);
+    if (managed && managed.ws.readyState === WebSocket.OPEN) {
       const payload: WsEnvelope = {
         v: 1,
         t: type,
         d: data,
       };
-      this.ws.send(JSON.stringify(payload));
+      managed.ws.send(JSON.stringify(payload));
     }
   }
 
-  private scheduleReconnect(): void {
-    this.reconnectAttempt++;
+  private scheduleReconnect(groupId: string): void {
+    const managed = this.sockets.get(groupId);
+    if (!managed) return;
+
+    managed.reconnectAttempt++;
     // Exponential backoff: 1s, 2s, 4s, 8s, 16s, capped at 30s
-    const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempt - 1), 30_000);
-    this.reconnectTimeout = setTimeout(() => {
-      this.initSocket();
+    const delay = Math.min(1000 * Math.pow(2, managed.reconnectAttempt - 1), 30_000);
+    managed.reconnectTimeout = setTimeout(() => {
+      this.initSocket(groupId);
     }, delay);
   }
 
-  private cleanupSocket(): void {
-    if (this.pingInterval) {
-      clearInterval(this.pingInterval);
-      this.pingInterval = null;
+  private cleanupSocketTimers(managed: ManagedSocket): void {
+    if (managed.pingInterval) {
+      clearInterval(managed.pingInterval);
+      managed.pingInterval = null;
     }
-    if (this.reconnectTimeout) {
-      clearTimeout(this.reconnectTimeout);
-      this.reconnectTimeout = null;
+    if (managed.reconnectTimeout) {
+      clearTimeout(managed.reconnectTimeout);
+      managed.reconnectTimeout = null;
     }
   }
 
-  disconnect(): void {
-    this.isIntentionallyClosed = true;
-    webrtcService.leave();
-    this.cleanupSocket();
-    if (this.ws) {
-      this.ws.close(1000, 'Intentional close');
-      this.ws = null;
+  private closeSocket(groupId: string): void {
+    const managed = this.sockets.get(groupId);
+    if (!managed) return;
+    managed.isIntentionallyClosed = true;
+    this.cleanupSocketTimers(managed);
+    if (managed.ws.readyState === WebSocket.OPEN || managed.ws.readyState === WebSocket.CONNECTING) {
+      try {
+        managed.ws.close(1000, 'Intentional close');
+      } catch {
+        // ignore
+      }
     }
-    this.currentGroupId = null;
+    this.sockets.delete(groupId);
+  }
+
+  disconnect(): void {
+    const prevActiveId = this.activeGroupId;
+    this.activeGroupId = null;
+    useChatStore.getState().setConnectionStatus('disconnected');
+
+    const voiceGroupId = useVoiceStore.getState().currentGroupId;
+    // Only close if we are NOT connected to a voice channel in this group!
+    if (prevActiveId && prevActiveId !== voiceGroupId) {
+      this.closeSocket(prevActiveId);
+    }
+  }
+
+  disconnectAll(): void {
+    this.activeGroupId = null;
+    webrtcService.leave();
+    for (const [groupId] of this.sockets) {
+      this.closeSocket(groupId);
+    }
+    this.sockets.clear();
   }
 }
 
