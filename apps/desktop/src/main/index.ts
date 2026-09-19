@@ -1,7 +1,7 @@
 import { existsSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import { app, shell, BrowserWindow, ipcMain } from 'electron';
+import { app, shell, BrowserWindow, ipcMain, Tray, Menu, nativeImage, Notification } from 'electron';
 import { electronApp, optimizer, is } from '@electron-toolkit/utils';
 import { APP_NAME, PROTOCOL_VERSION } from '@echo/shared';
 import { IdentityManager } from './identity';
@@ -10,6 +10,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 let mainWindow: BrowserWindow | null = null;
+let tray: Tray | null = null;
+let isQuitting = false;
 
 function getPreloadPath(): string {
   const cjsPath = join(__dirname, '../preload/index.cjs');
@@ -25,6 +27,49 @@ function getPreloadPath(): string {
   const jsPath = join(__dirname, '../preload/index.js');
   console.log('[Echo Main] Preload fallback (js):', jsPath, 'exists:', existsSync(jsPath));
   return jsPath;
+}
+
+function createTray(): void {
+  // 16x16 PNG fallback icon
+  const icon = nativeImage.createFromBuffer(
+    Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAAXNSR0IArs4c6QAAAElEQVQ4T2Nk+M/wnwEHQEQY1UAMjAYg2QCkGD3k8BmA1IBRAwZcAE6n49MAl214NUA3eWjQ4wYgN4fQo8gYq0GjBshhAACd4iIRfF9RMAAAAABJRU5ErkJggg==',
+      'base64',
+    ),
+  );
+
+  tray = new Tray(icon);
+  tray.setToolTip(APP_NAME);
+
+  const contextMenu = Menu.buildFromTemplate([
+    {
+      label: `${APP_NAME} Aç`,
+      click: () => {
+        if (mainWindow) {
+          if (mainWindow.isMinimized()) mainWindow.restore();
+          mainWindow.show();
+          mainWindow.focus();
+        }
+      },
+    },
+    { type: 'separator' },
+    {
+      label: 'Çıkış',
+      click: () => {
+        isQuitting = true;
+        app.quit();
+      },
+    },
+  ]);
+
+  tray.setContextMenu(contextMenu);
+  tray.on('double-click', () => {
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.show();
+      mainWindow.focus();
+    }
+  });
 }
 
 function createWindow(): void {
@@ -52,6 +97,14 @@ function createWindow(): void {
   mainWindow.on('ready-to-show', () => {
     if (mainWindow) {
       mainWindow.show();
+    }
+  });
+
+  // Minimize to tray on close if not quitting
+  mainWindow.on('close', (event) => {
+    if (!isQuitting) {
+      event.preventDefault();
+      mainWindow?.hide();
     }
   });
 
@@ -93,8 +146,13 @@ if (!gotTheLock) {
   app.on('second-instance', () => {
     if (mainWindow) {
       if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.show();
       mainWindow.focus();
     }
+  });
+
+  app.on('before-quit', () => {
+    isQuitting = true;
   });
 
   void app.whenReady().then(() => {
@@ -139,6 +197,37 @@ if (!gotTheLock) {
       return identityManager.signPayload(payload);
     });
 
+    // Handle Notification & Badge IPC
+    ipcMain.handle(
+      'desktop:notify',
+      (_, { title, body, silent }: { title: string; body: string; silent?: boolean }) => {
+        if (Notification.isSupported()) {
+          const notification = new Notification({
+            title,
+            body,
+            silent: Boolean(silent),
+          });
+          notification.on('click', () => {
+            if (mainWindow) {
+              if (mainWindow.isMinimized()) mainWindow.restore();
+              mainWindow.show();
+              mainWindow.focus();
+            }
+          });
+          notification.show();
+        }
+        return true;
+      },
+    );
+
+    ipcMain.handle('desktop:setBadge', (_, { count }: { count: number }) => {
+      if (app.setBadgeCount) {
+        app.setBadgeCount(count);
+      }
+      return true;
+    });
+
+    createTray();
     createWindow();
 
     app.on('activate', () => {

@@ -1,17 +1,25 @@
 import React, { useState } from 'react';
-import { Hash, Volume2, Plus, Share2, Check } from 'lucide-react';
+import { Hash, Volume2, Plus, Share2, Check, Settings } from 'lucide-react';
 import { useChatStore } from '../stores/useChatStore';
 import { useAuthStore } from '../stores/useAuthStore';
 import { wsService } from '../services/websocket';
+import { SettingsModal } from './SettingsModal';
 
 export const ChannelList: React.FC = () => {
   const { identity } = useAuthStore();
-  const { activeGroupMeta, channels, activeChannelId, setActiveChannel, defaultInviteCode } =
-    useChatStore();
+  const {
+    activeGroupMeta,
+    channels,
+    activeChannelId,
+    setActiveChannel,
+    defaultInviteCode,
+    unreadCounts,
+  } = useChatStore();
 
   const [copied, setCopied] = useState(false);
   const [showAddChannel, setShowAddChannel] = useState(false);
   const [newChannelName, setNewChannelName] = useState('');
+  const [showSettings, setShowSettings] = useState(false);
 
   if (!activeGroupMeta) {
     return (
@@ -52,7 +60,16 @@ export const ChannelList: React.FC = () => {
             </div>
             <div className="text-[10px] text-emerald-400">Çevrimiçi</div>
           </div>
+          <button
+            onClick={() => setShowSettings(true)}
+            className="rounded p-1.5 text-slate-400 hover:bg-slate-800 hover:text-white transition"
+            title="Ayarlar"
+          >
+            <Settings className="h-4 w-4" />
+          </button>
         </div>
+
+        <SettingsModal isOpen={showSettings} onClose={() => setShowSettings(false)} />
       </div>
     );
   }
@@ -130,6 +147,8 @@ export const ChannelList: React.FC = () => {
           <div className="mt-1 space-y-0.5">
             {textChannels.map((channel) => {
               const isActive = activeChannelId === channel.id;
+              const unread = unreadCounts[channel.id] ?? 0;
+
               return (
                 <button
                   key={channel.id}
@@ -143,8 +162,13 @@ export const ChannelList: React.FC = () => {
                       : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-200'
                   }`}
                 >
-                  <Hash className="h-4 w-4 text-slate-400" />
+                  <Hash className="h-4 w-4 text-slate-400 flex-shrink-0" />
                   <span className="truncate">{channel.name}</span>
+                  {unread > 0 && !isActive && (
+                    <span className="ml-auto rounded-full bg-indigo-600 px-1.5 py-0.2 text-[10px] font-bold text-white shadow">
+                      {unread}
+                    </span>
+                  )}
                 </button>
               );
             })}
@@ -185,7 +209,16 @@ export const ChannelList: React.FC = () => {
           <div className="truncate text-xs font-semibold text-white">{identity?.displayName}</div>
           <div className="text-[10px] text-emerald-400">Çevrimiçi</div>
         </div>
+        <button
+          onClick={() => setShowSettings(true)}
+          className="rounded p-1.5 text-slate-400 hover:bg-slate-800 hover:text-white transition"
+          title="Ayarlar"
+        >
+          <Settings className="h-4 w-4" />
+        </button>
       </div>
+
+      <SettingsModal isOpen={showSettings} onClose={() => setShowSettings(false)} />
     </div>
   );
 };

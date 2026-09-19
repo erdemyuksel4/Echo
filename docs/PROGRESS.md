@@ -8,7 +8,7 @@ Bu dosya her faz ve görev sonunda güncellenir.
 | ----- | --------------------------------------- | ---------- | ---------------------- | -------------------------------------------------------------------------- |
 | Faz 0 | İskelet (Monorepo, TS, Lint, Test, Dev) | Tamamlandı | `faz-0-iskelet`        | Monorepo, shared paket, sunucu ve masaüstü iskeleti kuruldu, testler geçti |
 | Faz 1 | Kimlik, grup, kanal, yazılı sohbet      | Tamamlandı | `faz-1-kimlik-sohbet`  | Ed25519 kimlik, safeStorage, GroupDO SQLite, WebSocket hibernation, UI    |
-| Faz 2 | Zengin mesajlaşma ve bildirim           | Başlanmadı | -                      | -                                                                          |
+| Faz 2 | Zengin mesajlaşma ve bildirim           | Tamamlandı | `faz-2-zengin-mesajlasma` | Yanıtla, düzenle, sil, emoji tepkisi, safe Markdown/spoiler, tray, ses, bildirim |
 | Faz 3 | Sesli sohbet ve TURN                    | Başlanmadı | -                      | -                                                                          |
 | Faz 4 | Medya                                   | Başlanmadı | -                      | -                                                                          |
 | Faz 5 | DM                                      | Başlanmadı | -                      | -                                                                          |
@@ -63,3 +63,31 @@ Bu dosya her faz ve görev sonunda güncellenir.
   - `pnpm lint`: Sıfır hata ile geçti.
   - `pnpm test`: 5 test dosyası, 13 testin tamamı (%100) geçti.
   - Gerçek `wrangler dev` sunucusuna canlı grup oluşturma ve davetle katılma testi başarıyla çalıştırıldı.
+
+## Faz 2 — Kabul Kriterleri ve Gerçekleşenler
+
+- [x] **Zengin Mesajlaşma (`@echo/shared`):**
+  - Mesaj şemasına yanıt (`replyTo`, `replyToAuthorName`, `replyToContent`), düzenleme (`editedAt`), silme (`deleted`) ve emoji tepkileri (`reactions: Record<string, string[]>`) alanları eklendi.
+  - Güvenli Markdown ayrıştırıcı (`parseMarkdownTokens`, `renderSafeHtml`): XSS açıklarına karşı (`<script>`, `onerror`, `javascript:`, `data:`) tam koruma.
+  - Discord tarzı biçimlendirme: Kalın (`**`), İtalik (`*` / `_`), Üstü çizili (`~~`), Satır içi kod (`` ` ``), Kod bloğu (```` ``` ````), Tıklanabilir Spoiler (`||...||`), Otomatik ve etiketli güvenli bağlantılar, `@kullanıcı` ve `@everyone` anmaları.
+- [x] **Sunucu Mimarisi (`apps/server`):**
+  - SQLite `reactions` tablosu (`message_id, user_id, emoji`).
+  - Mesaj tablosu şema göçü (`reply_to_author_name`, `reply_to_content`).
+  - `msg.edit` işleyicisi: Yalnızca mesaj sahibinin düzenleyebilmesi, anlık `msg.updated` yayını.
+  - `msg.delete` işleyicisi: Mesaj sahibi, kanal veya grup yöneticisinin silebilmesi, anlık `msg.deleted` yayını.
+  - `react.add` ve `react.remove` işleyicileri: Emoji tepkisi ekleme/çıkarma, anlık `react.updated` yayını.
+  - 90 günlük mesaj saklama ve yetim tepki temizliği için Cloudflare Durable Object `alarm()` rutini.
+- [x] **Masaüstü Entegrasyonu ve Arayüz (`apps/desktop`):**
+  - Mesaj üzerine gelindiğinde çıkan Discord tarzı işlem barı (Hızlı emojiler, Yanıtla, Düzenle, Sil).
+  - Giriş kutusu üzerinde alıntılı yanıt önizleme çubuğu.
+  - Satır içi mesaj düzenleme kutusu (Enter ile kaydet, Esc ile iptal) ve `(düzenlendi)` etiketi.
+  - Tıklanabilir tepki rozetleri (ekleme/kaldırma ve sayaç gösterimi).
+  - Web Audio API ile harici dosyasız hafif ve şık bildirim zili (`soundService`).
+  - Windows sistem bildirimleri (`Notification`) ve görev çubuğu rozet sayısı (`setBadgeCount`).
+  - Sistem tepsisi (Tray simgesi) ve pencere kapatıldığında tepsiye küçülme (`minimize to tray`).
+  - Ses ve bildirim tercihleri için Ayarlar modalı (`SettingsModal`).
+  - Kanallarda okunmamış mesaj sayacı rozeti.
+- [x] **Test Doğrulamaları:**
+  - `pnpm typecheck`: Sıfır hata ile geçti.
+  - `pnpm lint`: Sıfır hata ile geçti.
+  - `pnpm test`: 8 test dosyası, 23 testin tamamı (%100) başarıyla geçti. XSS güvenlik testleri doğrulandı.

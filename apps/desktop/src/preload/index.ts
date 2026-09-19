@@ -24,6 +24,8 @@ export interface EchoApi {
   createIdentity: (displayName: string, avatarColor: string) => Promise<StoredIdentityProfile>;
   signAuth: (targetId: string, timestamp: number) => Promise<SignedAuthResult | null>;
   signPayload: (payload: string) => Promise<SignedAuthResult | null>;
+  showNotification: (options: { title: string; body: string; silent?: boolean }) => Promise<boolean>;
+  setBadgeCount: (count: number) => Promise<boolean>;
 }
 
 const echoApi: EchoApi = {
@@ -41,6 +43,12 @@ const echoApi: EchoApi = {
   },
   signPayload: (payload: string): Promise<SignedAuthResult | null> => {
     return ipcRenderer.invoke('identity:signPayload', { payload });
+  },
+  showNotification: (options: { title: string; body: string; silent?: boolean }): Promise<boolean> => {
+    return ipcRenderer.invoke('desktop:notify', options);
+  },
+  setBadgeCount: (count: number): Promise<boolean> => {
+    return ipcRenderer.invoke('desktop:setBadge', { count });
   },
 };
 

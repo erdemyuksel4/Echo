@@ -11,6 +11,10 @@ import {
   WsServerEvents,
   AuthPayloadSchema,
   ClientMsgSendPayloadSchema,
+  ClientMsgEditPayloadSchema,
+  ClientMsgDeletePayloadSchema,
+  ClientReactAddPayloadSchema,
+  ClientReactRemovePayloadSchema,
   ClientChannelCreatePayloadSchema,
   ClientChannelRenamePayloadSchema,
   ClientChannelDeletePayloadSchema,
@@ -56,6 +60,8 @@ interface SqlMessageRow {
   author_name: string;
   content: string;
   reply_to: string | null;
+  reply_to_author_name?: string | null;
+  reply_to_content?: string | null;
   created_at: number;
   edited_at: number | null;
   deleted: number;
@@ -124,7 +130,44 @@ export class GroupDO extends DurableObject<Env> {
         uses INTEGER NOT NULL DEFAULT 0,
         revoked INTEGER NOT NULL DEFAULT 0
       );
+
+      CREATE TABLE IF NOT EXISTS reactions (
+        message_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        emoji TEXT NOT NULL,
+        PRIMARY KEY(message_id, user_id, emoji)
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_reactions_msg ON reactions (message_id);
     `);
+
+    try {
+      this.sql.exec(`ALTER TABLE messages ADD COLUMN reply_to_author_name TEXT`);
+    } catch {
+      // Column already exists
+    }
+
+    try {
+      this.sql.exec(`ALTER TABLE messages ADD COLUMN reply_to_content TEXT`);
+    } catch {
+      // Column already exists
+    }
+
+    // Schedule 24-hour cleanup alarm if not scheduled
+    this.ctx.storage.getAlarm().then((scheduled) => {
+      if (!scheduled) {
+        this.ctx.storage.setAlarm(Date.now() + 24 * 60 * 60 * 1000);
+      }
+    }).catch(() => {});
+  }
+
+  async alarm(): Promise<void> {
+    const ninetyDaysAgo = Date.now() - 90 * 24 * 60 * 60 * 1000;
+    // 90-day retention cleanup
+    this.sql.exec(`DELETE FROM messages WHERE created_at < ?`, ninetyDaysAgo);
+    this.sql.exec(`DELETE FROM reactions WHERE message_id NOT IN (SELECT id FROM messages)`);
+    // Reschedule in 24 hours
+    await this.ctx.storage.setAlarm(Date.now() + 24 * 60 * 60 * 1000);
   }
 
   async fetch(request: Request): Promise<Response> {
@@ -355,6 +398,18 @@ export class GroupDO extends DurableObject<Env> {
       case WsClientEvents.MSG_SEND:
         this.handleMessageSend(ws, session, envelope);
         break;
+      case WsClientEvents.MSG_EDIT:
+        this.handleMessageEdit(ws, session, envelope);
+        break;
+      case WsClientEvents.MSG_DELETE:
+        this.handleMessageDelete(ws, session, envelope);
+        break;
+      case WsClientEvents.REACT_ADD:
+        this.handleReactAdd(ws, session, envelope);
+        break;
+      case WsClientEvents.REACT_REMOVE:
+        this.handleReactRemove(ws, session, envelope);
+        break;
       case WsClientEvents.HISTORY_FETCH:
         this.handleHistoryFetch(ws, envelope);
         break;
@@ -468,15 +523,30 @@ export class GroupDO extends DurableObject<Env> {
     const id = ulid();
     const now = Date.now();
 
+    // Lookup reply info if replying
+    let replyToAuthorName: string | null = null;
+    let replyToContent: string | null = null;
+    if (replyTo) {
+      const replied = [
+        ...this.sql.exec(`SELECT author_name, content FROM messages WHERE id = ?`, replyTo),
+      ] as { author_name: string; content: string }[];
+      if (replied.length > 0 && replied[0]) {
+        replyToAuthorName = replied[0].author_name;
+        replyToContent = replied[0].content.slice(0, 100);
+      }
+    }
+
     this.sql.exec(
-      `INSERT INTO messages (id, channel_id, author_id, author_name, content, reply_to, created_at, deleted)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 0)`,
+      `INSERT INTO messages (id, channel_id, author_id, author_name, content, reply_to, reply_to_author_name, reply_to_content, created_at, deleted)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
       id,
       channelId,
       session.userId,
       session.displayName,
       content,
       replyTo ?? null,
+      replyToAuthorName,
+      replyToContent,
       now,
     );
 
@@ -487,13 +557,190 @@ export class GroupDO extends DurableObject<Env> {
       authorName: session.displayName,
       content,
       replyTo: replyTo ?? null,
+      replyToAuthorName,
+      replyToContent,
       createdAt: now,
       editedAt: null,
       deleted: false,
+      reactions: {},
     };
 
     // Broadcast to all connected group members with client nonce echo
     this.broadcast(WsServerEvents.MSG_NEW, message, envelope.id);
+  }
+
+  private handleMessageEdit(
+    ws: WebSocket,
+    session: WsSessionAttachment,
+    envelope: WsEnvelope,
+  ): void {
+    const parse = ClientMsgEditPayloadSchema.safeParse(envelope.d);
+    if (!parse.success) {
+      this.sendError(ws, 'INVALID_PAYLOAD', 'Mesaj düzenleme parametreleri geçersiz');
+      return;
+    }
+
+    const { channelId, messageId, content } = parse.data;
+
+    const rows = [
+      ...this.sql.exec(
+        `SELECT * FROM messages WHERE id = ? AND channel_id = ? AND deleted = 0`,
+        messageId,
+        channelId,
+      ),
+    ] as unknown as SqlMessageRow[];
+
+    if (rows.length === 0 || !rows[0]) {
+      this.sendError(ws, 'MESSAGE_NOT_FOUND', 'Düzenlenecek mesaj bulunamadı');
+      return;
+    }
+
+    const msg = rows[0];
+    if (msg.author_id !== session.userId) {
+      this.sendError(ws, 'FORBIDDEN', 'Yalnızca kendi mesajınızı düzenleyebilirsiniz');
+      return;
+    }
+
+    const now = Date.now();
+    this.sql.exec(
+      `UPDATE messages SET content = ?, edited_at = ? WHERE id = ?`,
+      content,
+      now,
+      messageId,
+    );
+
+    this.broadcast(WsServerEvents.MSG_UPDATED, {
+      channelId,
+      messageId,
+      content,
+      editedAt: now,
+    });
+  }
+
+  private handleMessageDelete(
+    ws: WebSocket,
+    session: WsSessionAttachment,
+    envelope: WsEnvelope,
+  ): void {
+    const parse = ClientMsgDeletePayloadSchema.safeParse(envelope.d);
+    if (!parse.success) {
+      this.sendError(ws, 'INVALID_PAYLOAD', 'Mesaj silme parametreleri geçersiz');
+      return;
+    }
+
+    const { channelId, messageId } = parse.data;
+
+    const rows = [
+      ...this.sql.exec(`SELECT * FROM messages WHERE id = ? AND channel_id = ?`, messageId, channelId),
+    ] as unknown as SqlMessageRow[];
+
+    if (rows.length === 0 || !rows[0]) {
+      this.sendError(ws, 'MESSAGE_NOT_FOUND', 'Silinecek mesaj bulunamadı');
+      return;
+    }
+
+    const msg = rows[0];
+    const canDelete =
+      msg.author_id === session.userId ||
+      session.role === 'owner' ||
+      session.role === 'admin';
+
+    if (!canDelete) {
+      this.sendError(ws, 'FORBIDDEN', 'Bu mesajı silme yetkiniz yok');
+      return;
+    }
+
+    this.sql.exec(`UPDATE messages SET deleted = 1 WHERE id = ?`, messageId);
+
+    this.broadcast(WsServerEvents.MSG_DELETED, {
+      channelId,
+      messageId,
+    });
+  }
+
+  private handleReactAdd(
+    ws: WebSocket,
+    session: WsSessionAttachment,
+    envelope: WsEnvelope,
+  ): void {
+    const parse = ClientReactAddPayloadSchema.safeParse(envelope.d);
+    if (!parse.success) {
+      this.sendError(ws, 'INVALID_PAYLOAD', 'Tepki parametreleri geçersiz');
+      return;
+    }
+
+    const { channelId, messageId, emoji } = parse.data;
+
+    const msgRows = [
+      ...this.sql.exec(
+        `SELECT id FROM messages WHERE id = ? AND channel_id = ? AND deleted = 0`,
+        messageId,
+        channelId,
+      ),
+    ];
+    if (msgRows.length === 0) {
+      this.sendError(ws, 'MESSAGE_NOT_FOUND', 'Tepki verilecek mesaj bulunamadı');
+      return;
+    }
+
+    this.sql.exec(
+      `INSERT OR IGNORE INTO reactions (message_id, user_id, emoji) VALUES (?, ?, ?)`,
+      messageId,
+      session.userId,
+      emoji,
+    );
+
+    const reactions = this.getMessageReactions(messageId);
+
+    this.broadcast(WsServerEvents.REACT_UPDATED, {
+      channelId,
+      messageId,
+      emoji,
+      reactions,
+    });
+  }
+
+  private handleReactRemove(
+    ws: WebSocket,
+    session: WsSessionAttachment,
+    envelope: WsEnvelope,
+  ): void {
+    const parse = ClientReactRemovePayloadSchema.safeParse(envelope.d);
+    if (!parse.success) {
+      this.sendError(ws, 'INVALID_PAYLOAD', 'Tepki kaldırma parametreleri geçersiz');
+      return;
+    }
+
+    const { channelId, messageId, emoji } = parse.data;
+
+    this.sql.exec(
+      `DELETE FROM reactions WHERE message_id = ? AND user_id = ? AND emoji = ?`,
+      messageId,
+      session.userId,
+      emoji,
+    );
+
+    const reactions = this.getMessageReactions(messageId);
+
+    this.broadcast(WsServerEvents.REACT_UPDATED, {
+      channelId,
+      messageId,
+      emoji,
+      reactions,
+    });
+  }
+
+  private getMessageReactions(messageId: string): Record<string, string[]> {
+    const rows = [
+      ...this.sql.exec(`SELECT emoji, user_id FROM reactions WHERE message_id = ?`, messageId),
+    ] as { emoji: string; user_id: string }[];
+
+    const result: Record<string, string[]> = {};
+    for (const r of rows) {
+      if (!result[r.emoji]) result[r.emoji] = [];
+      result[r.emoji]!.push(r.user_id);
+    }
+    return result;
   }
 
   private handleHistoryFetch(ws: WebSocket, envelope: WsEnvelope): void {
@@ -528,6 +775,28 @@ export class GroupDO extends DurableObject<Env> {
     const hasMore = rows.length > limit;
     const slice = hasMore ? rows.slice(0, limit) : rows;
 
+    const messageIds = slice.map((m) => m.id);
+    const reactionMap: Record<string, Record<string, string[]>> = {};
+    if (messageIds.length > 0) {
+      const placeholders = messageIds.map(() => '?').join(',');
+      const reactRows = [
+        ...this.sql.exec(
+          `SELECT message_id, user_id, emoji FROM reactions WHERE message_id IN (${placeholders})`,
+          ...messageIds,
+        ),
+      ] as { message_id: string; user_id: string; emoji: string }[];
+      for (const r of reactRows) {
+        if (!reactionMap[r.message_id]) {
+          reactionMap[r.message_id] = {};
+        }
+        const emojiMap = reactionMap[r.message_id]!;
+        if (!emojiMap[r.emoji]) {
+          emojiMap[r.emoji] = [];
+        }
+        emojiMap[r.emoji]!.push(r.user_id);
+      }
+    }
+
     const messages: Message[] = slice.map((r) => ({
       id: r.id,
       channelId: r.channel_id,
@@ -535,9 +804,12 @@ export class GroupDO extends DurableObject<Env> {
       authorName: r.author_name,
       content: r.content,
       replyTo: r.reply_to,
+      replyToAuthorName: r.reply_to_author_name ?? null,
+      replyToContent: r.reply_to_content ?? null,
       createdAt: r.created_at,
       editedAt: r.edited_at,
       deleted: Boolean(r.deleted),
+      reactions: reactionMap[r.id] ?? {},
     }));
 
     this.send(

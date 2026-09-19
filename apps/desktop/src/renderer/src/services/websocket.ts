@@ -7,6 +7,8 @@ import {
   type Channel,
 } from '@echo/shared';
 import { useChatStore } from '../stores/useChatStore';
+import { useAuthStore } from '../stores/useAuthStore';
+import { soundService } from './sound';
 
 class EchoWebSocketService {
   private ws: WebSocket | null = null;
@@ -119,6 +121,59 @@ class EchoWebSocketService {
       case WsServerEvents.MSG_NEW: {
         const message = envelope.d as Message;
         chatStore.addMessage(message.channelId, message);
+
+        const currentUserId = useAuthStore.getState().identity?.userId;
+        const currentUserName = useAuthStore.getState().identity?.displayName;
+
+        // Sound and notification if sent by another user
+        if (currentUserId && message.authorId !== currentUserId) {
+          soundService.playNotification();
+
+          const channel = chatStore.channels.find((c) => c.id === message.channelId);
+          const chanName = channel ? `#${channel.name}` : 'Sohbet';
+          const isMentioned =
+            currentUserName &&
+            (message.content.includes(`@${currentUserName}`) || message.content.includes('@everyone'));
+
+          if (document.hidden || chatStore.activeChannelId !== message.channelId || isMentioned) {
+            void window.echoApi?.showNotification({
+              title: `${message.authorName} (${chanName})`,
+              body: message.content.slice(0, 120),
+            });
+          }
+
+          const updatedUnreads = useChatStore.getState().unreadCounts;
+          const totalUnread = Object.values(updatedUnreads).reduce((a, b) => a + b, 0);
+          void window.echoApi?.setBadgeCount(totalUnread);
+        }
+        break;
+      }
+
+      case WsServerEvents.MSG_UPDATED: {
+        const data = envelope.d as {
+          channelId: string;
+          messageId: string;
+          content: string;
+          editedAt: number;
+        };
+        chatStore.updateMessage(data.channelId, data.messageId, data.content, data.editedAt);
+        break;
+      }
+
+      case WsServerEvents.MSG_DELETED: {
+        const data = envelope.d as { channelId: string; messageId: string };
+        chatStore.deleteMessage(data.channelId, data.messageId);
+        break;
+      }
+
+      case WsServerEvents.REACT_UPDATED: {
+        const data = envelope.d as {
+          channelId: string;
+          messageId: string;
+          emoji: string;
+          reactions: Record<string, string[]>;
+        };
+        chatStore.updateReactions(data.channelId, data.messageId, data.reactions);
         break;
       }
 
@@ -172,6 +227,38 @@ class EchoWebSocketService {
       channelId,
       content: content.trim(),
       replyTo: replyTo ?? null,
+    });
+  }
+
+  editMessage(channelId: string, messageId: string, content: string): void {
+    if (!content.trim()) return;
+    this.send(WsClientEvents.MSG_EDIT, {
+      channelId,
+      messageId,
+      content: content.trim(),
+    });
+  }
+
+  deleteMessage(channelId: string, messageId: string): void {
+    this.send(WsClientEvents.MSG_DELETE, {
+      channelId,
+      messageId,
+    });
+  }
+
+  addReaction(channelId: string, messageId: string, emoji: string): void {
+    this.send(WsClientEvents.REACT_ADD, {
+      channelId,
+      messageId,
+      emoji,
+    });
+  }
+
+  removeReaction(channelId: string, messageId: string, emoji: string): void {
+    this.send(WsClientEvents.REACT_REMOVE, {
+      channelId,
+      messageId,
+      emoji,
     });
   }
 

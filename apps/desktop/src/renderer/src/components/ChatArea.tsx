@@ -1,13 +1,22 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Hash, Send } from 'lucide-react';
+import { Hash, Send, CornerUpLeft, X } from 'lucide-react';
 import { useChatStore } from '../stores/useChatStore';
 import { useAuthStore } from '../stores/useAuthStore';
 import { wsService } from '../services/websocket';
+import { ChatMessageItem } from './ChatMessageItem';
 
 export const ChatArea: React.FC = () => {
   const { identity } = useAuthStore();
-  const { channels, activeChannelId, messages, typingUsers, connectionStatus, members } =
-    useChatStore();
+  const {
+    channels,
+    activeChannelId,
+    messages,
+    typingUsers,
+    connectionStatus,
+    members,
+    replyingTo,
+    setReplyingTo,
+  } = useChatStore();
 
   const [inputContent, setInputContent] = useState('');
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
@@ -15,6 +24,7 @@ export const ChatArea: React.FC = () => {
   const activeChannel = channels.find((c) => c.id === activeChannelId);
   const currentMessages = activeChannelId ? (messages[activeChannelId] ?? []) : [];
   const currentTyping = activeChannelId ? (typingUsers[activeChannelId] ?? []) : [];
+  const myMember = members.find((m) => m.userId === identity?.userId);
 
   // Auto scroll to bottom on new message
   useEffect(() => {
@@ -26,8 +36,10 @@ export const ChatArea: React.FC = () => {
     if (!activeChannelId || !inputContent.trim()) return;
 
     const content = inputContent;
+    const replyId = replyingTo?.id;
     setInputContent('');
-    wsService.sendMessage(activeChannelId, content);
+    setReplyingTo(null);
+    wsService.sendMessage(activeChannelId, content, replyId);
 
     // Immediately clear current user's name from typing state
     if (identity?.displayName) {
@@ -55,11 +67,6 @@ export const ChatArea: React.FC = () => {
     if (activeChannelId) {
       wsService.sendTyping(activeChannelId);
     }
-  };
-
-  const formatTime = (timestamp: number) => {
-    const d = new Date(timestamp);
-    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
   if (!activeChannel) {
@@ -135,29 +142,14 @@ export const ChatArea: React.FC = () => {
         ) : (
           currentMessages.map((msg) => {
             const member = members.find((m) => m.userId === msg.authorId);
-            const avatarColor = member?.pubkey ? '#' + member.pubkey.substring(0, 6) : '#6366f1';
-
             return (
-              <div
+              <ChatMessageItem
                 key={msg.id}
-                className="flex items-start gap-3 group hover:bg-slate-800/30 -mx-4 px-4 py-1 rounded"
-              >
-                <div
-                  className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full text-xs font-bold text-white shadow"
-                  style={{ backgroundColor: avatarColor }}
-                >
-                  {msg.authorName.charAt(0).toUpperCase()}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-xs font-bold text-white">{msg.authorName}</span>
-                    <span className="text-[10px] text-slate-500">{formatTime(msg.createdAt)}</span>
-                  </div>
-                  <p className="mt-0.5 text-xs text-slate-200 break-words leading-relaxed select-text">
-                    {msg.content}
-                  </p>
-                </div>
-              </div>
+                message={msg}
+                channelId={activeChannel.id}
+                member={member}
+                currentUserRole={myMember?.role ?? 'member'}
+              />
             );
           })
         )}
@@ -182,6 +174,29 @@ export const ChatArea: React.FC = () => {
 
       {/* Input Form */}
       <div className="p-4 pt-1">
+        {/* Reply Preview Bar */}
+        {replyingTo && (
+          <div className="flex items-center justify-between rounded-t-lg border-t border-x border-slate-800 bg-slate-950/90 px-4 py-2 text-xs text-slate-300">
+            <div className="flex items-center gap-2 truncate">
+              <CornerUpLeft className="h-3.5 w-3.5 text-indigo-400 flex-shrink-0" />
+              <span>
+                <strong className="text-white">@{replyingTo.authorName}</strong> kullanıcısına yanıt veriliyor:
+              </span>
+              <span className="truncate italic text-slate-400 max-w-sm">
+                "{replyingTo.content}"
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setReplyingTo(null)}
+              className="ml-2 rounded p-1 text-slate-400 hover:text-white transition"
+              title="Yanıtı İptal Et"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
+
         <form onSubmit={handleSendMessage} className="relative flex items-center">
           <input
             type="text"
@@ -189,7 +204,9 @@ export const ChatArea: React.FC = () => {
             onChange={handleInputChange}
             onKeyDown={handleKeyDown}
             placeholder={`#${activeChannel.name} kanalına mesaj gönder`}
-            className="w-full rounded-lg border border-slate-800 bg-slate-950 px-4 py-3 pr-12 text-xs text-white placeholder-slate-500 focus:border-indigo-500 focus:outline-none shadow-inner"
+            className={`w-full border border-slate-800 bg-slate-950 px-4 py-3 pr-12 text-xs text-white placeholder-slate-500 focus:border-indigo-500 focus:outline-none shadow-inner ${
+              replyingTo ? 'rounded-b-lg border-t-0' : 'rounded-lg'
+            }`}
           />
           <button
             type="submit"

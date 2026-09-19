@@ -17,6 +17,9 @@ interface ChatState {
   typingUsers: Record<string, string[]>; // channelId -> array of displayNames
   connectionStatus: 'disconnected' | 'connecting' | 'connected';
   defaultInviteCode: string | null;
+  replyingTo: Message | null;
+  editingMessageId: string | null;
+  unreadCounts: Record<string, number>; // channelId -> unread count
 
   setGroups: (groups: GroupItem[]) => void;
   addGroup: (group: GroupItem) => void;
@@ -25,6 +28,12 @@ interface ChatState {
   setActiveChannel: (channelId: string | null) => void;
   setConnectionStatus: (status: 'disconnected' | 'connecting' | 'connected') => void;
   addMessage: (channelId: string, message: Message) => void;
+  updateMessage: (channelId: string, messageId: string, content: string, editedAt: number) => void;
+  deleteMessage: (channelId: string, messageId: string) => void;
+  updateReactions: (channelId: string, messageId: string, reactions: Record<string, string[]>) => void;
+  setReplyingTo: (message: Message | null) => void;
+  setEditingMessageId: (id: string | null) => void;
+  markChannelRead: (channelId: string) => void;
   setHistory: (channelId: string, messages: Message[]) => void;
   addChannel: (channel: Channel) => void;
   removeChannel: (channelId: string) => void;
@@ -45,6 +54,9 @@ export const useChatStore = create<ChatState>((set) => ({
   typingUsers: {},
   connectionStatus: 'disconnected',
   defaultInviteCode: null,
+  replyingTo: null,
+  editingMessageId: null,
+  unreadCounts: {},
 
   setGroups: (groups) => set({ groups }),
   addGroup: (group) =>
@@ -68,7 +80,16 @@ export const useChatStore = create<ChatState>((set) => ({
     });
   },
 
-  setActiveChannel: (activeChannelId) => set({ activeChannelId }),
+  setActiveChannel: (activeChannelId) =>
+    set((state) => ({
+      activeChannelId,
+      unreadCounts: activeChannelId
+        ? { ...state.unreadCounts, [activeChannelId]: 0 }
+        : state.unreadCounts,
+      replyingTo: null,
+      editingMessageId: null,
+    })),
+
   setConnectionStatus: (connectionStatus) => set({ connectionStatus }),
 
   addMessage: (channelId, message) =>
@@ -77,6 +98,9 @@ export const useChatStore = create<ChatState>((set) => ({
       if (list.some((m) => m.id === message.id)) return state;
       const currentTyping = state.typingUsers[channelId] ?? [];
       const updatedTyping = currentTyping.filter((name) => name !== message.authorName);
+      const isUnread = state.activeChannelId !== channelId;
+      const currentUnread = state.unreadCounts[channelId] ?? 0;
+
       return {
         messages: {
           ...state.messages,
@@ -86,8 +110,51 @@ export const useChatStore = create<ChatState>((set) => ({
           ...state.typingUsers,
           [channelId]: updatedTyping,
         },
+        unreadCounts: isUnread
+          ? { ...state.unreadCounts, [channelId]: currentUnread + 1 }
+          : state.unreadCounts,
       };
     }),
+
+  updateMessage: (channelId, messageId, content, editedAt) =>
+    set((state) => {
+      const list = state.messages[channelId] ?? [];
+      return {
+        messages: {
+          ...state.messages,
+          [channelId]: list.map((m) => (m.id === messageId ? { ...m, content, editedAt } : m)),
+        },
+      };
+    }),
+
+  deleteMessage: (channelId, messageId) =>
+    set((state) => {
+      const list = state.messages[channelId] ?? [];
+      return {
+        messages: {
+          ...state.messages,
+          [channelId]: list.map((m) => (m.id === messageId ? { ...m, deleted: true } : m)),
+        },
+      };
+    }),
+
+  updateReactions: (channelId, messageId, reactions) =>
+    set((state) => {
+      const list = state.messages[channelId] ?? [];
+      return {
+        messages: {
+          ...state.messages,
+          [channelId]: list.map((m) => (m.id === messageId ? { ...m, reactions } : m)),
+        },
+      };
+    }),
+
+  setReplyingTo: (replyingTo) => set({ replyingTo }),
+  setEditingMessageId: (editingMessageId) => set({ editingMessageId }),
+  markChannelRead: (channelId) =>
+    set((state) => ({
+      unreadCounts: { ...state.unreadCounts, [channelId]: 0 },
+    })),
 
   setHistory: (channelId, messages) =>
     set((state) => ({

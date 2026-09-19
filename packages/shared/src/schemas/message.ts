@@ -9,9 +9,12 @@ export const MessageSchema = z.object({
   authorName: z.string(),
   content: z.string().min(1).max(MAX_MESSAGE_LENGTH),
   replyTo: z.string().nullable().default(null),
+  replyToAuthorName: z.string().nullable().default(null),
+  replyToContent: z.string().nullable().default(null),
   createdAt: z.number().int().positive(),
   editedAt: z.number().int().positive().nullable().default(null),
   deleted: z.boolean().default(false),
+  reactions: z.record(z.string(), z.array(z.string())).default({}),
 });
 
 export type Message = z.infer<typeof MessageSchema>;

@@ -24,6 +24,8 @@ export const WsClientEvents = {
   MSG_SEND: 'msg.send',
   MSG_EDIT: 'msg.edit',
   MSG_DELETE: 'msg.delete',
+  REACT_ADD: 'react.add',
+  REACT_REMOVE: 'react.remove',
   TYPING: 'typing',
   READ_MARK: 'read.mark',
   CHANNEL_CREATE: 'channel.create',
@@ -43,6 +45,7 @@ export const WsServerEvents = {
   MSG_NEW: 'msg.new',
   MSG_UPDATED: 'msg.updated',
   MSG_DELETED: 'msg.deleted',
+  REACT_UPDATED: 'react.updated',
   TYPING_USER: 'typing.user',
   CHANNEL_CREATED: 'channel.created',
   CHANNEL_UPDATED: 'channel.updated',
@@ -70,6 +73,37 @@ export const ClientMsgEditPayloadSchema = z.object({
 export const ClientMsgDeletePayloadSchema = z.object({
   messageId: z.string(),
   channelId: z.string(),
+});
+
+export const ClientReactAddPayloadSchema = z.object({
+  channelId: z.string(),
+  messageId: z.string(),
+  emoji: z.string().min(1).max(32),
+});
+
+export const ClientReactRemovePayloadSchema = z.object({
+  channelId: z.string(),
+  messageId: z.string(),
+  emoji: z.string().min(1).max(32),
+});
+
+export const ServerReactUpdatedPayloadSchema = z.object({
+  channelId: z.string(),
+  messageId: z.string(),
+  emoji: z.string(),
+  reactions: z.record(z.string(), z.array(z.string())),
+});
+
+export const ServerMsgUpdatedPayloadSchema = z.object({
+  channelId: z.string(),
+  messageId: z.string(),
+  content: z.string(),
+  editedAt: z.number(),
+});
+
+export const ServerMsgDeletedPayloadSchema = z.object({
+  channelId: z.string(),
+  messageId: z.string(),
 });
 
 export const ClientTypingPayloadSchema = z.object({
