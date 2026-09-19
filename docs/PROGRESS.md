@@ -113,6 +113,11 @@ Bu dosya her faz ve görev sonunda güncellenir.
   - Arayüz Konuşma Göstergesi: Konuşan kullanıcının avatarı etrafında yeşil parlayan halka (Kanal listesinde, ses panelinde ve üye listesinde eş zamanlı).
   - Discord tarzı Alt Sol Ses Paneli (`VoicePanel`): Bağlantı durumu (`Ses Bağlandı`), ping (ms), mikrofon susturma (`isMuted`), kulaklık sağırlaştırma (`isDeafened`), bağlantıyı kesme butonu.
   - Zorunlu Kabul Kriteri — Bağlantı Tanı Paneli (`VoiceDiagnosticsModal`): WebRTC `getStats()` API'si ile her eş (peer) için RTT (gecikme ms), paket kaybı (sayı ve yüzde), aday türü (`host` / `srflx` / `relay`), gelen bit hızı (kbps) ve ses seviyesi gösterimi.
+- [x] **Çoklu Kullanıcı Eşitlemesi ve Ses Ayarları İyileştirmeleri:**
+  - Kullanıcı grupları ve aktif grup `localStorage` ve sunucu `GET /api/users/:userId/groups` uç noktası ile kalıcı hale getirildi; yeniden açılışta veya profil geçişinde grup kaybı ve ayrı gruplara düşme sorunu giderildi.
+  - Bir kullanıcı davetle gruba katıldığında anlık `member.joined` yayını ve `#genel` kanalında otomatik hoş geldin duyuru mesajı (`🎉 **{displayName}** gruba katıldı. Hoş geldin!`) yayınlandı.
+  - Ses kanalına katılma senaryosunda katılımcı senkronizasyonu düzeltildi (yeni gelen katılımcının mevcut herkesi, mevcutların da yeni geleni anında görmesi).
+  - Ayarlar modalına (`SettingsModal`): Mikrofon aygıtı seçimi (Input Device dropdown), gerçek zamanlı yeşil seviye göstergeli interaktif mikrofon testi ("Mikrofonu Test Et"), çıkış ses seviyesi kaydırıcısı (%0-100) ve ses çalma testi eklendi.
 - [x] **Test Doğrulamaları:**
   - `pnpm typecheck`: Monorepo genelinde sıfır hata ile geçti.
   - `pnpm lint`: Workspace genelinde sıfır hata ile geçti.
