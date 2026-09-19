@@ -28,6 +28,15 @@ export const app = new Hono<{ Bindings: Env }>();
 app.use('*', cors());
 
 // Health Check
+app.get('/api/turn', (c) => {
+  return c.json({
+    iceServers: [
+      { urls: 'stun:stun.cloudflare.com:3478' },
+      { urls: 'stun:stun.l.google.com:19302' },
+    ],
+  });
+});
+
 app.get('/api/health', (c) => {
   const healthData: HealthResponse = {
     status: 'ok',

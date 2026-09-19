@@ -34,6 +34,10 @@ export const WsClientEvents = {
   INVITE_CREATE: 'invite.create',
   HISTORY_FETCH: 'history.fetch',
   PRESENCE_UPDATE: 'presence.update',
+  VOICE_JOIN: 'voice.join',
+  VOICE_LEAVE: 'voice.leave',
+  VOICE_SIGNAL: 'voice.signal',
+  VOICE_STATE: 'voice.state',
 } as const;
 
 // Server to Client Events
@@ -55,6 +59,11 @@ export const WsServerEvents = {
   PRESENCE_CHANGED: 'presence.changed',
   INVITE_CREATED: 'invite.created',
   HISTORY_DATA: 'history.data',
+  VOICE_USER_JOINED: 'voice.user_joined',
+  VOICE_USER_LEFT: 'voice.user_left',
+  VOICE_SIGNAL: 'voice.signal',
+  VOICE_STATE: 'voice.state',
+  VOICE_PARTICIPANTS: 'voice.participants',
 } as const;
 
 // Event Payload Schemas

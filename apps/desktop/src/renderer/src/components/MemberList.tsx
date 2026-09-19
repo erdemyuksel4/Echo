@@ -1,9 +1,13 @@
 import React from 'react';
 import { Crown, Shield } from 'lucide-react';
 import { useChatStore } from '../stores/useChatStore';
+import { useAuthStore } from '../stores/useAuthStore';
+import { useVoiceStore } from '../stores/useVoiceStore';
 
 export const MemberList: React.FC = () => {
   const { members, activeGroupId } = useChatStore();
+  const { identity } = useAuthStore();
+  const { channelParticipants, isSpeaking } = useVoiceStore();
 
   if (!activeGroupId) return null;
 
@@ -12,6 +16,12 @@ export const MemberList: React.FC = () => {
 
   const renderMember = (member: (typeof members)[0]) => {
     const avatarColor = member.pubkey ? '#' + member.pubkey.substring(0, 6) : '#6366f1';
+    const isLocal = member.userId === identity?.userId;
+    const isSpeakingMember = isLocal
+      ? isSpeaking
+      : Object.values(channelParticipants).some((list) =>
+          list.some((p) => p.userId === member.userId && p.speaking),
+        );
 
     return (
       <div
@@ -20,7 +30,11 @@ export const MemberList: React.FC = () => {
       >
         <div className="relative">
           <div
-            className="flex h-7 w-7 items-center justify-center rounded-full text-[11px] font-bold text-white shadow"
+            className={`flex h-7 w-7 items-center justify-center rounded-full text-[11px] font-bold text-white shadow transition-all duration-150 ${
+              isSpeakingMember
+                ? 'ring-2 ring-emerald-400 ring-offset-1 ring-offset-slate-950 shadow-sm shadow-emerald-400/80 scale-105'
+                : ''
+            }`}
             style={{ backgroundColor: avatarColor }}
           >
             {member.displayName.charAt(0).toUpperCase()}
@@ -36,7 +50,11 @@ export const MemberList: React.FC = () => {
           <div className="flex items-center gap-1">
             <span
               className={`truncate text-xs font-medium ${
-                member.status === 'online' ? 'text-slate-200' : 'text-slate-500'
+                isSpeakingMember
+                  ? 'text-emerald-300 font-semibold'
+                  : member.status === 'online'
+                  ? 'text-slate-200'
+                  : 'text-slate-500'
               }`}
             >
               {member.displayName}

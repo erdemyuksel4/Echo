@@ -1,7 +1,7 @@
 import { existsSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import { app, shell, BrowserWindow, ipcMain, Tray, Menu, nativeImage, Notification } from 'electron';
+import { app, shell, BrowserWindow, ipcMain, Tray, Menu, nativeImage, Notification, session } from 'electron';
 import { electronApp, optimizer, is } from '@electron-toolkit/utils';
 import { APP_NAME, PROTOCOL_VERSION } from '@echo/shared';
 import { IdentityManager } from './identity';
@@ -157,6 +157,19 @@ if (!gotTheLock) {
 
   void app.whenReady().then(() => {
     electronApp.setAppUserModelId('com.echo.app');
+
+    // Grant media (microphone) permission for WebRTC voice chat
+    session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback) => {
+      if (permission === 'media') {
+        callback(true);
+        return;
+      }
+      callback(false);
+    });
+
+    session.defaultSession.setPermissionCheckHandler((_webContents, permission) => {
+      return permission === 'media';
+    });
 
     app.on('browser-window-created', (_, window) => {
       optimizer.watchWindowShortcuts(window);

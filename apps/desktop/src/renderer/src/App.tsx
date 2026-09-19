@@ -9,6 +9,7 @@ import { ChatArea } from './components/ChatArea';
 import { MemberList } from './components/MemberList';
 import { DirectMessagesView } from './components/DirectMessagesView';
 import { CreateOrJoinModal } from './components/CreateOrJoinModal';
+import { webrtcService } from './services/webrtc';
 
 export const App: React.FC = () => {
   const { identity, isLoaded, loadIdentity } = useAuthStore();
@@ -17,6 +18,7 @@ export const App: React.FC = () => {
 
   useEffect(() => {
     loadIdentity();
+    void webrtcService.init();
   }, [loadIdentity]);
 
   if (!isLoaded) {

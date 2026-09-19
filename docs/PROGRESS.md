@@ -9,7 +9,7 @@ Bu dosya her faz ve görev sonunda güncellenir.
 | Faz 0 | İskelet (Monorepo, TS, Lint, Test, Dev) | Tamamlandı | `faz-0-iskelet`        | Monorepo, shared paket, sunucu ve masaüstü iskeleti kuruldu, testler geçti |
 | Faz 1 | Kimlik, grup, kanal, yazılı sohbet      | Tamamlandı | `faz-1-kimlik-sohbet`  | Ed25519 kimlik, safeStorage, GroupDO SQLite, WebSocket hibernation, UI    |
 | Faz 2 | Zengin mesajlaşma ve bildirim           | Tamamlandı | `faz-2-zengin-mesajlasma` | Yanıtla, düzenle, sil, emoji tepkisi, safe Markdown/spoiler, tray, ses, bildirim |
-| Faz 3 | Sesli sohbet ve TURN                    | Başlanmadı | -                      | -                                                                          |
+| Faz 3 | Sesli sohbet ve TURN                    | Tamamlandı | `faz-3-sesli-sohbet`   | WebRTC Tam Mesh, Cloudflare STUN/TURN, VAD konuşma halkası, ses paneli ve bağlantı tanı modalı |
 | Faz 4 | Medya                                   | Başlanmadı | -                      | -                                                                          |
 | Faz 5 | DM                                      | Başlanmadı | -                      | -                                                                          |
 | Faz 6 | Ekran paylaşımı (mesh)                  | Başlanmadı | -                      | -                                                                          |
@@ -91,3 +91,30 @@ Bu dosya her faz ve görev sonunda güncellenir.
   - `pnpm typecheck`: Sıfır hata ile geçti.
   - `pnpm lint`: Sıfır hata ile geçti.
   - `pnpm test`: 8 test dosyası, 23 testin tamamı (%100) başarıyla geçti. XSS güvenlik testleri doğrulandı.
+
+## Faz 3 — Kabul Kriterleri ve Gerçekleşenler
+
+- [x] **Ortak Şemalar ve Protokol (`@echo/shared`):**
+  - `packages/shared/src/schemas/voice.ts`: `ClientVoiceJoinPayloadSchema`, `ClientVoiceLeavePayloadSchema`, `ClientVoiceSignalPayloadSchema`, `ClientVoiceStatePayloadSchema`, `ServerVoiceUserJoinedPayloadSchema`, `ServerVoiceParticipantsPayloadSchema`, `PeerDiagnosticsStats`.
+  - Protokol olayları: `voice.join`, `voice.leave`, `voice.signal`, `voice.state`, `voice.user_joined`, `voice.user_left`, `voice.participants`.
+  - `voice.test.ts`: 11 yeni birim testi başarıyla geçti.
+- [x] **Sunucu Mimarisi (`apps/server`):**
+  - `GET /api/turn`: STUN sunucuları (`stun:stun.cloudflare.com:3478`, `stun:stun.l.google.com:19302`).
+  - `GroupDO`: Bellek içi geçici oda yönetimi (`voiceRooms: Map<channelId, Map<userId, VoiceParticipant>>`, `userVoiceChannel: Map<userId, channelId>`).
+  - Maksimum 10 katılımcı sınırı (`VOICE_CHANNEL_FULL`).
+  - WebRTC sinyalleşme rölesi (`voice.signal` ile offer/answer/candidate doğrudan hedef kullanıcıya yönlendirme).
+  - Kanal üyelerine anlık `voice.user_joined`, `voice.user_left`, `voice.state` yayınları ve bağlantı kopmasında otomatik ses odası temizliği.
+  - Yeni gruplarda varsayılan `Genel Ses` ses kanalının oluşturulması.
+- [x] **Masaüstü ve WebRTC Mesh Motoru (`apps/desktop`):**
+  - Electron ana sürecinde mikrofon izni: `session.defaultSession.setPermissionRequestHandler` ile `media` izninin otomatik ve güvenli verilmesi.
+  - `webrtcService`: Tam WebRTC Mesh motoru (`RTCPeerConnection` havuzu, Opus mono, yankı engelleme `echoCancellation: true`, gürültü bastırma `noiseSuppression: true`, otomatik kazanç `autoGainControl: true`).
+  - Perfect Negotiation & Polite Peer: Yeni katılan kullanıcı mevcut tüm katılımcılara offer gönderir; glare / çakışma önlenir.
+  - VAD (Ses Aktivite Algılama): Web Audio `AudioContext` ve `AnalyserNode` ile 100ms aralıklarla RMS ses düzeyi ölçümü, konuşma başlayınca `speaking: true`, bitişte yumuşak 350ms sönümleme.
+  - Arayüz Konuşma Göstergesi: Konuşan kullanıcının avatarı etrafında yeşil parlayan halka (Kanal listesinde, ses panelinde ve üye listesinde eş zamanlı).
+  - Discord tarzı Alt Sol Ses Paneli (`VoicePanel`): Bağlantı durumu (`Ses Bağlandı`), ping (ms), mikrofon susturma (`isMuted`), kulaklık sağırlaştırma (`isDeafened`), bağlantıyı kesme butonu.
+  - Zorunlu Kabul Kriteri — Bağlantı Tanı Paneli (`VoiceDiagnosticsModal`): WebRTC `getStats()` API'si ile her eş (peer) için RTT (gecikme ms), paket kaybı (sayı ve yüzde), aday türü (`host` / `srflx` / `relay`), gelen bit hızı (kbps) ve ses seviyesi gösterimi.
+- [x] **Test Doğrulamaları:**
+  - `pnpm typecheck`: Monorepo genelinde sıfır hata ile geçti.
+  - `pnpm lint`: Workspace genelinde sıfır hata ile geçti.
+  - `pnpm test`: 9 test dosyası, 34 testin tamamı (%100) başarıyla geçti.
+  - `apps/desktop` electron-vite derlemesi başarıyla tamamlandı.

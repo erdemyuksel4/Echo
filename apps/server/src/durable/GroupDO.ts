@@ -20,6 +20,11 @@ import {
   ClientChannelDeletePayloadSchema,
   ClientHistoryFetchPayloadSchema,
   ClientTypingPayloadSchema,
+  ClientVoiceJoinPayloadSchema,
+  ClientVoiceLeavePayloadSchema,
+  ClientVoiceSignalPayloadSchema,
+  ClientVoiceStatePayloadSchema,
+  type VoiceParticipant,
   type GroupSnapshot,
   type Channel,
   type GroupMember,
@@ -70,6 +75,8 @@ interface SqlMessageRow {
 export class GroupDO extends DurableObject<Env> {
   private sql: SqlStorage;
   private typingMap: Map<string, number> = new Map(); // userId -> lastTypingTimestamp
+  private voiceRooms: Map<string, Map<string, VoiceParticipant>> = new Map(); // channelId -> (userId -> participant)
+  private userVoiceChannel: Map<string, string> = new Map(); // userId -> channelId
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -231,6 +238,14 @@ export class GroupDO extends DurableObject<Env> {
         `INSERT INTO channels (id, name, type, position, created_at) VALUES (?, 'genel', 'text', 0, ?)`,
         chanId,
         now,
+      );
+
+      // Default voice channel
+      const voiceChanId = ulid();
+      this.sql.exec(
+        `INSERT INTO channels (id, name, type, position, created_at) VALUES (?, 'Genel Ses', 'voice', 1, ?)`,
+        voiceChanId,
+        now + 1,
       );
 
       // Create default permanent invite
@@ -425,6 +440,18 @@ export class GroupDO extends DurableObject<Env> {
       case WsClientEvents.CHANNEL_DELETE:
         this.handleChannelDelete(ws, session, envelope);
         break;
+      case WsClientEvents.VOICE_JOIN:
+        this.handleVoiceJoin(ws, session, envelope);
+        break;
+      case WsClientEvents.VOICE_LEAVE:
+        this.handleVoiceLeave(session, envelope);
+        break;
+      case WsClientEvents.VOICE_SIGNAL:
+        this.handleVoiceSignal(session, envelope);
+        break;
+      case WsClientEvents.VOICE_STATE:
+        this.handleVoiceState(session, envelope);
+        break;
       default:
         this.sendError(ws, 'UNKNOWN_EVENT', `Bilinmeyen olay: ${envelope.t}`);
         break;
@@ -495,6 +522,16 @@ export class GroupDO extends DurableObject<Env> {
     this.send(ws, WsServerEvents.AUTH_OK, { userId, role: member.role });
     const snapshot = this.getGroupSnapshot();
     this.send(ws, WsServerEvents.SNAPSHOT, snapshot);
+
+    // Send active voice participants across channels
+    for (const [chanId, room] of this.voiceRooms.entries()) {
+      if (room.size > 0) {
+        this.send(ws, WsServerEvents.VOICE_PARTICIPANTS, {
+          channelId: chanId,
+          participants: Array.from(room.values()),
+        });
+      }
+    }
 
     // Broadcast presence changed to online
     this.broadcast(WsServerEvents.PRESENCE_CHANGED, { userId, status: 'online' });
@@ -933,6 +970,143 @@ export class GroupDO extends DurableObject<Env> {
     );
   }
 
+  private handleVoiceJoin(
+    ws: WebSocket,
+    session: WsSessionAttachment,
+    envelope: WsEnvelope,
+  ): void {
+    const parse = ClientVoiceJoinPayloadSchema.safeParse(envelope.d);
+    if (!parse.success) {
+      this.sendError(ws, 'INVALID_PAYLOAD', 'Ses kanalına katılım parametreleri geçersiz');
+      return;
+    }
+
+    const { channelId } = parse.data;
+    const chanRows = [...this.sql.exec(`SELECT id, type FROM channels WHERE id = ?`, channelId)] as { id: string; type: string }[];
+    if (chanRows.length === 0 || chanRows[0]?.type !== 'voice') {
+      this.sendError(ws, 'CHANNEL_NOT_FOUND', 'Ses kanalı bulunamadı');
+      return;
+    }
+
+    // If user is already in another voice channel, leave it first
+    const currentChannelId = this.userVoiceChannel.get(session.userId);
+    if (currentChannelId && currentChannelId !== channelId) {
+      this.leaveVoiceRoom(session.userId, currentChannelId);
+    }
+
+    let room = this.voiceRooms.get(channelId);
+    if (!room) {
+      room = new Map();
+      this.voiceRooms.set(channelId, room);
+    }
+
+    if (room.size >= 10 && !room.has(session.userId)) {
+      this.sendError(ws, 'VOICE_CHANNEL_FULL', 'Ses kanalı dolu (maksimum 10 kullanıcı)');
+      return;
+    }
+
+    const participant: VoiceParticipant = {
+      userId: session.userId,
+      displayName: session.displayName,
+      muted: false,
+      deafened: false,
+      speaking: false,
+    };
+
+    // Get list of existing participants BEFORE adding this new one (for mesh offer initiation)
+    const existingParticipants = Array.from(room.values());
+
+    room.set(session.userId, participant);
+    this.userVoiceChannel.set(session.userId, channelId);
+
+    // Broadcast to all connected clients in the group so channel avatars & mesh update
+    this.broadcast(
+      WsServerEvents.VOICE_USER_JOINED,
+      {
+        channelId,
+        userId: session.userId,
+        displayName: session.displayName,
+        currentParticipants: existingParticipants,
+      },
+      envelope.id,
+    );
+  }
+
+  private handleVoiceLeave(
+    session: WsSessionAttachment,
+    envelope: WsEnvelope,
+  ): void {
+    const parse = ClientVoiceLeavePayloadSchema.safeParse(envelope.d);
+    if (!parse.success) return;
+
+    const { channelId } = parse.data;
+    this.leaveVoiceRoom(session.userId, channelId, envelope.id);
+  }
+
+  private leaveVoiceRoom(userId: string, channelId: string, envelopeId?: string): void {
+    const room = this.voiceRooms.get(channelId);
+    if (room && room.has(userId)) {
+      room.delete(userId);
+      if (room.size === 0) {
+        this.voiceRooms.delete(channelId);
+      }
+    }
+    if (this.userVoiceChannel.get(userId) === channelId) {
+      this.userVoiceChannel.delete(userId);
+    }
+
+    this.broadcast(
+      WsServerEvents.VOICE_USER_LEFT,
+      {
+        channelId,
+        userId,
+      },
+      envelopeId,
+    );
+  }
+
+  private handleVoiceSignal(
+    session: WsSessionAttachment,
+    envelope: WsEnvelope,
+  ): void {
+    const parse = ClientVoiceSignalPayloadSchema.safeParse(envelope.d);
+    if (!parse.success) return;
+
+    const { channelId, targetUserId, signal } = parse.data;
+
+    // Direct relay to target user
+    this.sendToUser(targetUserId, WsServerEvents.VOICE_SIGNAL, {
+      channelId,
+      fromUserId: session.userId,
+      signal,
+    });
+  }
+
+  private handleVoiceState(
+    session: WsSessionAttachment,
+    envelope: WsEnvelope,
+  ): void {
+    const parse = ClientVoiceStatePayloadSchema.safeParse(envelope.d);
+    if (!parse.success) return;
+
+    const { channelId, muted, deafened, speaking } = parse.data;
+    const room = this.voiceRooms.get(channelId);
+    if (room && room.has(session.userId)) {
+      const p = room.get(session.userId)!;
+      p.muted = muted;
+      p.deafened = deafened;
+      p.speaking = speaking;
+    }
+
+    this.broadcast(WsServerEvents.VOICE_STATE, {
+      channelId,
+      userId: session.userId,
+      muted,
+      deafened,
+      speaking,
+    });
+  }
+
   async webSocketClose(ws: WebSocket): Promise<void> {
     const session = ws.deserializeAttachment() as WsSessionAttachment | null;
     if (session?.authenticated && session.userId) {
@@ -947,12 +1121,32 @@ export class GroupDO extends DurableObject<Env> {
           userId: session.userId,
           status: 'offline',
         });
+
+        // Also leave any voice room if currently connected
+        const currentChannelId = this.userVoiceChannel.get(session.userId);
+        if (currentChannelId) {
+          this.leaveVoiceRoom(session.userId, currentChannelId);
+        }
       }
     }
   }
 
   async webSocketError(ws: WebSocket): Promise<void> {
     await this.webSocketClose(ws);
+  }
+
+  private sendToUser(userId: string, type: string, data: unknown, id?: string): void {
+    const payload = JSON.stringify({ v: 1, t: type, id, d: data });
+    for (const ws of this.ctx.getWebSockets()) {
+      const att = ws.deserializeAttachment() as WsSessionAttachment | null;
+      if (att?.userId === userId) {
+        try {
+          ws.send(payload);
+        } catch {
+          // ignore write failure
+        }
+      }
+    }
   }
 
   private send(ws: WebSocket, type: string, data: unknown, id?: string): void {

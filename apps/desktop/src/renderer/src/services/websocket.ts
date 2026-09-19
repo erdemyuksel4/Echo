@@ -5,10 +5,14 @@ import {
   type GroupSnapshot,
   type Message,
   type Channel,
+  type VoiceParticipant,
+  type VoiceSignalData,
 } from '@echo/shared';
 import { useChatStore } from '../stores/useChatStore';
 import { useAuthStore } from '../stores/useAuthStore';
+import { useVoiceStore } from '../stores/useVoiceStore';
 import { soundService } from './sound';
+import { webrtcService } from './webrtc';
 
 class EchoWebSocketService {
   private ws: WebSocket | null = null;
@@ -213,6 +217,71 @@ class EchoWebSocketService {
         break;
       }
 
+      case WsServerEvents.VOICE_USER_JOINED: {
+        const data = envelope.d as {
+          channelId: string;
+          userId: string;
+          displayName: string;
+          currentParticipants: VoiceParticipant[];
+        };
+        useVoiceStore.getState().addChannelParticipant(data.channelId, {
+          userId: data.userId,
+          displayName: data.displayName,
+          muted: false,
+          deafened: false,
+          speaking: false,
+        });
+        webrtcService.handleUserJoined(
+          data.channelId,
+          data.userId,
+          data.displayName,
+          data.currentParticipants,
+        );
+        break;
+      }
+
+      case WsServerEvents.VOICE_USER_LEFT: {
+        const data = envelope.d as { channelId: string; userId: string };
+        useVoiceStore.getState().removeChannelParticipant(data.channelId, data.userId);
+        webrtcService.handleUserLeft(data.channelId, data.userId);
+        break;
+      }
+
+      case WsServerEvents.VOICE_SIGNAL: {
+        const data = envelope.d as {
+          channelId: string;
+          fromUserId: string;
+          signal: VoiceSignalData;
+        };
+        void webrtcService.handleSignal(data.fromUserId, data.signal);
+        break;
+      }
+
+      case WsServerEvents.VOICE_STATE: {
+        const data = envelope.d as {
+          channelId: string;
+          userId: string;
+          muted: boolean;
+          deafened: boolean;
+          speaking: boolean;
+        };
+        useVoiceStore.getState().updateChannelParticipantState(data.channelId, data.userId, {
+          muted: data.muted,
+          deafened: data.deafened,
+          speaking: data.speaking,
+        });
+        break;
+      }
+
+      case WsServerEvents.VOICE_PARTICIPANTS: {
+        const data = envelope.d as {
+          channelId: string;
+          participants: VoiceParticipant[];
+        };
+        useVoiceStore.getState().setChannelParticipants(data.channelId, data.participants);
+        break;
+      }
+
       case WsServerEvents.ERROR: {
         const data = envelope.d as { code: string; message: string };
         console.error('Server error:', data.code, data.message);
@@ -290,6 +359,32 @@ class EchoWebSocketService {
     this.send(WsClientEvents.CHANNEL_DELETE, { channelId });
   }
 
+  joinVoice(channelId: string): void {
+    this.send(WsClientEvents.VOICE_JOIN, { channelId });
+  }
+
+  leaveVoice(channelId: string): void {
+    this.send(WsClientEvents.VOICE_LEAVE, { channelId });
+  }
+
+  sendVoiceSignal(channelId: string, targetUserId: string, signal: VoiceSignalData): void {
+    this.send(WsClientEvents.VOICE_SIGNAL, {
+      channelId,
+      targetUserId,
+      signal,
+    });
+  }
+
+  sendVoiceState(
+    channelId: string,
+    state: { muted: boolean; deafened: boolean; speaking: boolean },
+  ): void {
+    this.send(WsClientEvents.VOICE_STATE, {
+      channelId,
+      ...state,
+    });
+  }
+
   private send(type: string, data: unknown): void {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       const payload: WsEnvelope = {
@@ -323,6 +418,7 @@ class EchoWebSocketService {
 
   disconnect(): void {
     this.isIntentionallyClosed = true;
+    webrtcService.leave();
     this.cleanupSocket();
     if (this.ws) {
       this.ws.close(1000, 'Intentional close');
