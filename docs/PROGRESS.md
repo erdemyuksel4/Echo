@@ -11,7 +11,7 @@ Bu dosya her faz ve görev sonunda güncellenir.
 | Faz 2 | Zengin mesajlaşma ve bildirim           | Tamamlandı | `faz-2-zengin-mesajlasma` | Yanıtla, düzenle, sil, emoji tepkisi, safe Markdown/spoiler, tray, ses, bildirim |
 | Faz 3 | Sesli sohbet ve TURN                    | Tamamlandı | `faz-3-sesli-sohbet`   | WebRTC Tam Mesh, Cloudflare STUN/TURN, VAD konuşma halkası, ses paneli ve bağlantı tanı modalı |
 | Faz 4 | Medya                                   | Tamamlandı | `faz-4-medya`          | Görsel/GIF yükleme (server), P2P dosya paylaşımı (WebRTC DataChannel), lightbox görüntüleyici, sürükle-bırak, Ctrl+V paste, Giphy picker |
-| Faz 5 | DM                                      | Başlanmadı | -                      | -                                                                          |
+| Faz 5 | DM                                      | Tamamlandı | `faz-5-dm`             | UserDO çift taraflı yazım, /ws/user WS endpoint, dm_threads, dm_messages, DmChatArea, MemberList DM başlatma |
 | Faz 6 | Ekran paylaşımı (mesh)                  | Başlanmadı | -                      | -                                                                          |
 | Faz 7 | SFU (kapılı)                            | Başlanmadı | -                      | -                                                                          |
 | Faz 8 | Cilalama ve dağıtım                     | Başlanmadı | -                      | -                                                                          |
@@ -161,3 +161,33 @@ Bu dosya her faz ve görev sonunda güncellenir.
 ### Bilinen Limitler / Açık İşler
 - Görsel URL'leri `http://localhost:8787` ile hardcode edilmiş; canlıya almada `ARCHITECTURE.md`'de tanımlı gerçek Worker URL'sine güncellenmesi gerekir.
 - P2P dosya indirme, gönderen kullanıcı çevrimiçi olduğunda çalışır; çevrimdışıysa dosya alınamaz (P2P'nin doğal kısıtı).
+
+## Faz 5 — Kabul Kriterleri ve Gerçekleşenler
+
+- [x] **Ortak Şemalar (`@echo/shared`):**
+  - `DmThreadSchema`, `DmThread` türü (`peerId, peerName, peerColor, lastMessageAt, lastMessagePreview, unreadCount`).
+  - `DmMessageSchema`, `DmMessage` türü (`id, fromUserId, toUserId, fromName, fromColor, content, attachments, createdAt, deleted`).
+  - Protokol olayları: `dm.send`, `dm.history_fetch`, `dm.read_mark`, `dm.new`, `dm.read`, `dm.snapshot`.
+  - İlgili Zod payload şemaları (`ClientDmSendPayloadSchema`, `ClientDmHistoryFetchPayloadSchema`, vb.).
+- [x] **Sunucu Mimarisi (`apps/server`):**
+  - `UserDO` SQLite tabloları: `dm_threads`, `dm_messages`, `dm_read_state`.
+  - Çift taraflı yazım (Double-write): Gönderen kullanıcı kendi `UserDO`'suna yazar ve alıcı `UserDO`'suna `/internal/dm/deliver` ile teslim eder. İki tarafın da bağımsız tam geçmişi tutulur.
+  - WebSocket Hibernation: `/internal/ws` uç noktası ile kişisel UserDO'ya bağlanma, `serializeAttachment` ile oturum bilgisi bağlama.
+  - İmzalı kimlik doğrulama: `GET /ws/user` (Ed25519 `echo-auth|user|<ts>` doğrulaması, süre aşımı ve pubkey kontrolü).
+  - Ortak grup kontrolü: `GET /api/dm/check` ve `hasCommonGroup` yardımcısı (iki kullanıcının üyelik kümelerini karşılaştırma).
+  - DM geçmişi sayfalama (`/internal/dm/history`, limit & before desteği).
+  - Okundu işaretleme (`/internal/dm/read-mark`, okunmamış sayacını sıfırlama).
+  - Yeni 5 adet otomatik birim testi (`apps/server/test/dm.spec.ts`).
+- [x] **Masaüstü Arayüzü (`apps/desktop`):**
+  - `dmWebsocket.ts`: Kişisel `UserDO`'ya bağlanan WebSocket servisi (otomatik kimlik imzalama, yeniden bağlanma, `dm.send`, `dm.history_fetch`, `dm.read_mark`).
+  - `useDmStore.ts`: DM thread'leri, mesaj geçmişi, aktif eş (peer), okunmamış rozetleri, sesli bildirim (`playNotification`) ve masaüstü sistem bildirimi entegrasyonu.
+  - `DmChatArea.tsx`: Birebir özel sohbet alanı; Markdown/spoiler/kod blokları ayrıştırma, zaman damgaları, otomatik kaydırma ve anlık mesaj gönderimi.
+  - `DirectMessagesView.tsx`: Ana sayfa paneli; seçili eş olduğunda doğrudan sohbet, seçili değilken son görüşmeler ve genel bakış dashboard'u.
+  - `ChannelList.tsx`: DM modunda sol panelde tüm DM sohbetlerinin listelenmesi, okunmamış rozetleri ve ana sayfa geçiş butonu.
+  - `MemberList.tsx`: Grup üye listesindeki herhangi bir üyeye tek tıkla doğrudan DM başlatma butonu (`MessageSquare`).
+  - `App.tsx`: Kimlik yüklendiğinde otomatik `dmWebSocketService.connect()` başlatılması.
+- [x] **Test Doğrulamaları:**
+  - `pnpm typecheck`: Monorepo genelinde sıfır hata ile geçti.
+  - `pnpm lint`: Workspace genelinde sıfır hata ile geçti.
+  - `pnpm test`: 12 test dosyası, 51 testin tamamı (%100) başarıyla geçti.
+
