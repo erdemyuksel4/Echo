@@ -12,11 +12,13 @@ import {
   Trash2,
   LogOut,
   MessageSquare,
+  Radio,
 } from 'lucide-react';
 import { useChatStore } from '../stores/useChatStore';
 import { useAuthStore } from '../stores/useAuthStore';
 import { useVoiceStore } from '../stores/useVoiceStore';
 import { useDmStore } from '../stores/useDmStore';
+import { useScreenShareStore } from '../stores/useScreenShareStore';
 import { wsService } from '../services/websocket';
 import { webrtcService } from '../services/webrtc';
 import { SettingsModal } from './SettingsModal';
@@ -52,6 +54,7 @@ export const ChannelList: React.FC = () => {
 
   const isOwner = activeGroupMeta ? identity?.userId === activeGroupMeta.ownerId : false;
   const { threads, activePeer, setActivePeer } = useDmStore();
+  const { activeShares, watchStream } = useScreenShareStore();
 
   if (!activeGroupMeta) {
     return (
@@ -535,6 +538,27 @@ export const ChannelList: React.FC = () => {
                             >
                               {p.displayName} {isLocal && '(Sen)'}
                             </span>
+
+                            {activeShares.some((s) => s.channelId === channel.id && s.userId === p.userId) && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (!isLocal) {
+                                    void watchStream(p.userId, p.displayName, channel.id);
+                                  }
+                                }}
+                                className={`flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-bold transition shadow-sm ${
+                                  isLocal
+                                    ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30 cursor-default'
+                                    : 'bg-rose-600 text-white hover:bg-rose-500 animate-pulse cursor-pointer'
+                                }`}
+                                title={isLocal ? 'Ekranını paylaşıyorsun' : 'Yayını İzle'}
+                              >
+                                <Radio className="h-2.5 w-2.5" />
+                                <span>CANLI</span>
+                              </button>
+                            )}
+
                             <div className="ml-auto flex items-center gap-1">
                               {muted && (
                                 <span title="Mikrofon kapalı">

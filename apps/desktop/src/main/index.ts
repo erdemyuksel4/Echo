@@ -1,7 +1,7 @@
 import { existsSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import { app, shell, BrowserWindow, ipcMain, Tray, Menu, nativeImage, Notification, session, clipboard } from 'electron';
+import { app, shell, BrowserWindow, ipcMain, Tray, Menu, nativeImage, Notification, session, clipboard, desktopCapturer } from 'electron';
 import { electronApp, optimizer, is } from '@electron-toolkit/utils';
 import { APP_NAME, PROTOCOL_VERSION } from '@echo/shared';
 import { IdentityManager } from './identity';
@@ -243,6 +243,23 @@ if (!gotTheLock) {
     ipcMain.handle('desktop:copyToClipboard', (_, { text }: { text: string }) => {
       clipboard.writeText(text);
       return true;
+    });
+
+    // Handle Desktop Capturer for Screen Sharing
+    ipcMain.handle('desktop:getSources', async () => {
+      const sources = await desktopCapturer.getSources({
+        types: ['screen', 'window'],
+        thumbnailSize: { width: 320, height: 180 },
+        fetchWindowIcons: true,
+      });
+
+      return sources.map((s) => ({
+        id: s.id,
+        name: s.name,
+        thumbnailDataUrl: s.thumbnail.toDataURL(),
+        appIconDataUrl: s.appIcon ? s.appIcon.toDataURL() : null,
+        isScreen: s.id.startsWith('screen:'),
+      }));
     });
 
     createTray();

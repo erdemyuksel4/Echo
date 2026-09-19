@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import type { UserProfile } from '@echo/shared';
+import type { UserProfile, ScreenShareSource } from '@echo/shared';
 
 export interface AppInfo {
   appName: string;
@@ -27,6 +27,7 @@ export interface EchoApi {
   showNotification: (options: { title: string; body: string; silent?: boolean }) => Promise<boolean>;
   setBadgeCount: (count: number) => Promise<boolean>;
   copyToClipboard: (text: string) => Promise<boolean>;
+  getDesktopSources: () => Promise<ScreenShareSource[]>;
 }
 
 const echoApi: EchoApi = {
@@ -53,6 +54,9 @@ const echoApi: EchoApi = {
   },
   copyToClipboard: (text: string): Promise<boolean> => {
     return ipcRenderer.invoke('desktop:copyToClipboard', { text });
+  },
+  getDesktopSources: (): Promise<ScreenShareSource[]> => {
+    return ipcRenderer.invoke('desktop:getSources');
   },
 };
 

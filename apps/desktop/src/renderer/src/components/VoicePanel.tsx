@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Mic,
   MicOff,
@@ -6,14 +6,20 @@ import {
   PhoneOff,
   Activity,
   VolumeX,
+  Monitor,
+  MonitorOff,
+  AlertTriangle,
 } from 'lucide-react';
 import { useVoiceStore } from '../stores/useVoiceStore';
+import { useScreenShareStore } from '../stores/useScreenShareStore';
 import { webrtcService } from '../services/webrtc';
 import { VoiceDiagnosticsModal } from './VoiceDiagnosticsModal';
+import { ScreenSourcePickerModal } from './ScreenSourcePickerModal';
 
 export const VoicePanel: React.FC = () => {
   const {
     connectionStatus,
+    currentChannelId,
     currentChannelName,
     isMuted,
     isDeafened,
@@ -21,6 +27,9 @@ export const VoicePanel: React.FC = () => {
     pingMs,
     setDiagnosticsOpen,
   } = useVoiceStore();
+
+  const { isSharing, viewerCount, stopSharing } = useScreenShareStore();
+  const [showSourcePicker, setShowSourcePicker] = useState(false);
 
   if (connectionStatus === 'disconnected') {
     return null;
@@ -32,6 +41,13 @@ export const VoicePanel: React.FC = () => {
     if (rtt <= 50) return 'text-emerald-400';
     if (rtt <= 120) return 'text-yellow-400';
     return 'text-rose-400';
+  };
+
+  const handleDisconnect = () => {
+    if (isSharing && currentChannelId) {
+      void stopSharing(currentChannelId);
+    }
+    webrtcService.leave();
   };
 
   return (
@@ -79,13 +95,61 @@ export const VoicePanel: React.FC = () => {
 
             {/* Disconnect button */}
             <button
-              onClick={() => webrtcService.leave()}
+              onClick={handleDisconnect}
               className="rounded p-1.5 text-rose-400 hover:bg-rose-500/20 hover:text-rose-300 transition"
               title="Bağlantıyı Kes"
             >
               <PhoneOff className="h-4 w-4" />
             </button>
           </div>
+        </div>
+
+        {/* Screen Share Action Row */}
+        <div className="mb-2">
+          {isSharing ? (
+            <div className="flex items-center justify-between rounded-lg bg-indigo-950/60 border border-indigo-500/30 px-2.5 py-1.5">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-rose-500" />
+                </span>
+                <span className="text-[11px] font-bold text-indigo-200">
+                  Ekranını Paylaşıyorsun
+                </span>
+                {viewerCount > 0 && (
+                  <span className="text-[10px] text-indigo-300 font-medium bg-indigo-900/60 px-1.5 py-0.5 rounded">
+                    {viewerCount} izleyici
+                  </span>
+                )}
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                {viewerCount > 2 && (
+                  <span
+                    className="flex items-center gap-1 text-[10px] text-amber-300 bg-amber-500/10 border border-amber-500/30 px-1.5 py-0.5 rounded"
+                    title="İzleyici sayısı yüksek; bilgisayarını ve internetini yorabilir."
+                  >
+                    <AlertTriangle className="h-3 w-3 text-amber-400" />
+                  </span>
+                )}
+                <button
+                  onClick={() => currentChannelId && void stopSharing(currentChannelId)}
+                  className="rounded p-1 text-rose-400 hover:bg-rose-500/20 hover:text-rose-300 transition"
+                  title="Yayını Durdur"
+                >
+                  <MonitorOff className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              onClick={() => setShowSourcePicker(true)}
+              className="w-full flex items-center justify-center gap-2 rounded-lg bg-slate-900 py-1.5 px-3 text-xs font-semibold text-slate-300 border border-slate-800 hover:bg-indigo-600 hover:text-white hover:border-indigo-500 transition shadow-sm"
+            >
+              <Monitor className="h-3.5 w-3.5" />
+              <span>Ekran Paylaş</span>
+            </button>
+          )}
         </div>
 
         {/* Audio control buttons row */}
@@ -131,6 +195,10 @@ export const VoicePanel: React.FC = () => {
       </div>
 
       <VoiceDiagnosticsModal />
+      <ScreenSourcePickerModal
+        isOpen={showSourcePicker}
+        onClose={() => setShowSourcePicker(false)}
+      />
     </>
   );
 };

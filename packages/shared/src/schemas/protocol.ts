@@ -43,6 +43,9 @@ export const WsClientEvents = {
   DM_SEND: 'dm.send',
   DM_HISTORY_FETCH: 'dm.history_fetch',
   DM_READ_MARK: 'dm.read_mark',
+  SHARE_START: 'share.start',
+  SHARE_STOP: 'share.stop',
+  SHARE_SIGNAL: 'share.signal',
 } as const;
 
 // Server to Client Events
@@ -75,6 +78,10 @@ export const WsServerEvents = {
   DM_NEW: 'dm.new',
   DM_READ: 'dm.read',
   DM_SNAPSHOT: 'dm.snapshot',
+  SHARE_STARTED: 'share.started',
+  SHARE_STOPPED: 'share.stopped',
+  SHARE_SIGNAL: 'share.signal',
+  SHARE_ACTIVE_LIST: 'share.active_list',
 } as const;
 
 // Event Payload Schemas
@@ -229,6 +236,8 @@ export const ServerDmReadPayloadSchema = z.object({
   peerId: z.string(),
   lastReadId: z.string(),
 });
+
+export * from './screenshare';
 
 export {
   AuthPayloadSchema,

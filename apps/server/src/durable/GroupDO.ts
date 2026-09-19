@@ -27,7 +27,11 @@ import {
   ClientVoiceStatePayloadSchema,
   ClientFileSignalPayloadSchema,
   AttachmentUploadRequestSchema,
+  ClientShareStartPayloadSchema,
+  ClientShareStopPayloadSchema,
+  ClientShareSignalPayloadSchema,
   type VoiceParticipant,
+  type ScreenShareState,
   type GroupSnapshot,
   type Channel,
   type GroupMember,
@@ -82,6 +86,7 @@ export class GroupDO extends DurableObject<Env> {
   private typingMap: Map<string, number> = new Map(); // userId -> lastTypingTimestamp
   private voiceRooms: Map<string, Map<string, VoiceParticipant>> = new Map(); // channelId -> (userId -> participant)
   private userVoiceChannel: Map<string, string> = new Map(); // userId -> channelId
+  private screenShares: Map<string, Map<string, ScreenShareState>> = new Map(); // channelId -> (userId -> ScreenShareState)
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -773,6 +778,15 @@ export class GroupDO extends DurableObject<Env> {
       case WsClientEvents.FILE_SIGNAL:
         this.handleFileSignal(session, envelope);
         break;
+      case WsClientEvents.SHARE_START:
+        this.handleShareStart(ws, session, envelope);
+        break;
+      case WsClientEvents.SHARE_STOP:
+        this.handleShareStop(session, envelope);
+        break;
+      case WsClientEvents.SHARE_SIGNAL:
+        this.handleShareSignal(session, envelope);
+        break;
       default:
         this.sendError(ws, 'UNKNOWN_EVENT', `Bilinmeyen olay: ${envelope.t}`);
         break;
@@ -1365,6 +1379,15 @@ export class GroupDO extends DurableObject<Env> {
       },
       envelope.id,
     );
+
+    // Send currently active screen shares in this channel to the newly joined user
+    const channelShares = Array.from(this.screenShares.get(channelId)?.values() ?? []);
+    if (channelShares.length > 0) {
+      this.send(ws, WsServerEvents.SHARE_ACTIVE_LIST, {
+        channelId,
+        shares: channelShares,
+      });
+    }
   }
 
   private handleVoiceLeave(
@@ -1388,6 +1411,16 @@ export class GroupDO extends DurableObject<Env> {
     }
     if (this.userVoiceChannel.get(userId) === channelId) {
       this.userVoiceChannel.delete(userId);
+    }
+
+    // Stop active screen share if this user was sharing
+    const shares = this.screenShares.get(channelId);
+    if (shares && shares.has(userId)) {
+      shares.delete(userId);
+      if (shares.size === 0) {
+        this.screenShares.delete(channelId);
+      }
+      this.broadcast(WsServerEvents.SHARE_STOPPED, { channelId, userId });
     }
 
     this.broadcast(
@@ -1452,6 +1485,90 @@ export class GroupDO extends DurableObject<Env> {
     const { targetUserId, signal } = parse.data;
 
     this.sendToUser(targetUserId, WsServerEvents.FILE_SIGNAL, {
+      fromUserId: session.userId,
+      signal,
+    });
+  }
+
+  private handleShareStart(
+    ws: WebSocket,
+    session: WsSessionAttachment,
+    envelope: WsEnvelope,
+  ): void {
+    const parse = ClientShareStartPayloadSchema.safeParse(envelope.d);
+    if (!parse.success) {
+      this.sendError(ws, 'INVALID_PAYLOAD', 'Ekran paylaşımı parametreleri geçersiz');
+      return;
+    }
+
+    const { channelId, quality, mode, hasAudio } = parse.data;
+
+    // Check if user is in this voice channel
+    if (this.userVoiceChannel.get(session.userId) !== channelId) {
+      this.sendError(ws, 'FORBIDDEN', 'Ekran paylaşmak için önce ses kanalına katılmalısınız');
+      return;
+    }
+
+    let channelShares = this.screenShares.get(channelId);
+    if (!channelShares) {
+      channelShares = new Map();
+      this.screenShares.set(channelId, channelShares);
+    }
+
+    const shareState: ScreenShareState = {
+      channelId,
+      userId: session.userId,
+      displayName: session.displayName,
+      isSharing: true,
+      quality,
+      mode,
+      hasAudio,
+      viewersCount: 0,
+    };
+
+    channelShares.set(session.userId, shareState);
+
+    // Broadcast to entire group
+    this.broadcast(WsServerEvents.SHARE_STARTED, shareState, envelope.id);
+  }
+
+  private handleShareStop(
+    session: WsSessionAttachment,
+    envelope: WsEnvelope,
+  ): void {
+    const parse = ClientShareStopPayloadSchema.safeParse(envelope.d);
+    if (!parse.success) return;
+
+    const { channelId } = parse.data;
+    const channelShares = this.screenShares.get(channelId);
+    if (channelShares && channelShares.has(session.userId)) {
+      channelShares.delete(session.userId);
+      if (channelShares.size === 0) {
+        this.screenShares.delete(channelId);
+      }
+    }
+
+    this.broadcast(
+      WsServerEvents.SHARE_STOPPED,
+      {
+        channelId,
+        userId: session.userId,
+      },
+      envelope.id,
+    );
+  }
+
+  private handleShareSignal(
+    session: WsSessionAttachment,
+    envelope: WsEnvelope,
+  ): void {
+    const parse = ClientShareSignalPayloadSchema.safeParse(envelope.d);
+    if (!parse.success) return;
+
+    const { channelId, targetUserId, signal } = parse.data;
+
+    this.sendToUser(targetUserId, WsServerEvents.SHARE_SIGNAL, {
+      channelId,
       fromUserId: session.userId,
       signal,
     });

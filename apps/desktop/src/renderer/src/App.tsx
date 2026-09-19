@@ -9,6 +9,7 @@ import { ChatArea } from './components/ChatArea';
 import { MemberList } from './components/MemberList';
 import { DirectMessagesView } from './components/DirectMessagesView';
 import { CreateOrJoinModal } from './components/CreateOrJoinModal';
+import { ScreenShareViewer } from './components/ScreenShareViewer';
 import { webrtcService } from './services/webrtc';
 
 import { wsService } from './services/websocket';
@@ -119,6 +120,7 @@ export const App: React.FC = () => {
       )}
 
       <CreateOrJoinModal isOpen={showCreateModal} onClose={() => setShowCreateModal(false)} />
+      <ScreenShareViewer />
     </div>
   );
 };

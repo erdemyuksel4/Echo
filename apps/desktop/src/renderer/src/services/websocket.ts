@@ -9,13 +9,17 @@ import {
   type VoiceParticipant,
   type VoiceSignalData,
   type Attachment,
+  type ScreenShareState,
+  type ScreenQualityPreset,
 } from '@echo/shared';
 import { useChatStore } from '../stores/useChatStore';
 import { useAuthStore } from '../stores/useAuthStore';
 import { useVoiceStore } from '../stores/useVoiceStore';
+import { useScreenShareStore } from '../stores/useScreenShareStore';
 import { soundService } from './sound';
 import { webrtcService } from './webrtc';
 import { p2pFileTransferService } from './p2pFileTransfer';
+import { screenShareTransport } from './screenShare/transport';
 
 class EchoWebSocketService {
   private ws: WebSocket | null = null;
@@ -340,6 +344,30 @@ class EchoWebSocketService {
         break;
       }
 
+      case WsServerEvents.SHARE_STARTED: {
+        const data = envelope.d as ScreenShareState;
+        useScreenShareStore.getState().addOrUpdateShare(data);
+        break;
+      }
+
+      case WsServerEvents.SHARE_STOPPED: {
+        const data = envelope.d as { channelId: string; userId: string };
+        useScreenShareStore.getState().removeShare(data.userId);
+        break;
+      }
+
+      case WsServerEvents.SHARE_ACTIVE_LIST: {
+        const data = envelope.d as { channelId: string; shares: ScreenShareState[] };
+        useScreenShareStore.getState().setActiveShares(data.shares);
+        break;
+      }
+
+      case WsServerEvents.SHARE_SIGNAL: {
+        const data = envelope.d as { channelId: string; fromUserId: string; signal: unknown };
+        void screenShareTransport.handleSignal(data.fromUserId, data.channelId, data.signal);
+        break;
+      }
+
       case WsServerEvents.ERROR: {
         const data = envelope.d as { code: string; message: string };
         console.error('Server error:', data.code, data.message);
@@ -452,6 +480,32 @@ class EchoWebSocketService {
 
   sendFileSignal(targetUserId: string, signal: unknown): void {
     this.send(WsClientEvents.FILE_SIGNAL, {
+      targetUserId,
+      signal,
+    });
+  }
+
+  sendShareStart(
+    channelId: string,
+    quality: ScreenQualityPreset,
+    mode: 'motion' | 'detail',
+    hasAudio: boolean,
+  ): void {
+    this.send(WsClientEvents.SHARE_START, {
+      channelId,
+      quality,
+      mode,
+      hasAudio,
+    });
+  }
+
+  sendShareStop(channelId: string): void {
+    this.send(WsClientEvents.SHARE_STOP, { channelId });
+  }
+
+  sendShareSignal(channelId: string, targetUserId: string, signal: unknown): void {
+    this.send(WsClientEvents.SHARE_SIGNAL, {
+      channelId,
       targetUserId,
       signal,
     });
