@@ -26,6 +26,7 @@ export default [
         NodeJS: 'readonly',
         Response: 'readonly',
         Request: 'readonly',
+        module: 'readonly',
       },
     },
     plugins: {
@@ -36,6 +37,19 @@ export default [
       'no-unused-vars': 'off',
       '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
       '@typescript-eslint/no-explicit-any': 'error',
+    },
+  },
+  {
+    files: ['**/*.js', '**/*.cjs'],
+    languageOptions: {
+      globals: {
+        module: 'readonly',
+        require: 'readonly',
+        __dirname: 'readonly',
+        __filename: 'readonly',
+        process: 'readonly',
+        console: 'readonly',
+      },
     },
   },
   {
