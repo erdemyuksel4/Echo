@@ -194,6 +194,21 @@ app.post('/api/groups/join', async (c) => {
   return c.json(joinData);
 });
 
+// User memberships
+app.get('/api/users/:userId/groups', async (c) => {
+  const userId = c.req.param('userId');
+  const userDoId = c.env.USER_DO.idFromName(userId);
+  const userStub = c.env.USER_DO.get(userDoId);
+  const res = await userStub.fetch('http://do/internal/memberships');
+  const memberships = (await res.json()) as { group_id: string; group_name: string }[];
+  return c.json(
+    memberships.map((m) => ({
+      id: m.group_id,
+      name: m.group_name,
+    })),
+  );
+});
+
 // Group WebSocket endpoint
 app.get('/ws/group/:id', async (c) => {
   const groupId = c.req.param('id');

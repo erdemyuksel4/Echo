@@ -200,6 +200,18 @@ export const ChatMessageItem: React.FC<Props> = ({
     ([, userIds]) => userIds.length > 0,
   );
 
+  if (message.authorId === 'system') {
+    return (
+      <div className="flex items-center gap-3 px-4 py-2.5 my-1.5 text-xs text-slate-300 bg-indigo-950/30 border-l-2 border-indigo-500 rounded-r shadow-sm">
+        <span className="text-base">🎉</span>
+        <div className="flex-1 font-medium leading-relaxed text-slate-200">
+          {renderContentTokens(message.content)}
+        </div>
+        <span className="text-[10px] text-slate-500 font-mono">{formatTime(message.createdAt)}</span>
+      </div>
+    );
+  }
+
   return (
     <div className="group relative flex items-start gap-3 -mx-4 px-4 py-1.5 rounded transition-colors hover:bg-slate-800/40">
       {/* Action Toolbar on Hover */}

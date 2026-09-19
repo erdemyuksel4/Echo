@@ -315,6 +315,50 @@ export class GroupDO extends DurableObject<Env> {
 
       this.sql.exec(`UPDATE invites SET uses = uses + 1 WHERE code = ?`, body.inviteCode);
 
+      // 1. Broadcast member.joined to all connected sockets
+      const newMember: GroupMember = {
+        userId: body.userId,
+        displayName: body.displayName,
+        pubkey: body.pubkey,
+        role: 'member',
+        joinedAt: now,
+        banned: false,
+        status: 'online',
+      };
+      this.broadcast(WsServerEvents.MEMBER_JOINED, newMember);
+
+      // 2. Insert welcome system message in #genel and broadcast msg.new
+      const genelRows = [...this.sql.exec(`SELECT id FROM channels WHERE name = 'genel' LIMIT 1`)] as { id: string }[];
+      const genelChanId = genelRows[0]?.id;
+      if (genelChanId) {
+        const welcomeId = ulid();
+        const welcomeContent = `🎉 **${body.displayName}** gruba katıldı. Hoş geldin!`;
+        this.sql.exec(
+          `INSERT INTO messages (id, channel_id, author_id, author_name, content, created_at, deleted)
+           VALUES (?, ?, 'system', 'Echo Sistemi', ?, ?, 0)`,
+          welcomeId,
+          genelChanId,
+          welcomeContent,
+          now,
+        );
+
+        const welcomeMsg: Message = {
+          id: welcomeId,
+          channelId: genelChanId,
+          authorId: 'system',
+          authorName: 'Echo Sistemi',
+          content: welcomeContent,
+          replyTo: null,
+          replyToAuthorName: null,
+          replyToContent: null,
+          createdAt: now,
+          editedAt: null,
+          deleted: false,
+          reactions: {},
+        };
+        this.broadcast(WsServerEvents.MSG_NEW, welcomeMsg);
+      }
+
       const snapshot = this.getGroupSnapshot();
       return Response.json({ success: true, snapshot });
     }
@@ -374,10 +418,17 @@ export class GroupDO extends DurableObject<Env> {
       status: onlineUserIds.has(r.user_id) ? 'online' : 'offline',
     }));
 
+    const inviteCursor = this.sql.exec(
+      `SELECT code FROM invites WHERE revoked = 0 ORDER BY created_at ASC LIMIT 1`,
+    );
+    const inviteRows = [...inviteCursor] as { code: string }[];
+    const inviteCode = inviteRows[0]?.code;
+
     return {
       group: groupMeta,
       channels,
       members,
+      inviteCode,
     };
   }
 

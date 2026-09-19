@@ -6,6 +6,25 @@ export interface GroupItem {
   name: string;
 }
 
+const loadInitialGroups = (): GroupItem[] => {
+  try {
+    const raw = localStorage.getItem('echo_groups');
+    if (raw) return JSON.parse(raw);
+  } catch (e) {
+    void e;
+  }
+  return [];
+};
+
+const loadInitialActiveGroupId = (): string | null => {
+  try {
+    return localStorage.getItem('echo_active_group_id');
+  } catch (e) {
+    void e;
+  }
+  return null;
+};
+
 interface ChatState {
   groups: GroupItem[];
   activeGroupId: string | null;
@@ -24,7 +43,12 @@ interface ChatState {
   setGroups: (groups: GroupItem[]) => void;
   addGroup: (group: GroupItem) => void;
   setActiveGroup: (groupId: string | null) => void;
-  setSnapshot: (meta: GroupMeta, channels: Channel[], members: GroupMember[]) => void;
+  setSnapshot: (
+    meta: GroupMeta,
+    channels: Channel[],
+    members: GroupMember[],
+    inviteCode?: string,
+  ) => void;
   setActiveChannel: (channelId: string | null) => void;
   setConnectionStatus: (status: 'disconnected' | 'connecting' | 'connected') => void;
   addMessage: (channelId: string, message: Message) => void;
@@ -38,14 +62,15 @@ interface ChatState {
   addChannel: (channel: Channel) => void;
   removeChannel: (channelId: string) => void;
   updateChannel: (channelId: string, name: string) => void;
+  addMember: (member: GroupMember) => void;
   setMemberPresence: (userId: string, status: 'online' | 'idle' | 'offline') => void;
   setTypingUser: (channelId: string, displayName: string) => void;
   setDefaultInviteCode: (code: string | null) => void;
 }
 
 export const useChatStore = create<ChatState>((set) => ({
-  groups: [],
-  activeGroupId: null,
+  groups: loadInitialGroups(),
+  activeGroupId: loadInitialActiveGroupId(),
   activeGroupMeta: null,
   channels: [],
   activeChannelId: null,
@@ -58,27 +83,78 @@ export const useChatStore = create<ChatState>((set) => ({
   editingMessageId: null,
   unreadCounts: {},
 
-  setGroups: (groups) => set({ groups }),
-  addGroup: (group) =>
-    set((state) => ({
-      groups: state.groups.some((g) => g.id === group.id) ? state.groups : [...state.groups, group],
-    })),
-  setActiveGroup: (activeGroupId) => set({ activeGroupId }),
+  setGroups: (groups) => {
+    try {
+      localStorage.setItem('echo_groups', JSON.stringify(groups));
+    } catch (e) {
+      void e;
+    }
+    set({ groups });
+  },
 
-  setSnapshot: (activeGroupMeta, channels, members) => {
+  addGroup: (group) =>
     set((state) => {
+      const updated = state.groups.some((g) => g.id === group.id)
+        ? state.groups.map((g) => (g.id === group.id ? { id: g.id, name: group.name } : g))
+        : [...state.groups, group];
+      try {
+        localStorage.setItem('echo_groups', JSON.stringify(updated));
+      } catch (e) {
+        void e;
+      }
+      return { groups: updated };
+    }),
+
+  setActiveGroup: (activeGroupId) => {
+    try {
+      if (activeGroupId) {
+        localStorage.setItem('echo_active_group_id', activeGroupId);
+      } else {
+        localStorage.removeItem('echo_active_group_id');
+      }
+    } catch (e) {
+      void e;
+    }
+    set({ activeGroupId });
+  },
+
+  setSnapshot: (activeGroupMeta, channels, members, inviteCode) => {
+    set((state) => {
+      const updatedGroups = state.groups.some((g) => g.id === activeGroupMeta.id)
+        ? state.groups.map((g) =>
+            g.id === activeGroupMeta.id ? { id: g.id, name: activeGroupMeta.name } : g,
+          )
+        : [...state.groups, { id: activeGroupMeta.id, name: activeGroupMeta.name }];
+      try {
+        localStorage.setItem('echo_groups', JSON.stringify(updatedGroups));
+      } catch (e) {
+        void e;
+      }
+
       // Pick first text channel if none active or current is invalid
       const currentValid = channels.some((c) => c.id === state.activeChannelId);
       const firstText = channels.find((c) => c.type === 'text');
       const activeChannelId = currentValid ? state.activeChannelId : (firstText?.id ?? null);
       return {
+        groups: updatedGroups,
         activeGroupMeta,
         channels,
         members,
         activeChannelId,
+        defaultInviteCode: inviteCode ?? state.defaultInviteCode,
       };
     });
   },
+
+  addMember: (member) =>
+    set((state) => {
+      if (state.members.some((m) => m.userId === member.userId)) {
+        return state;
+      }
+      return {
+        members: [...state.members, member],
+      };
+    }),
 
   setActiveChannel: (activeChannelId) =>
     set((state) => ({

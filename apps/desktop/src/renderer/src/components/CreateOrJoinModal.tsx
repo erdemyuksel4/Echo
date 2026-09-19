@@ -102,6 +102,7 @@ export const CreateOrJoinModal: React.FC<Props> = ({ isOpen, onClose }) => {
       const grp = data.snapshot.group;
       addGroup({ id: grp.id, name: grp.name });
       setActiveGroup(grp.id);
+      setDefaultInviteCode(data.snapshot.inviteCode ?? code);
       wsService.connect(grp.id);
       setInviteCode('');
       setError(null);

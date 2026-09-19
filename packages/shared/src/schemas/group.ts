@@ -42,6 +42,7 @@ export const GroupSnapshotSchema = z.object({
   group: GroupMetaSchema,
   channels: z.array(ChannelSchema),
   members: z.array(GroupMemberSchema),
+  inviteCode: z.string().optional(),
 });
 
 export type GroupSnapshot = z.infer<typeof GroupSnapshotSchema>;

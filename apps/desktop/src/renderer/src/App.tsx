@@ -11,6 +11,8 @@ import { DirectMessagesView } from './components/DirectMessagesView';
 import { CreateOrJoinModal } from './components/CreateOrJoinModal';
 import { webrtcService } from './services/webrtc';
 
+import { wsService } from './services/websocket';
+
 export const App: React.FC = () => {
   const { identity, isLoaded, loadIdentity } = useAuthStore();
   const { activeGroupId } = useChatStore();
@@ -20,6 +22,48 @@ export const App: React.FC = () => {
     loadIdentity();
     void webrtcService.init();
   }, [loadIdentity]);
+
+  // Load and sync user's groups on startup
+  useEffect(() => {
+    if (!identity) return;
+
+    void fetch(`http://localhost:8787/api/users/${identity.userId}/groups`)
+      .then((res) => (res.ok ? res.json() : []))
+      .then((serverGroups: { id: string; name: string }[]) => {
+        if (serverGroups && serverGroups.length > 0) {
+          const currentGroups = useChatStore.getState().groups;
+          const merged = [...currentGroups];
+          for (const sg of serverGroups) {
+            const idx = merged.findIndex((g) => g.id === sg.id);
+            if (idx === -1) {
+              merged.push(sg);
+            } else {
+              merged[idx] = sg; // Update name if changed
+            }
+          }
+          useChatStore.getState().setGroups(merged);
+
+          const currentActive = useChatStore.getState().activeGroupId;
+          const targetId =
+            currentActive && merged.some((g) => g.id === currentActive)
+              ? currentActive
+              : merged[0]!.id;
+          useChatStore.getState().setActiveGroup(targetId);
+          wsService.connect(targetId);
+        } else {
+          const currentActive = useChatStore.getState().activeGroupId;
+          if (currentActive) {
+            wsService.connect(currentActive);
+          }
+        }
+      })
+      .catch(() => {
+        const currentActive = useChatStore.getState().activeGroupId;
+        if (currentActive) {
+          wsService.connect(currentActive);
+        }
+      });
+  }, [identity]);
 
   if (!isLoaded) {
     return (

@@ -5,6 +5,7 @@ import {
   type GroupSnapshot,
   type Message,
   type Channel,
+  type GroupMember,
   type VoiceParticipant,
   type VoiceSignalData,
 } from '@echo/shared';
@@ -112,7 +113,12 @@ class EchoWebSocketService {
 
       case WsServerEvents.SNAPSHOT: {
         const snapshot = envelope.d as GroupSnapshot;
-        chatStore.setSnapshot(snapshot.group, snapshot.channels, snapshot.members);
+        chatStore.setSnapshot(
+          snapshot.group,
+          snapshot.channels,
+          snapshot.members,
+          snapshot.inviteCode,
+        );
 
         // Fetch history for first active channel
         const activeChanId = chatStore.activeChannelId;
@@ -214,6 +220,12 @@ class EchoWebSocketService {
       case WsServerEvents.CHANNEL_DELETED: {
         const data = envelope.d as { channelId: string };
         chatStore.removeChannel(data.channelId);
+        break;
+      }
+
+      case WsServerEvents.MEMBER_JOINED: {
+        const member = envelope.d as GroupMember;
+        chatStore.addMember(member);
         break;
       }
 
