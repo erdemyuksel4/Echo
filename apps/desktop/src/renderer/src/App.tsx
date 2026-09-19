@@ -11,6 +11,8 @@ import { MemberList } from './components/MemberList';
 import { DirectMessagesView } from './components/DirectMessagesView';
 import { CreateOrJoinModal } from './components/CreateOrJoinModal';
 import { ScreenShareViewer } from './components/ScreenShareViewer';
+import { VoiceStageView } from './components/VoiceStageView';
+import { UpdateNotification } from './components/UpdateNotification';
 import { webrtcService } from './services/webrtc';
 import { SERVER_HTTP_URL } from './config';
 
@@ -19,7 +21,8 @@ import { dmWebSocketService } from './services/dmWebsocket';
 
 export const App: React.FC = () => {
   const { identity, isLoaded, loadIdentity } = useAuthStore();
-  const { activeGroupId, connectionStatus } = useChatStore();
+  const { activeGroupId, connectionStatus, channels, activeChannelId } = useChatStore();
+  const activeChannel = channels.find((c) => c.id === activeChannelId);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const { inputMode, pttKey, pttReleaseDelay, currentChannelId } = useVoiceStore();
 
@@ -162,40 +165,48 @@ export const App: React.FC = () => {
   }
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-slate-900 text-slate-100 select-none relative">
-      {!identity && <OnboardingModal />}
+    <div className="flex h-screen w-screen flex-col overflow-hidden bg-slate-900 text-slate-100 select-none relative">
+      <UpdateNotification />
 
-      {/* Floating Reconnection / Offline Banner */}
-      {activeGroupId && connectionStatus !== 'connected' && (
-        <div className="fixed top-3 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 rounded-full bg-amber-500/90 backdrop-blur px-4 py-1.5 text-xs font-semibold text-slate-950 shadow-lg shadow-amber-500/20 animate-in fade-in slide-in-from-top-2">
-          {connectionStatus === 'connecting' ? (
-            <>
-              <Loader2 className="h-3.5 w-3.5 animate-spin text-slate-950" />
-              <span>Sunucuya bağlanılıyor...</span>
-            </>
-          ) : (
-            <>
-              <WifiOff className="h-3.5 w-3.5 text-slate-950" />
-              <span>Bağlantı koptu, yeniden bağlanılıyor...</span>
-            </>
-          )}
-        </div>
-      )}
+      <div className="flex flex-1 min-h-0 w-full overflow-hidden relative">
+        {!identity && <OnboardingModal />}
 
-      {/* Main Application Layout */}
-      <Sidebar onOpenCreateModal={() => setShowCreateModal(true)} />
-      <ChannelList />
-      {activeGroupId ? (
-        <>
-          <ChatArea />
-          <MemberList />
-        </>
-      ) : (
-        <DirectMessagesView />
-      )}
+        {/* Floating Reconnection / Offline Banner */}
+        {activeGroupId && connectionStatus !== 'connected' && (
+          <div className="fixed top-3 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 rounded-full bg-amber-500/90 backdrop-blur px-4 py-1.5 text-xs font-semibold text-slate-950 shadow-lg shadow-amber-500/20 animate-in fade-in slide-in-from-top-2">
+            {connectionStatus === 'connecting' ? (
+              <>
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-slate-950" />
+                <span>Sunucuya bağlanılıyor...</span>
+              </>
+            ) : (
+              <>
+                <WifiOff className="h-3.5 w-3.5 text-slate-950" />
+                <span>Bağlantı koptu, yeniden bağlanılıyor...</span>
+              </>
+            )}
+          </div>
+        )}
 
-      <CreateOrJoinModal isOpen={showCreateModal} onClose={() => setShowCreateModal(false)} />
-      <ScreenShareViewer />
+        {/* Main Application Layout */}
+        <Sidebar onOpenCreateModal={() => setShowCreateModal(true)} />
+        <ChannelList />
+        {activeGroupId ? (
+          <>
+            {activeChannel?.type === 'voice' ? (
+              <VoiceStageView channel={activeChannel} />
+            ) : (
+              <ChatArea />
+            )}
+            <MemberList />
+          </>
+        ) : (
+          <DirectMessagesView />
+        )}
+
+        <CreateOrJoinModal isOpen={showCreateModal} onClose={() => setShowCreateModal(false)} />
+        <ScreenShareViewer />
+      </div>
     </div>
   );
 };

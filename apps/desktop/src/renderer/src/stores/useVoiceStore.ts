@@ -12,6 +12,8 @@ export interface VoiceState {
   isMuted: boolean;
   isDeafened: boolean;
   isSpeaking: boolean;
+  isCameraActive: boolean;
+  cameraStreams: Record<string, MediaStream>;
   pingMs: number;
 
   // Push-to-Talk configuration
@@ -40,6 +42,9 @@ export interface VoiceState {
   setMuted: (muted: boolean) => void;
   setDeafened: (deafened: boolean) => void;
   setSpeaking: (speaking: boolean) => void;
+  setCameraActive: (active: boolean) => void;
+  setPeerCameraStream: (peerId: string, stream: MediaStream) => void;
+  removePeerCameraStream: (peerId: string) => void;
   setPingMs: (ping: number) => void;
 
   setInputMode: (mode: VoiceInputMode) => void;
@@ -53,7 +58,7 @@ export interface VoiceState {
   updateChannelParticipantState: (
     channelId: string,
     userId: string,
-    state: { muted: boolean; deafened: boolean; speaking: boolean },
+    state: { muted: boolean; deafened: boolean; speaking: boolean; camera?: boolean },
   ) => void;
 
   setDiagnostics: (diagnostics: Record<string, PeerDiagnosticsStats>) => void;
@@ -103,6 +108,8 @@ export const useVoiceStore = create<VoiceState>((set) => ({
   isMuted: false,
   isDeafened: false,
   isSpeaking: false,
+  isCameraActive: false,
+  cameraStreams: {},
   pingMs: 0,
 
   inputMode: getInitialInputMode(),
@@ -139,6 +146,8 @@ export const useVoiceStore = create<VoiceState>((set) => ({
       currentChannelName: null,
       connectionStatus: 'disconnected',
       isSpeaking: false,
+      isCameraActive: false,
+      cameraStreams: {},
       pingMs: 0,
       diagnostics: {},
     }),
@@ -146,6 +155,20 @@ export const useVoiceStore = create<VoiceState>((set) => ({
   setMuted: (isMuted) => set({ isMuted }),
   setDeafened: (isDeafened) => set({ isDeafened, isMuted: isDeafened ? true : undefined }),
   setSpeaking: (isSpeaking) => set({ isSpeaking }),
+  setCameraActive: (isCameraActive) => set({ isCameraActive }),
+  setPeerCameraStream: (peerId, stream) =>
+    set((state) => ({
+      cameraStreams: {
+        ...state.cameraStreams,
+        [peerId]: stream,
+      },
+    })),
+  removePeerCameraStream: (peerId) =>
+    set((state) => {
+      const next = { ...state.cameraStreams };
+      delete next[peerId];
+      return { cameraStreams: next };
+    }),
   setPingMs: (pingMs) => set({ pingMs }),
 
   setInputMode: (inputMode) => {
@@ -224,6 +247,7 @@ export const useVoiceStore = create<VoiceState>((set) => ({
                   muted: update.muted,
                   deafened: update.deafened,
                   speaking: update.speaking,
+                  camera: update.camera !== undefined ? update.camera : p.camera,
                 }
               : p,
           ),

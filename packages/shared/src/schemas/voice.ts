@@ -41,6 +41,7 @@ export const ClientVoiceStatePayloadSchema = z.object({
   muted: z.boolean(),
   deafened: z.boolean(),
   speaking: z.boolean(),
+  camera: z.boolean().optional(),
 });
 
 export type ClientVoiceStatePayload = z.infer<typeof ClientVoiceStatePayloadSchema>;
@@ -52,6 +53,7 @@ export const VoiceParticipantSchema = z.object({
   muted: z.boolean().default(false),
   deafened: z.boolean().default(false),
   speaking: z.boolean().default(false),
+  camera: z.boolean().default(false),
 });
 
 export type VoiceParticipant = z.infer<typeof VoiceParticipantSchema>;
@@ -86,6 +88,7 @@ export const ServerVoiceStatePayloadSchema = z.object({
   muted: z.boolean(),
   deafened: z.boolean(),
   speaking: z.boolean(),
+  camera: z.boolean().default(false),
 });
 
 export type ServerVoiceStatePayload = z.infer<typeof ServerVoiceStatePayloadSchema>;

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Settings,
   Volume2,
@@ -12,6 +12,7 @@ import {
   Keyboard,
   Sliders,
   Laptop,
+  Video,
 } from 'lucide-react';
 import { soundService } from '../services/sound';
 import { webrtcService } from '../services/webrtc';
@@ -44,6 +45,13 @@ export const SettingsModal: React.FC<Props> = ({ isOpen, onClose }) => {
 
   const [isTestingMic, setIsTestingMic] = useState(false);
   const [micLevel, setMicLevel] = useState(0);
+
+  const [videoDevices, setVideoDevices] = useState<MediaDeviceInfo[]>([]);
+  const [selectedVideoId, setSelectedVideoId] = useState<string>(
+    webrtcService.getVideoDeviceId() || '',
+  );
+  const [isTestingCamera, setIsTestingCamera] = useState(false);
+  const testVideoRef = useRef<HTMLVideoElement | null>(null);
 
   const {
     inputMode,
@@ -111,12 +119,19 @@ export const SettingsModal: React.FC<Props> = ({ isOpen, onClose }) => {
           setSelectedInputId(inputs[0]!.deviceId);
         }
       });
+      void webrtcService.getVideoDevices().then((videos) => {
+        setVideoDevices(videos);
+        if (!selectedVideoId && videos.length > 0) {
+          setSelectedVideoId(videos[0]!.deviceId);
+        }
+      });
     } else {
       setIsTestingMic(false);
       setMicLevel(0);
+      setIsTestingCamera(false);
       setIsRecordingPttKey(false);
     }
-  }, [isOpen, selectedInputId]);
+  }, [isOpen, selectedInputId, selectedVideoId]);
 
   useEffect(() => {
     if (isTestingMic) {
@@ -131,6 +146,25 @@ export const SettingsModal: React.FC<Props> = ({ isOpen, onClose }) => {
       return undefined;
     }
   }, [isTestingMic]);
+
+  useEffect(() => {
+    if (isTestingCamera && testVideoRef.current) {
+      const cleanup = webrtcService.testCamera(testVideoRef.current);
+      return () => {
+        cleanup();
+      };
+    }
+    return undefined;
+  }, [isTestingCamera]);
+
+  const handleVideoDeviceChange = async (deviceId: string) => {
+    setSelectedVideoId(deviceId);
+    await webrtcService.setVideoDevice(deviceId);
+    if (isTestingCamera && testVideoRef.current) {
+      setIsTestingCamera(false);
+      setTimeout(() => setIsTestingCamera(true), 50);
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -415,6 +449,89 @@ export const SettingsModal: React.FC<Props> = ({ isOpen, onClose }) => {
                     </div>
                   </div>
                 )}
+              </div>
+
+              {/* Camera & Video Settings */}
+              <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4 space-y-4">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-600/20 text-emerald-400">
+                    <Video className="h-5 w-5" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="text-sm font-semibold text-white">Kamera &amp; Video</h3>
+                    <p className="text-xs text-slate-400">Kamera aygıtını seçin ve canlı ayna görüntünüzü test edin</p>
+                  </div>
+                </div>
+
+                {/* Webcam Selector */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-slate-300">Kamera Aygıtı</label>
+                  {videoDevices.length === 0 ? (
+                    <div className="rounded-lg bg-slate-900 border border-slate-800 px-3 py-2 text-xs text-slate-500 italic">
+                      Algılanan kamera bulunamadı
+                    </div>
+                  ) : (
+                    <select
+                      value={selectedVideoId}
+                      onChange={(e) => void handleVideoDeviceChange(e.target.value)}
+                      className="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-xs text-slate-200 focus:border-emerald-500 focus:outline-none"
+                    >
+                      {videoDevices.map((dev, idx) => (
+                        <option key={dev.deviceId || idx} value={dev.deviceId}>
+                          {dev.label || `Kamera ${idx + 1}`}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+
+                {/* Camera Test Section */}
+                <div className="space-y-2 pt-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-medium text-slate-300">Kamera Önizleme &amp; Ayna Testi</span>
+                    <button
+                      type="button"
+                      onClick={() => setIsTestingCamera((prev) => !prev)}
+                      className={`flex items-center gap-1.5 rounded-lg px-3 py-1 text-xs font-semibold transition ${
+                        isTestingCamera
+                          ? 'bg-rose-600 text-white hover:bg-rose-500'
+                          : 'bg-emerald-600 text-white hover:bg-emerald-500'
+                      }`}
+                    >
+                      {isTestingCamera ? (
+                        <>
+                          <Square className="h-3 w-3 fill-current" />
+                          <span>Testi Durdur</span>
+                        </>
+                      ) : (
+                        <>
+                          <Play className="h-3 w-3 fill-current" />
+                          <span>Kamerayı Test Et</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  {isTestingCamera ? (
+                    <div className="relative aspect-video w-full rounded-xl overflow-hidden bg-slate-900 border border-emerald-500/50 shadow-inner flex items-center justify-center">
+                      <video
+                        ref={testVideoRef}
+                        autoPlay
+                        playsInline
+                        muted
+                        className="w-full h-full object-cover -scale-x-100"
+                      />
+                      <div className="absolute top-2 left-2 flex items-center gap-1.5 bg-slate-950/80 backdrop-blur px-2 py-0.5 rounded-md border border-emerald-500/30 text-[11px] font-medium text-emerald-400">
+                        <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+                        <span>Canlı Önizleme (480p24)</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="rounded-lg border border-dashed border-slate-800 bg-slate-900/40 p-4 text-center text-xs text-slate-500">
+                      Görüntünüzü kontrol etmek için yukarıdaki &quot;Kamerayı Test Et&quot; düğmesine tıklayın.
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </div>

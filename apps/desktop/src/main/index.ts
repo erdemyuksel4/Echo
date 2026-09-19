@@ -5,6 +5,7 @@ import { app, shell, BrowserWindow, ipcMain, Tray, Menu, nativeImage, Notificati
 import { electronApp, optimizer, is } from '@electron-toolkit/utils';
 import { APP_NAME, PROTOCOL_VERSION } from '@echo/shared';
 import { IdentityManager } from './identity';
+import { initAutoUpdater } from './updater';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -137,6 +138,8 @@ function createWindow(): void {
   } else {
     void mainWindow.loadFile(join(__dirname, '../renderer/index.html'));
   }
+
+  initAutoUpdater(mainWindow);
 }
 
 // Single Instance Lock (disabled or isolated when testing with custom profiles)

@@ -15,7 +15,7 @@ Bu dosya her faz ve görev sonunda güncellenir.
 | Faz 6 | Ekran paylaşımı (mesh)                  | Tamamlandı | `faz-6-ekran-paylasimi`| desktopCapturer, 720p30/1080p kalite ön ayarları, ScreenShareTransport, MeshTransport, ScreenShareViewer |
 | Faz 7 | SFU (kapılı)                            | Atlandı    | -                      | Patron kararıyla şimdilik atlandı (P2P Mesh yeterli)                       |
 | Faz 8 | Cilalama ve dağıtım                     | Tamamlandı | `faz-8-cilalama-dagitim`| Bas-konuş, Windows ile başlat, boş durumlar, NSIS tek tıkla .exe kurulumu  |
-| Faz 9 | Kamera (opsiyonel)                      | Başlanmadı | -                      | -                                                                          |
+| Faz 9 | Kamera (Webcam)                         | Tamamlandı | `faz-9-kamera`         | WebRTC 480p24 mesh kamera yayını, VoiceStageView video grid, Ayarlar kamera seçici & ayna testi |
 
 ## Faz 0 — Kabul Kriterleri ve Gerçekleşenler
 
@@ -255,6 +255,38 @@ Bu dosya her faz ve görev sonunda güncellenir.
   - **Katılımcı Senkronizasyonu & Boş Oda Temizliği:** `GroupDO.handleAuth` metodunda tüm ses kanallarının katılımcı listeleri (boş odalar için `[]` dahil) gönderilerek istemcideki eski/yetim katılımcı listeleri temizlendi.
   - **Anında Çıkış ve Kolaylık (Toggle):** `webrtcService.leave()` çağrıldığında kullanıcının kendi kaydı yerel Zustand store'dan anında silinir; `ChannelList` üzerinde aktif ses kanalına tekrar tıklandığında kolayca bağlantıyı kesme (toggle leave) özelliği eklendi.
   - **Canlı Sunucu Güncellemesi:** Sunucu güncellemeleri Cloudflare Workers üzerine deploy edildi (`Version ID: 5d10a9a9-08ba-422c-9907-6dfca7d26926`), masaüstü kurulum paketi güncellendi ve kodlar GitHub'a pushlandı.
+
+## Faz 9 — Kabul Kriterleri ve Gerçekleşenler
+
+- [x] **Ortak Şemalar ve Protokol (`@echo/shared`):**
+  - `VoiceParticipantSchema`: `camera: z.boolean().default(false)` alanı eklendi.
+  - `ClientVoiceStatePayloadSchema`: `camera: z.boolean().optional()` alanı eklendi.
+  - `ServerVoiceStatePayloadSchema`: `camera: z.boolean().default(false)` alanı eklendi.
+  - `packages/shared/src/__tests__/voice.test.ts`: Kamera şemalarını doğrulayan birim testleri eklendi ve tüm testler (43/43) başarıyla geçti.
+- [x] **Sunucu Mimarisi (`apps/server`):**
+  - `GroupDO.ts`: Ses odasına katılan katılımcılara varsayılan `camera: false` atandı.
+  - `GroupDO.handleVoiceState`: İstemcilerden gelen `camera` durumu oda hafızasında güncellenerek gruptaki tüm eşlere `voice.state` olayı ile anlık olarak duyurulması sağlandı.
+- [x] **WebRTC Motoru ve Kamera Yönetimi (`apps/desktop`):**
+  - `WebRTCVoiceService`: `localCameraStream`, `selectedVideoDeviceId` yönetimi tanımlandı.
+  - `toggleCamera(enable?: boolean)`: 480p24 optimum çözünürlük kısıtlaması (`{ width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { max: 24 } }`), H.264/VP8 uyumlu mesh entegrasyonu.
+  - Kamera açıldığında mevcut tüm eş RTCPeerConnection bağlantılarına `pc.addTrack` ile video track eklenip renegotiation (yeniden anlaşma) teklifleri gönderildi.
+  - `pc.ontrack`: Uzak eşlerden gelen video track'leri `video` türünde yakalanarak `useVoiceStore.setPeerCameraStream` üzerinden UI ile senkronize edildi.
+  - Kamera kapatıldığında `pc.removeTrack` ve `initiateOffer` ile video parçaları temizlenip `voice.state` ile diğer kullanıcılara `camera: false` bildirildi.
+  - Cihaz yönetimi: `getVideoDevices()`, `setVideoDevice(deviceId)`, `testCamera(videoElement)` metotları yazıldı.
+- [x] **Ses & Video Store (`useVoiceStore.ts`):**
+  - `isCameraActive: boolean`, `cameraStreams: Record<string, MediaStream>` state'leri eklendi.
+  - `setCameraActive`, `setPeerCameraStream`, `removePeerCameraStream` eylemleri tanımlandı.
+  - `updateChannelParticipantState` içine `camera` güncellemesi eklendi.
+- [x] **Arayüz (UI) Bileşenleri:**
+  - `VoicePanel.tsx`: Alt ses kontrol paneline "Kamera Aç / Kapat" (`Video` / `VideoOff`) butonu eklendi. Kanal ismine tıklandığında ses sahnesine odaklanma sağlandı.
+  - `VoiceStageView.tsx`: Discord tarzı dinamik video ızgarası (Grid view). Kamera açıksa canlı `<video autoPlay playsInline muted={isLocal} />` oynatıcı, kapalıysa avatar + konuşurken yeşil parlayan halka gösterimi, tam ekran kontrolü, alt araç çubuğu (Kamera, Mikrofon, Kulaklık, Ayrıl).
+  - `SettingsModal.tsx`: "Kamera & Video" ayar kartı, sistemdeki kamera cihazlarını listeleyen açılır menü (`Webcam Selector`) ve canlı aynalı kamera önizleme testi ("Kamerayı Test Et").
+  - `App.tsx` & `ChannelList.tsx`: Aktif kanal bir ses kanalı olduğunda ortada `VoiceStageView` sahnesi render edilir; kanal listesinden ses kanalına tıklandığında hem katılım hem sahne odağı sağlanır. Katılımcı listesinde kamerası açık kullanıcılarda yeşil kamera rozeti gösterilir.
+- [x] **Test Doğrulamaları:**
+  - `pnpm typecheck`: Sıfır hata ile geçti.
+  - `pnpm test`: Tüm paketlerdeki 65 testin tamamı (%100) başarıyla geçti.
+  - `pnpm --filter @echo/desktop build`: Sıfır hata ile derlendi.
+
 
 
 

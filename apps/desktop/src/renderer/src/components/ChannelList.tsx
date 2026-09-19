@@ -13,6 +13,7 @@ import {
   LogOut,
   MessageSquare,
   Radio,
+  Video,
 } from 'lucide-react';
 import { useChatStore } from '../stores/useChatStore';
 import { useAuthStore } from '../stores/useAuthStore';
@@ -486,12 +487,13 @@ export const ChannelList: React.FC = () => {
                           channel.id,
                           channel.name,
                         );
-                      } else if (isVoiceActive) {
-                        webrtcService.leave();
                       }
+                      setActiveChannel(channel.id);
                     }}
                     className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs font-medium transition group ${
-                      isVoiceActive
+                      activeChannelId === channel.id
+                        ? 'bg-slate-800 text-white font-semibold'
+                        : isVoiceActive
                         ? 'bg-emerald-950/40 text-emerald-300 font-semibold border border-emerald-800/40'
                         : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-200'
                     }`}
@@ -568,6 +570,11 @@ export const ChannelList: React.FC = () => {
                             )}
 
                             <div className="ml-auto flex items-center gap-1">
+                              {p.camera && (
+                                <span title="Kamera açık">
+                                  <Video className="h-3 w-3 text-emerald-400" />
+                                </span>
+                              )}
                               {muted && (
                                 <span title="Mikrofon kapalı">
                                   <MicOff className="h-3 w-3 text-rose-400" />

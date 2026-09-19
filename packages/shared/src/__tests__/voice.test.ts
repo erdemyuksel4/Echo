@@ -5,7 +5,11 @@ import {
   ClientVoiceSignalPayloadSchema,
   ClientVoiceStatePayloadSchema,
   ServerVoiceUserJoinedPayloadSchema,
+  ServerVoiceUserLeftPayloadSchema,
+  ServerVoiceSignalPayloadSchema,
+  ServerVoiceStatePayloadSchema,
   ServerVoiceParticipantsPayloadSchema,
+  VoiceParticipantSchema,
   WsEnvelopeSchema,
   WsClientEvents,
   WsServerEvents,
@@ -81,7 +85,22 @@ describe('Voice Schemas & Protocol', () => {
     expect(parsed.success).toBe(false);
   });
 
-  it('should validate voice state payload (muted, deafened, speaking)', () => {
+  it('should validate voice state payload (muted, deafened, speaking, camera)', () => {
+    const raw = {
+      channelId: 'chan-voice-1',
+      muted: true,
+      deafened: false,
+      speaking: false,
+      camera: true,
+    };
+    const parsed = ClientVoiceStatePayloadSchema.safeParse(raw);
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(parsed.data.camera).toBe(true);
+    }
+  });
+
+  it('should validate voice state payload without camera (optional)', () => {
     const raw = {
       channelId: 'chan-voice-1',
       muted: true,
@@ -126,6 +145,90 @@ describe('Voice Schemas & Protocol', () => {
     };
     const parsed = ServerVoiceParticipantsPayloadSchema.safeParse(raw);
     expect(parsed.success).toBe(true);
+  });
+
+  it('should validate VoiceParticipantSchema with default camera false and explicit camera true', () => {
+    const rawDefault = {
+      userId: 'user-camera-1',
+      displayName: 'Can',
+      muted: false,
+      deafened: false,
+      speaking: false,
+    };
+    const parsedDefault = VoiceParticipantSchema.safeParse(rawDefault);
+    expect(parsedDefault.success).toBe(true);
+    if (parsedDefault.success) {
+      expect(parsedDefault.data.camera).toBe(false);
+    }
+
+    const rawWithCam = {
+      userId: 'user-camera-2',
+      displayName: 'Zeynep',
+      muted: false,
+      deafened: false,
+      speaking: true,
+      camera: true,
+    };
+    const parsedWithCam = VoiceParticipantSchema.safeParse(rawWithCam);
+    expect(parsedWithCam.success).toBe(true);
+    if (parsedWithCam.success) {
+      expect(parsedWithCam.data.camera).toBe(true);
+    }
+  });
+
+  it('should validate ServerVoiceStatePayloadSchema with camera state', () => {
+    const raw = {
+      channelId: 'chan-voice-1',
+      userId: 'user-123',
+      muted: false,
+      deafened: false,
+      speaking: true,
+      camera: true,
+    };
+    const parsed = ServerVoiceStatePayloadSchema.safeParse(raw);
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(parsed.data.camera).toBe(true);
+    }
+
+    // Camera defaults to false when omitted in server payload
+    const rawDefault = {
+      channelId: 'chan-voice-1',
+      userId: 'user-123',
+      muted: true,
+      deafened: false,
+      speaking: false,
+    };
+    const parsedDefault = ServerVoiceStatePayloadSchema.safeParse(rawDefault);
+    expect(parsedDefault.success).toBe(true);
+    if (parsedDefault.success) {
+      expect(parsedDefault.data.camera).toBe(false);
+    }
+  });
+
+  it('should validate ServerVoiceUserLeftPayloadSchema', () => {
+    const raw = {
+      channelId: 'chan-voice-1',
+      userId: 'user-left-1',
+    };
+    const parsed = ServerVoiceUserLeftPayloadSchema.safeParse(raw);
+    expect(parsed.success).toBe(true);
+  });
+
+  it('should validate ServerVoiceSignalPayloadSchema forwarding WebRTC signal', () => {
+    const raw = {
+      channelId: 'chan-voice-1',
+      fromUserId: 'user-peer-1',
+      signal: {
+        type: 'offer',
+        sdp: 'v=0\r\no=- 999 2 IN IP4 127.0.0.1...',
+      },
+    };
+    const parsed = ServerVoiceSignalPayloadSchema.safeParse(raw);
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(parsed.data.fromUserId).toBe('user-peer-1');
+    }
   });
 
   it('should wrap voice join in standard WsEnvelope', () => {

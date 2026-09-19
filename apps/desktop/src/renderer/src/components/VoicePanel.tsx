@@ -8,8 +8,10 @@ import {
   VolumeX,
   Monitor,
   MonitorOff,
-  AlertTriangle,
+  Video,
+  VideoOff,
 } from 'lucide-react';
+import { useChatStore } from '../stores/useChatStore';
 import { useVoiceStore } from '../stores/useVoiceStore';
 import { useScreenShareStore } from '../stores/useScreenShareStore';
 import { webrtcService } from '../services/webrtc';
@@ -25,12 +27,14 @@ export const VoicePanel: React.FC = () => {
     isMuted,
     isDeafened,
     isSpeaking,
+    isCameraActive,
     pingMs,
     setDiagnosticsOpen,
   } = useVoiceStore();
 
   const { isSharing, viewerCount, stopSharing } = useScreenShareStore();
   const [showSourcePicker, setShowSourcePicker] = useState(false);
+  const [isTogglingCamera, setIsTogglingCamera] = useState(false);
 
   if (connectionStatus === 'disconnected') {
     return null;
@@ -51,6 +55,16 @@ export const VoicePanel: React.FC = () => {
     webrtcService.leave();
   };
 
+  const handleToggleCamera = async () => {
+    if (isTogglingCamera) return;
+    setIsTogglingCamera(true);
+    try {
+      await webrtcService.toggleCamera();
+    } finally {
+      setIsTogglingCamera(false);
+    }
+  };
+
   return (
     <>
       <div className="border-t border-slate-800/80 bg-slate-950 px-3 py-2 select-none">
@@ -67,7 +81,15 @@ export const VoicePanel: React.FC = () => {
                 <span className="absolute -inset-1 rounded-full bg-emerald-400/40 animate-ping" />
               )}
             </div>
-            <div className="min-w-0">
+            <div
+              className="min-w-0 cursor-pointer hover:opacity-85 transition"
+              onClick={() => {
+                if (currentChannelId) {
+                  useChatStore.getState().setActiveChannel(currentChannelId);
+                }
+              }}
+              title="Ses Sahnesini Görüntüle"
+            >
               <div className="flex items-center gap-1.5">
                 <span className="text-xs font-semibold text-emerald-400 truncate">
                   {isConnected ? 'Ses Bağlandı' : 'Bağlanıyor...'}
@@ -105,49 +127,48 @@ export const VoicePanel: React.FC = () => {
           </div>
         </div>
 
-        {/* Screen Share Action Row */}
-        <div className="mb-2">
-          {isSharing ? (
-            <div className="flex items-center justify-between rounded-lg bg-indigo-950/60 border border-indigo-500/30 px-2.5 py-1.5">
-              <div className="flex items-center gap-2 min-w-0">
-                <span className="relative flex h-2 w-2">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75" />
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-rose-500" />
-                </span>
-                <span className="text-[11px] font-bold text-indigo-200">
-                  Ekranını Paylaşıyorsun
-                </span>
-                {viewerCount > 0 && (
-                  <span className="text-[10px] text-indigo-300 font-medium bg-indigo-900/60 px-1.5 py-0.5 rounded">
-                    {viewerCount} izleyici
-                  </span>
-                )}
-              </div>
+        {/* Media Stream Action Row (Camera & Screen Share) */}
+        <div className="grid grid-cols-2 gap-1.5 mb-2">
+          {/* Camera Button */}
+          <button
+            onClick={handleToggleCamera}
+            disabled={isTogglingCamera}
+            className={`flex items-center justify-center gap-1.5 rounded-lg py-1.5 px-2 text-xs font-semibold border transition shadow-sm ${
+              isCameraActive
+                ? 'bg-emerald-600 text-white border-emerald-500 hover:bg-emerald-500'
+                : 'bg-slate-900 text-slate-300 border-slate-800 hover:bg-slate-800 hover:text-white hover:border-slate-700'
+            }`}
+            title={isCameraActive ? 'Kamerayı Kapat' : 'Kamera Aç'}
+          >
+            {isCameraActive ? (
+              <Video className="h-3.5 w-3.5 text-white" />
+            ) : (
+              <VideoOff className="h-3.5 w-3.5 text-slate-400" />
+            )}
+            <span>{isCameraActive ? 'Kamera Açık' : 'Kamera'}</span>
+          </button>
 
-              <div className="flex items-center gap-1.5">
-                {viewerCount > 2 && (
-                  <span
-                    className="flex items-center gap-1 text-[10px] text-amber-300 bg-amber-500/10 border border-amber-500/30 px-1.5 py-0.5 rounded"
-                    title="İzleyici sayısı yüksek; bilgisayarını ve internetini yorabilir."
-                  >
-                    <AlertTriangle className="h-3 w-3 text-amber-400" />
-                  </span>
-                )}
-                <button
-                  onClick={() => currentChannelId && void stopSharing(currentChannelId)}
-                  className="rounded p-1 text-rose-400 hover:bg-rose-500/20 hover:text-rose-300 transition"
-                  title="Yayını Durdur"
-                >
-                  <MonitorOff className="h-3.5 w-3.5" />
-                </button>
-              </div>
+          {/* Screen Share Button */}
+          {isSharing ? (
+            <div className="flex items-center justify-between rounded-lg bg-indigo-950/60 border border-indigo-500/30 px-2 py-1">
+              <span className="text-[11px] font-bold text-indigo-200 truncate">
+                {viewerCount > 0 ? `${viewerCount} izleyici` : 'Canlı'}
+              </span>
+              <button
+                onClick={() => currentChannelId && void stopSharing(currentChannelId)}
+                className="rounded p-1 text-rose-400 hover:bg-rose-500/20 hover:text-rose-300 transition shrink-0"
+                title="Yayını Durdur"
+              >
+                <MonitorOff className="h-3.5 w-3.5" />
+              </button>
             </div>
           ) : (
             <button
               onClick={() => setShowSourcePicker(true)}
-              className="w-full flex items-center justify-center gap-2 rounded-lg bg-slate-900 py-1.5 px-3 text-xs font-semibold text-slate-300 border border-slate-800 hover:bg-indigo-600 hover:text-white hover:border-indigo-500 transition shadow-sm"
+              className="flex items-center justify-center gap-1.5 rounded-lg bg-slate-900 py-1.5 px-2 text-xs font-semibold text-slate-300 border border-slate-800 hover:bg-indigo-600 hover:text-white hover:border-indigo-500 transition shadow-sm"
+              title="Ekran Paylaş"
             >
-              <Monitor className="h-3.5 w-3.5" />
+              <Monitor className="h-3.5 w-3.5 text-slate-400" />
               <span>Ekran Paylaş</span>
             </button>
           )}

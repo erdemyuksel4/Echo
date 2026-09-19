@@ -30,6 +30,12 @@ export interface EchoApi {
   getDesktopSources: () => Promise<ScreenShareSource[]>;
   getLoginItemSettings: () => Promise<{ openAtLogin: boolean }>;
   setLoginItemSettings: (openAtLogin: boolean) => Promise<boolean>;
+  checkForUpdates: () => Promise<void>;
+  downloadUpdate: () => Promise<void>;
+  quitAndInstall: () => void;
+  onUpdateAvailable: (cb: (info: { version: string; releaseNotes?: string }) => void) => () => void;
+  onUpdateProgress: (cb: (progress: { percent: number; bytesPerSecond: number }) => void) => () => void;
+  onUpdateDownloaded: (cb: (info: { version: string }) => void) => () => void;
 }
 
 const echoApi: EchoApi = {
@@ -65,6 +71,50 @@ const echoApi: EchoApi = {
   },
   setLoginItemSettings: (openAtLogin: boolean): Promise<boolean> => {
     return ipcRenderer.invoke('desktop:setLoginItemSettings', { openAtLogin });
+  },
+  checkForUpdates: async (): Promise<void> => {
+    await ipcRenderer.invoke('updater:check');
+  },
+  downloadUpdate: async (): Promise<void> => {
+    await ipcRenderer.invoke('updater:download');
+  },
+  quitAndInstall: (): void => {
+    void ipcRenderer.invoke('updater:install');
+  },
+  onUpdateAvailable: (cb: (info: { version: string; releaseNotes?: string }) => void): (() => void) => {
+    const handler = (
+      _event: Electron.IpcRendererEvent,
+      info: { version: string; releaseNotes?: string },
+    ): void => {
+      cb(info);
+    };
+    ipcRenderer.on('updater:available', handler);
+    return () => {
+      ipcRenderer.removeListener('updater:available', handler);
+    };
+  },
+  onUpdateProgress: (
+    cb: (progress: { percent: number; bytesPerSecond: number }) => void,
+  ): (() => void) => {
+    const handler = (
+      _event: Electron.IpcRendererEvent,
+      progress: { percent: number; bytesPerSecond: number },
+    ): void => {
+      cb(progress);
+    };
+    ipcRenderer.on('updater:progress', handler);
+    return () => {
+      ipcRenderer.removeListener('updater:progress', handler);
+    };
+  },
+  onUpdateDownloaded: (cb: (info: { version: string }) => void): (() => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, info: { version: string }): void => {
+      cb(info);
+    };
+    ipcRenderer.on('updater:downloaded', handler);
+    return () => {
+      ipcRenderer.removeListener('updater:downloaded', handler);
+    };
   },
 };
 

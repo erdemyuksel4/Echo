@@ -1362,6 +1362,7 @@ export class GroupDO extends DurableObject<Env> {
       muted: false,
       deafened: false,
       speaking: false,
+      camera: false,
     };
 
     // Get list of existing participants BEFORE adding this new one (for mesh offer initiation)
@@ -1459,13 +1460,18 @@ export class GroupDO extends DurableObject<Env> {
     const parse = ClientVoiceStatePayloadSchema.safeParse(envelope.d);
     if (!parse.success) return;
 
-    const { channelId, muted, deafened, speaking } = parse.data;
+    const { channelId, muted, deafened, speaking, camera } = parse.data;
     const room = this.voiceRooms.get(channelId);
+    let currentCamera = false;
     if (room && room.has(session.userId)) {
       const p = room.get(session.userId)!;
       p.muted = muted;
       p.deafened = deafened;
       p.speaking = speaking;
+      if (camera !== undefined) {
+        p.camera = camera;
+      }
+      currentCamera = p.camera;
     }
 
     this.broadcast(WsServerEvents.VOICE_STATE, {
@@ -1474,6 +1480,7 @@ export class GroupDO extends DurableObject<Env> {
       muted,
       deafened,
       speaking,
+      camera: currentCamera,
     });
   }
 

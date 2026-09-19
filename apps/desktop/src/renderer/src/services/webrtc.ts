@@ -38,6 +38,8 @@ class WebRTCVoiceService {
 
   private selectedInputDeviceId: string | null = null;
   private selectedOutputDeviceId: string | null = null;
+  private selectedVideoDeviceId: string | null = null;
+  private localCameraStream: MediaStream | null = null;
   private outputVolume = 1.0;
 
   async init(): Promise<void> {
@@ -148,6 +150,12 @@ class WebRTCVoiceService {
       this.localStream = null;
     }
 
+    // Stop local camera stream tracks
+    if (this.localCameraStream) {
+      this.localCameraStream.getTracks().forEach((t) => t.stop());
+      this.localCameraStream = null;
+    }
+
     // Close all peer connections
     for (const [peerId, pc] of this.peers.entries()) {
       pc.close();
@@ -213,6 +221,7 @@ class WebRTCVoiceService {
     this.peerDisplayNames.delete(leftUserId);
     this.pendingCandidates.delete(leftUserId);
     this.prevStats.delete(leftUserId);
+    useVoiceStore.getState().removePeerCameraStream(leftUserId);
 
     // Remove from diagnostics
     const currentDiag = { ...useVoiceStore.getState().diagnostics };
@@ -239,7 +248,7 @@ class WebRTCVoiceService {
     try {
       const offer = await pc.createOffer({
         offerToReceiveAudio: true,
-        offerToReceiveVideo: false,
+        offerToReceiveVideo: true,
       });
 
       await pc.setLocalDescription(offer);
@@ -347,6 +356,13 @@ class WebRTCVoiceService {
       });
     }
 
+    // Add local camera video track
+    if (this.localCameraStream) {
+      this.localCameraStream.getVideoTracks().forEach((track) => {
+        pc!.addTrack(track, this.localCameraStream!);
+      });
+    }
+
     // ICE Candidate generation (only non-empty candidates)
     pc.onicecandidate = (event) => {
       if (event.candidate && event.candidate.candidate && this.currentChannelId) {
@@ -359,8 +375,17 @@ class WebRTCVoiceService {
       }
     };
 
-    // Remote audio track reception
+    // Remote track reception (audio or video)
     pc.ontrack = (event) => {
+      if (event.track.kind === 'video') {
+        const stream = event.streams[0] ?? new MediaStream([event.track]);
+        useVoiceStore.getState().setPeerCameraStream(peerId, stream);
+        event.track.onended = () => {
+          useVoiceStore.getState().removePeerCameraStream(peerId);
+        };
+        return;
+      }
+
       let audio = this.peerAudioElements.get(peerId);
       if (!audio) {
         audio = new Audio();
@@ -753,6 +778,187 @@ class WebRTCVoiceService {
       if (stream) stream.getTracks().forEach((t) => t.stop());
       onLevel(0);
     };
+  }
+
+  getLocalCameraStream(): MediaStream | null {
+    return this.localCameraStream;
+  }
+
+  getVideoDeviceId(): string | null {
+    return this.selectedVideoDeviceId;
+  }
+
+  async getVideoDevices(): Promise<MediaDeviceInfo[]> {
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      return devices.filter((d) => d.kind === 'videoinput');
+    } catch {
+      return [];
+    }
+  }
+
+  async setVideoDevice(deviceId: string): Promise<void> {
+    this.selectedVideoDeviceId = deviceId;
+    if (this.localCameraStream && this.currentChannelId) {
+      try {
+        const newStream = await navigator.mediaDevices.getUserMedia({
+          audio: false,
+          video: {
+            deviceId: { exact: deviceId },
+            width: { ideal: 640 },
+            height: { ideal: 480 },
+            frameRate: { max: 24 },
+          },
+        });
+
+        const newTrack = newStream.getVideoTracks()[0];
+        if (newTrack) {
+          for (const pc of this.peers.values()) {
+            const sender = pc.getSenders().find((s) => s.track?.kind === 'video');
+            if (sender) {
+              await sender.replaceTrack(newTrack);
+            }
+          }
+          this.localCameraStream.getVideoTracks().forEach((t) => t.stop());
+          this.localCameraStream = newStream;
+          useVoiceStore.getState().setPeerCameraStream('local', newStream);
+          const myUserId = useAuthStore.getState().identity?.userId;
+          if (myUserId) {
+            useVoiceStore.getState().setPeerCameraStream(myUserId, newStream);
+          }
+        }
+      } catch (err) {
+        console.warn('Failed to switch video device:', err);
+      }
+    }
+  }
+
+  testCamera(videoElement: HTMLVideoElement): () => void {
+    let active = true;
+    let stream: MediaStream | null = null;
+
+    void (async () => {
+      try {
+        const constraints: MediaStreamConstraints = {
+          audio: false,
+          video: {
+            width: { ideal: 640 },
+            height: { ideal: 480 },
+            frameRate: { max: 24 },
+            ...(this.selectedVideoDeviceId ? { deviceId: { exact: this.selectedVideoDeviceId } } : {}),
+          },
+        };
+        stream = await navigator.mediaDevices.getUserMedia(constraints);
+        if (!active) {
+          stream.getTracks().forEach((t) => t.stop());
+          return;
+        }
+        videoElement.srcObject = stream;
+        void videoElement.play().catch((e) => console.warn('Test camera play error:', e));
+      } catch (err) {
+        console.warn('Camera test error:', err);
+      }
+    })();
+
+    return () => {
+      active = false;
+      if (stream) {
+        stream.getTracks().forEach((t) => t.stop());
+      }
+      videoElement.srcObject = null;
+    };
+  }
+
+  async toggleCamera(enable?: boolean): Promise<boolean> {
+    const shouldEnable = enable === undefined ? !this.localCameraStream : enable;
+    const voiceStore = useVoiceStore.getState();
+
+    if (shouldEnable) {
+      try {
+        const constraints: MediaStreamConstraints = {
+          audio: false,
+          video: {
+            width: { ideal: 640 },
+            height: { ideal: 480 },
+            frameRate: { max: 24 },
+            ...(this.selectedVideoDeviceId ? { deviceId: { exact: this.selectedVideoDeviceId } } : {}),
+          },
+        };
+
+        this.localCameraStream = await navigator.mediaDevices.getUserMedia(constraints);
+        const videoTrack = this.localCameraStream.getVideoTracks()[0];
+        if (!videoTrack) return false;
+
+        voiceStore.setCameraActive(true);
+        voiceStore.setPeerCameraStream('local', this.localCameraStream);
+        const myUserId = useAuthStore.getState().identity?.userId;
+        if (myUserId) {
+          voiceStore.setPeerCameraStream(myUserId, this.localCameraStream);
+        }
+
+        // Add track to each existing peer and renegotiate
+        for (const [peerId, pc] of this.peers.entries()) {
+          try {
+            pc.addTrack(videoTrack, this.localCameraStream);
+            const displayName = this.peerDisplayNames.get(peerId) || 'Kullanıcı';
+            await this.initiateOffer(peerId, displayName);
+          } catch (e) {
+            console.warn(`Failed to add video track or offer to peer ${peerId}:`, e);
+          }
+        }
+
+        if (this.currentChannelId) {
+          wsService.sendVoiceState(this.currentChannelId, {
+            muted: voiceStore.isMuted,
+            deafened: voiceStore.isDeafened,
+            speaking: voiceStore.isSpeaking,
+            camera: true,
+          });
+        }
+        return true;
+      } catch (err) {
+        console.error('Failed to start camera:', err);
+        return false;
+      }
+    } else {
+      if (this.localCameraStream) {
+        this.localCameraStream.getTracks().forEach((t) => t.stop());
+        this.localCameraStream = null;
+      }
+
+      voiceStore.setCameraActive(false);
+      voiceStore.removePeerCameraStream('local');
+      const myUserId = useAuthStore.getState().identity?.userId;
+      if (myUserId) {
+        voiceStore.removePeerCameraStream(myUserId);
+      }
+
+      // Remove video senders and renegotiate
+      for (const [peerId, pc] of this.peers.entries()) {
+        try {
+          const senders = pc.getSenders();
+          for (const sender of senders) {
+            if (sender.track?.kind === 'video') {
+              pc.removeTrack(sender);
+            }
+          }
+          const displayName = this.peerDisplayNames.get(peerId) || 'Kullanıcı';
+          await this.initiateOffer(peerId, displayName);
+        } catch (e) {
+          console.warn(`Failed to remove video track or offer to peer ${peerId}:`, e);
+        }
+      }
+
+      if (this.currentChannelId) {
+        wsService.sendVoiceState(this.currentChannelId, {
+          muted: voiceStore.isMuted,
+          deafened: voiceStore.isDeafened,
+          speaking: voiceStore.isSpeaking,
+          camera: false,
+        });
+      }
+      return false;
+    }
   }
 }
 

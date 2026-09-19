@@ -40,7 +40,7 @@ export default [
     },
   },
   {
-    files: ['**/*.js', '**/*.cjs'],
+    files: ['**/*.js', '**/*.cjs', '**/*.mjs'],
     languageOptions: {
       globals: {
         module: 'readonly',
@@ -49,6 +49,8 @@ export default [
         __filename: 'readonly',
         process: 'readonly',
         console: 'readonly',
+        setTimeout: 'readonly',
+        clearTimeout: 'readonly',
       },
     },
   },

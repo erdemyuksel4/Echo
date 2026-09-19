@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@echo/shared": "workspace:*",
+    "electron-updater": "^6.8.9",
     "lucide-react": "^0.475.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
@@ -36,6 +37,11 @@
   "build": {
     "appId": "com.echo.app",
     "productName": "Echo",
+    "publish": {
+      "provider": "github",
+      "owner": "erdemyuksel4",
+      "repo": "Echo"
+    },
     "directories": {
       "output": "dist"
     },

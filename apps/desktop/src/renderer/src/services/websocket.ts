@@ -344,6 +344,7 @@ class EchoWebSocketService {
               muted: voiceStore.isMuted,
               deafened: voiceStore.isDeafened,
               speaking: false,
+              camera: false,
             },
           ];
           voiceStore.setChannelParticipants(data.channelId, allParticipants);
@@ -355,6 +356,7 @@ class EchoWebSocketService {
             muted: false,
             deafened: false,
             speaking: false,
+            camera: false,
           });
         }
 
@@ -393,11 +395,13 @@ class EchoWebSocketService {
           muted: boolean;
           deafened: boolean;
           speaking: boolean;
+          camera?: boolean;
         };
         useVoiceStore.getState().updateChannelParticipantState(data.channelId, data.userId, {
           muted: data.muted,
           deafened: data.deafened,
           speaking: data.speaking,
+          camera: data.camera,
         });
         break;
       }
@@ -559,7 +563,7 @@ class EchoWebSocketService {
 
   sendVoiceState(
     channelId: string,
-    state: { muted: boolean; deafened: boolean; speaking: boolean },
+    state: { muted: boolean; deafened: boolean; speaking: boolean; camera?: boolean },
   ): void {
     const gId = useVoiceStore.getState().currentGroupId ?? this.activeGroupId;
     if (!gId) return;
