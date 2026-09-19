@@ -244,10 +244,11 @@ Bu dosya her faz ve görev sonunda güncellenir.
 - [x] **Arkadaşlara Dağıtım & SmartScreen Rehberi:**
   - `docs/DISTRIBUTION.md`: Arkadaşlara `.exe` dosyasını iletme (Drive, WeTransfer vb.), Windows SmartScreen mavi ekranını ("Ek bilgi" -> "Yine de çalıştır") aşma adımları ve ilk açılışta davet koduyla katılma rehberi hazırlandı.
   - `README.md` kurulum ve dağıtım bölümleri güncellendi.
-- [x] **Test Doğrulamaları:**
-  - `pnpm typecheck`: Monorepo genelinde sıfır hata ile geçti.
-  - `pnpm lint`: Workspace genelinde sıfır hata ile geçti.
-  - `pnpm test`: 14 test dosyası, 60 testin tamamı (%100) başarıyla geçti.
-  - `Echo Setup 0.1.0.exe` derleme çıktısı doğrudan test edildi ve doğrulandı.
+- [x] **Canlıya Alma (Cloudflare Workers) & GitHub Dağıtımı:**
+  - Sunucu: `https://echo-server.erdemyuksel04.workers.dev` adresinde Cloudflare Workers ve Durable Objects üzerine canlıya alındı.
+  - Masaüstü konfigürasyonu (`config.ts`): Canlı Cloudflare Workers uç noktasına bağlandı.
+  - Windows Kurulum Paketi: Canlı sunucu adresi gömülü olarak `Echo Setup 0.1.0.exe` derlendi.
+  - GitHub: Proje tüm dallarıyla `https://github.com/erdemyuksel4/Echo` deposuna yüklendi ve `v0.1.0` release etiketi açıldı.
+
 
 
