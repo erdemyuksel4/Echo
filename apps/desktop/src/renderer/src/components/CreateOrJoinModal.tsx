@@ -53,9 +53,13 @@ export const CreateOrJoinModal: React.FC<Props> = ({ isOpen, onClose }) => {
       setActiveGroup(data.groupId);
       setDefaultInviteCode(data.inviteCode);
       wsService.connect(data.groupId);
-      onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Bir hata oluştu');
+      const msg = err instanceof Error ? err.message : 'Bir hata oluştu';
+      if (msg.toLowerCase().includes('fetch') || msg.includes('Failed to fetch')) {
+        setError('Sunucuya bağlanılamadı. Lütfen sunucunun (pnpm dev:server) çalıştığından emin olun.');
+      } else {
+        setError(msg);
+      }
     } finally {
       setLoading(false);
     }
@@ -96,9 +100,13 @@ export const CreateOrJoinModal: React.FC<Props> = ({ isOpen, onClose }) => {
       addGroup({ id: grp.id, name: grp.name });
       setActiveGroup(grp.id);
       wsService.connect(grp.id);
-      onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Bir hata oluştu');
+      const msg = err instanceof Error ? err.message : 'Bir hata oluştu';
+      if (msg.toLowerCase().includes('fetch') || msg.includes('Failed to fetch')) {
+        setError('Sunucuya bağlanılamadı. Lütfen sunucunun (pnpm dev:server) çalıştığından emin olun.');
+      } else {
+        setError(msg);
+      }
     } finally {
       setLoading(false);
     }
