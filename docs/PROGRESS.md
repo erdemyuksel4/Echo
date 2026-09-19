@@ -12,7 +12,7 @@ Bu dosya her faz ve görev sonunda güncellenir.
 | Faz 3 | Sesli sohbet ve TURN                    | Tamamlandı | `faz-3-sesli-sohbet`   | WebRTC Tam Mesh, Cloudflare STUN/TURN, VAD konuşma halkası, ses paneli ve bağlantı tanı modalı |
 | Faz 4 | Medya                                   | Tamamlandı | `faz-4-medya`          | Görsel/GIF yükleme (server), P2P dosya paylaşımı (WebRTC DataChannel), lightbox görüntüleyici, sürükle-bırak, Ctrl+V paste, Giphy picker |
 | Faz 5 | DM                                      | Tamamlandı | `faz-5-dm`             | UserDO çift taraflı yazım, /ws/user WS endpoint, dm_threads, dm_messages, DmChatArea, MemberList DM başlatma |
-| Faz 6 | Ekran paylaşımı (mesh)                  | Başlanmadı | -                      | -                                                                          |
+| Faz 6 | Ekran paylaşımı (mesh)                  | Tamamlandı | `faz-6-ekran-paylasimi`| desktopCapturer, 720p30/1080p kalite ön ayarları, ScreenShareTransport, MeshTransport, ScreenShareViewer |
 | Faz 7 | SFU (kapılı)                            | Başlanmadı | -                      | -                                                                          |
 | Faz 8 | Cilalama ve dağıtım                     | Başlanmadı | -                      | -                                                                          |
 | Faz 9 | Kamera (opsiyonel)                      | Başlanmadı | -                      | -                                                                          |
@@ -190,4 +190,36 @@ Bu dosya her faz ve görev sonunda güncellenir.
   - `pnpm typecheck`: Monorepo genelinde sıfır hata ile geçti.
   - `pnpm lint`: Workspace genelinde sıfır hata ile geçti.
   - `pnpm test`: 12 test dosyası, 51 testin tamamı (%100) başarıyla geçti.
+
+## Faz 6 — Kabul Kriterleri ve Gerçekleşenler
+
+- [x] **Ortak Şemalar (`@echo/shared`):**
+  - `ScreenQualityPresetSchema` (`720p30`, `1080p30`, `1080p60`), `ScreenShareModeSchema` (`motion`, `detail`).
+  - Kalite konfigürasyonları: `SCREEN_QUALITY_PRESETS` (çözünürlük, framerate, maxBitrate).
+  - Ekran paylaşımı kaynak ve durum şemaları (`ScreenShareSourceSchema`, `ScreenShareStateSchema`).
+  - Ekran paylaşımı protokol olayları: `share.start`, `share.stop`, `share.signal`, `share.started`, `share.stopped`, `share.active_list`.
+  - Yeni 4 adet Zod birim testi (`packages/shared/src/__tests__/screenshare.test.ts`).
+- [x] **Sunucu Mimarisi (`apps/server`):**
+  - `GroupDO`: `screenShares` bellekiçi haritası ile ses kanalı bazlı ekran paylaşımı takibi.
+  - `share.start`: Yetki ve ses kanalı üyeliği kontrolü; grup geneline `share.started` duyurusu.
+  - `share.stop`: Paylaşımı kaldırma ve `share.stopped` yayını.
+  - `share.signal`: Hedef izleyiciye/yayıncıya doğrudan WebRTC sinyal yönlendirmesi.
+  - Ses kanalından ayrılma veya bağlantı kopmasında otomatik ekran yayını sonlandırma.
+  - Kanala katılan yeni kullanıcılara o kanaldaki aktif yayınların otomatik iletilmesi (`share.active_list`).
+  - Yeni 5 adet otomatik birim testi (`apps/server/test/screenshare.spec.ts`).
+- [x] **Masaüstü Altyapısı ve Arayüzü (`apps/desktop`):**
+  - Electron Ana Süreci: `desktopCapturer.getSources` ile açık pencere ve ekranları küçük resimleriyle toplayan `desktop:getSources` IPC işleyicisi.
+  - Preload: `getDesktopSources()` metodunun güvenli `contextBridge` köprüsü.
+  - `ScreenShareTransport`: SFU geçişine hazır modüler aktarım arayüzü ve `MeshScreenShareTransport` implementasyonu (H.264 donanım codec tercihi, bitrate kısıtlamaları).
+  - `screenCaptureService`: `navigator.mediaDevices.getUserMedia` ile ekran yakalama; `contentHint` ve sistem sesi (loopback) desteği.
+  - `useScreenShareStore`: Yayın durumu, aktif yayınlar, izleyici sayısı ve izleme durumu yönetimi.
+  - `ScreenSourcePickerModal`: Ekran/pencere sekmeleri, canlı önizleme kartları, 720p30/1080p ön ayarları, hareket/ayrıntı optimizasyonu, 1080p60 performans uyarısı ve ses paylaşımı onay kutusu.
+  - `ScreenShareViewer`: Tam ekran modu, ses seviyesi kaydırıcısı/susturma, canlı rozeti ve yayından ayrılma butonu içeren video oynatıcı arayüzü.
+  - `VoicePanel`: Ses kanalında "Ekran Paylaş" butonu, aktif yayında "Yayını Durdur" butonu, izleyici sayısı göstergesi ve 2'den fazla izleyicide sarı sistem yükü uyarı rozeti.
+  - `ChannelList`: Ses kanalındaki yayıncılarda yanıp sönen kırmızı "CANLI" rozeti ve tek tıkla "Yayını İzle" butonu.
+- [x] **Test Doğrulamaları:**
+  - `pnpm typecheck`: Monorepo genelinde sıfır hata ile geçti.
+  - `pnpm lint`: Workspace genelinde sıfır hata ile geçti.
+  - `pnpm test`: 14 test dosyası, 60 testin tamamı (%100) başarıyla geçti.
+
 
