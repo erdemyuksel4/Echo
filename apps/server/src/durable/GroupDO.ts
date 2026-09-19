@@ -1,4 +1,5 @@
 import { DurableObject } from 'cloudflare:workers';
+import { Buffer } from 'node:buffer';
 import { ulid } from 'ulidx';
 import {
   sha256,
@@ -24,11 +25,14 @@ import {
   ClientVoiceLeavePayloadSchema,
   ClientVoiceSignalPayloadSchema,
   ClientVoiceStatePayloadSchema,
+  ClientFileSignalPayloadSchema,
+  AttachmentUploadRequestSchema,
   type VoiceParticipant,
   type GroupSnapshot,
   type Channel,
   type GroupMember,
   type Message,
+  type Attachment,
 } from '@echo/shared';
 import type { Env } from '../index';
 
@@ -67,6 +71,7 @@ interface SqlMessageRow {
   reply_to: string | null;
   reply_to_author_name?: string | null;
   reply_to_content?: string | null;
+  attachments_json?: string | null;
   created_at: number;
   edited_at: number | null;
   deleted: number;
@@ -146,6 +151,25 @@ export class GroupDO extends DurableObject<Env> {
       );
 
       CREATE INDEX IF NOT EXISTS idx_reactions_msg ON reactions (message_id);
+
+      CREATE TABLE IF NOT EXISTS attachments (
+        id TEXT PRIMARY KEY,
+        file_name TEXT NOT NULL,
+        mime_type TEXT NOT NULL,
+        size_bytes INTEGER NOT NULL,
+        total_chunks INTEGER NOT NULL,
+        uploaded_by TEXT NOT NULL,
+        created_at INTEGER NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_attachments_created ON attachments (created_at);
+
+      CREATE TABLE IF NOT EXISTS attachment_chunks (
+        attachment_id TEXT NOT NULL,
+        chunk_index INTEGER NOT NULL,
+        data_base64 TEXT NOT NULL,
+        PRIMARY KEY(attachment_id, chunk_index)
+      );
     `);
 
     try {
@@ -156,6 +180,12 @@ export class GroupDO extends DurableObject<Env> {
 
     try {
       this.sql.exec(`ALTER TABLE messages ADD COLUMN reply_to_content TEXT`);
+    } catch {
+      // Column already exists
+    }
+
+    try {
+      this.sql.exec(`ALTER TABLE messages ADD COLUMN attachments_json TEXT DEFAULT '[]'`);
     } catch {
       // Column already exists
     }
@@ -191,6 +221,11 @@ export class GroupDO extends DurableObject<Env> {
     // 90-day retention cleanup
     this.sql.exec(`DELETE FROM messages WHERE created_at < ?`, ninetyDaysAgo);
     this.sql.exec(`DELETE FROM reactions WHERE message_id NOT IN (SELECT id FROM messages)`);
+    this.sql.exec(
+      `DELETE FROM attachment_chunks WHERE attachment_id IN (SELECT id FROM attachments WHERE created_at < ?)`,
+      ninetyDaysAgo,
+    );
+    this.sql.exec(`DELETE FROM attachments WHERE created_at < ?`, ninetyDaysAgo);
     // Reschedule in 24 hours
     await this.ctx.storage.setAlarm(Date.now() + 24 * 60 * 60 * 1000);
   }
@@ -351,6 +386,7 @@ export class GroupDO extends DurableObject<Env> {
           replyTo: null,
           replyToAuthorName: null,
           replyToContent: null,
+          attachments: [],
           createdAt: now,
           editedAt: null,
           deleted: false,
@@ -455,6 +491,117 @@ export class GroupDO extends DurableObject<Env> {
       }
 
       return Response.json({ success: true, groupId: meta.id, displayName: memberDisplayName });
+    }
+
+    if (url.pathname === '/internal/attachments/upload' && request.method === 'POST') {
+      const rawBody = await request.json();
+      const parse = AttachmentUploadRequestSchema.safeParse(rawBody);
+      if (!parse.success) {
+        return Response.json({ error: 'Geçersiz ek yükleme verisi' }, { status: 400 });
+      }
+
+      const body = parse.data;
+      const MAX_GROUP_ATTACHMENTS_BYTES = 1.5 * 1024 * 1024 * 1024; // 1.5 GB limit
+
+      // Check storage quota
+      const sizeRows = [
+        ...this.sql.exec(`SELECT SUM(size_bytes) as total_size FROM attachments`),
+      ] as { total_size: number | null }[];
+      const currentTotal = sizeRows[0]?.total_size ?? 0;
+      if (currentTotal + body.sizeBytes > MAX_GROUP_ATTACHMENTS_BYTES) {
+        const oldestRows = [
+          ...this.sql.exec(`SELECT id, size_bytes FROM attachments ORDER BY created_at ASC`),
+        ] as { id: string; size_bytes: number }[];
+        let freed = 0;
+        const needed = currentTotal + body.sizeBytes - MAX_GROUP_ATTACHMENTS_BYTES;
+        for (const oldAtt of oldestRows) {
+          this.sql.exec(`DELETE FROM attachment_chunks WHERE attachment_id = ?`, oldAtt.id);
+          this.sql.exec(`DELETE FROM attachments WHERE id = ?`, oldAtt.id);
+          freed += oldAtt.size_bytes;
+          if (freed >= needed) break;
+        }
+      }
+
+      const attachmentId = ulid();
+      this.sql.exec(
+        `INSERT INTO attachments (id, file_name, mime_type, size_bytes, total_chunks, uploaded_by, created_at)
+         VALUES (?, ?, ?, ?, ?, '', ?)`,
+        attachmentId,
+        body.filename,
+        body.mimeType,
+        body.sizeBytes,
+        body.totalChunks,
+        Date.now(),
+      );
+
+      for (const chunk of body.chunks) {
+        this.sql.exec(
+          `INSERT OR REPLACE INTO attachment_chunks (attachment_id, chunk_index, data_base64) VALUES (?, ?, ?)`,
+          attachmentId,
+          chunk.index,
+          chunk.dataBase64,
+        );
+      }
+
+      const metaRows = [...this.sql.exec(`SELECT id FROM group_meta LIMIT 1`)];
+      const groupId = (metaRows[0] as { id: string } | undefined)?.id ?? '';
+
+      const attachmentType: 'image' | 'gif' = body.mimeType === 'image/gif' ? 'gif' : 'image';
+      const attachment: Attachment = {
+        id: attachmentId,
+        name: body.filename,
+        size: body.sizeBytes,
+        mimeType: body.mimeType,
+        url: `/api/groups/${groupId}/attachments/${attachmentId}`,
+        type: attachmentType,
+        width: body.width,
+        height: body.height,
+      };
+
+      return Response.json({
+        success: true,
+        attachment,
+      });
+    }
+
+    if (url.pathname.startsWith('/internal/attachments/') && request.method === 'GET') {
+      const attachmentId = url.pathname.replace('/internal/attachments/', '');
+      const attRows = [
+        ...this.sql.exec(`SELECT * FROM attachments WHERE id = ?`, attachmentId),
+      ] as {
+        file_name: string;
+        mime_type: string;
+        size_bytes: number;
+        total_chunks: number;
+      }[];
+
+      if (attRows.length === 0 || !attRows[0]) {
+        return new Response('Attachment not found', { status: 404 });
+      }
+
+      const att = attRows[0];
+      const chunkRows = [
+        ...this.sql.exec(
+          `SELECT chunk_index, data_base64 FROM attachment_chunks WHERE attachment_id = ? ORDER BY chunk_index ASC`,
+          attachmentId,
+        ),
+      ] as { chunk_index: number; data_base64: string }[];
+
+      if (chunkRows.length < att.total_chunks) {
+        return new Response('Attachment incomplete', { status: 425 });
+      }
+
+      const buffers = chunkRows.map((c) => Buffer.from(c.data_base64, 'base64'));
+      const totalBuffer = Buffer.concat(buffers);
+
+      return new Response(totalBuffer, {
+        status: 200,
+        headers: {
+          'Content-Type': att.mime_type,
+          'Content-Disposition': `inline; filename="${encodeURIComponent(att.file_name)}"`,
+          'Cache-Control': 'public, max-age=31536000, immutable',
+        },
+      });
     }
 
     return new Response('Not Found', { status: 404 });
@@ -623,6 +770,9 @@ export class GroupDO extends DurableObject<Env> {
       case WsClientEvents.VOICE_STATE:
         this.handleVoiceState(session, envelope);
         break;
+      case WsClientEvents.FILE_SIGNAL:
+        this.handleFileSignal(session, envelope);
+        break;
       default:
         this.sendError(ws, 'UNKNOWN_EVENT', `Bilinmeyen olay: ${envelope.t}`);
         break;
@@ -719,7 +869,7 @@ export class GroupDO extends DurableObject<Env> {
       return;
     }
 
-    const { channelId, content, replyTo } = parse.data;
+    const { channelId, content = '', replyTo, attachments = [] } = parse.data;
 
     // Check if channel exists
     const chanRows = [...this.sql.exec(`SELECT id FROM channels WHERE id = ?`, channelId)];
@@ -745,8 +895,8 @@ export class GroupDO extends DurableObject<Env> {
     }
 
     this.sql.exec(
-      `INSERT INTO messages (id, channel_id, author_id, author_name, content, reply_to, reply_to_author_name, reply_to_content, created_at, deleted)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
+      `INSERT INTO messages (id, channel_id, author_id, author_name, content, reply_to, reply_to_author_name, reply_to_content, attachments_json, created_at, deleted)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
       id,
       channelId,
       session.userId,
@@ -755,6 +905,7 @@ export class GroupDO extends DurableObject<Env> {
       replyTo ?? null,
       replyToAuthorName,
       replyToContent,
+      JSON.stringify(attachments),
       now,
     );
 
@@ -767,6 +918,7 @@ export class GroupDO extends DurableObject<Env> {
       replyTo: replyTo ?? null,
       replyToAuthorName,
       replyToContent,
+      attachments,
       createdAt: now,
       editedAt: null,
       deleted: false,
@@ -1005,20 +1157,32 @@ export class GroupDO extends DurableObject<Env> {
       }
     }
 
-    const messages: Message[] = slice.map((r) => ({
-      id: r.id,
-      channelId: r.channel_id,
-      authorId: r.author_id,
-      authorName: r.author_name,
-      content: r.content,
-      replyTo: r.reply_to,
-      replyToAuthorName: r.reply_to_author_name ?? null,
-      replyToContent: r.reply_to_content ?? null,
-      createdAt: r.created_at,
-      editedAt: r.edited_at,
-      deleted: Boolean(r.deleted),
-      reactions: reactionMap[r.id] ?? {},
-    }));
+    const messages: Message[] = slice.map((r) => {
+      let attachments: Attachment[] = [];
+      if (r.attachments_json) {
+        try {
+          attachments = JSON.parse(r.attachments_json);
+        } catch {
+          attachments = [];
+        }
+      }
+
+      return {
+        id: r.id,
+        channelId: r.channel_id,
+        authorId: r.author_id,
+        authorName: r.author_name,
+        content: r.content,
+        replyTo: r.reply_to,
+        replyToAuthorName: r.reply_to_author_name ?? null,
+        replyToContent: r.reply_to_content ?? null,
+        attachments,
+        createdAt: r.created_at,
+        editedAt: r.edited_at,
+        deleted: Boolean(r.deleted),
+        reactions: reactionMap[r.id] ?? {},
+      };
+    });
 
     this.send(
       ws,
@@ -1275,6 +1439,21 @@ export class GroupDO extends DurableObject<Env> {
       muted,
       deafened,
       speaking,
+    });
+  }
+
+  private handleFileSignal(
+    session: WsSessionAttachment,
+    envelope: WsEnvelope,
+  ): void {
+    const parse = ClientFileSignalPayloadSchema.safeParse(envelope.d);
+    if (!parse.success) return;
+
+    const { targetUserId, signal } = parse.data;
+
+    this.sendToUser(targetUserId, WsServerEvents.FILE_SIGNAL, {
+      fromUserId: session.userId,
+      signal,
     });
   }
 

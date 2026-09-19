@@ -8,12 +8,14 @@ import {
   type GroupMember,
   type VoiceParticipant,
   type VoiceSignalData,
+  type Attachment,
 } from '@echo/shared';
 import { useChatStore } from '../stores/useChatStore';
 import { useAuthStore } from '../stores/useAuthStore';
 import { useVoiceStore } from '../stores/useVoiceStore';
 import { soundService } from './sound';
 import { webrtcService } from './webrtc';
+import { p2pFileTransferService } from './p2pFileTransfer';
 
 class EchoWebSocketService {
   private ws: WebSocket | null = null;
@@ -329,6 +331,15 @@ class EchoWebSocketService {
         break;
       }
 
+      case WsServerEvents.FILE_SIGNAL: {
+        const data = envelope.d as {
+          fromUserId: string;
+          signal: unknown;
+        };
+        void p2pFileTransferService.handleSignal(data.fromUserId, data.signal);
+        break;
+      }
+
       case WsServerEvents.ERROR: {
         const data = envelope.d as { code: string; message: string };
         console.error('Server error:', data.code, data.message);
@@ -337,12 +348,19 @@ class EchoWebSocketService {
     }
   }
 
-  sendMessage(channelId: string, content: string, replyTo?: string): void {
-    if (!content.trim()) return;
+  sendMessage(
+    channelId: string,
+    content: string,
+    replyTo?: string,
+    attachments?: Attachment[],
+  ): void {
+    const trimmed = content.trim();
+    if (!trimmed && (!attachments || attachments.length === 0)) return;
     this.send(WsClientEvents.MSG_SEND, {
       channelId,
-      content: content.trim(),
+      content: trimmed,
       replyTo: replyTo ?? null,
+      attachments: attachments ?? [],
     });
   }
 
@@ -432,6 +450,13 @@ class EchoWebSocketService {
     });
   }
 
+  sendFileSignal(targetUserId: string, signal: unknown): void {
+    this.send(WsClientEvents.FILE_SIGNAL, {
+      targetUserId,
+      signal,
+    });
+  }
+
   private send(type: string, data: unknown): void {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       const payload: WsEnvelope = {
@@ -476,3 +501,4 @@ class EchoWebSocketService {
 }
 
 export const wsService = new EchoWebSocketService();
+export const echoWebSocketService = wsService;

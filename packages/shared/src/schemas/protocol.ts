@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { AuthPayloadSchema } from './auth';
 import { GroupSnapshotSchema, ChannelSchema, GroupMemberSchema } from './group';
-import { MessageSchema } from './message';
+import { MessageSchema, AttachmentSchema } from './message';
 
 // Standard Envelope
 export const WsEnvelopeSchema = z.object({
@@ -38,6 +38,7 @@ export const WsClientEvents = {
   VOICE_LEAVE: 'voice.leave',
   VOICE_SIGNAL: 'voice.signal',
   VOICE_STATE: 'voice.state',
+  FILE_SIGNAL: 'file.signal',
 } as const;
 
 // Server to Client Events
@@ -66,14 +67,23 @@ export const WsServerEvents = {
   VOICE_PARTICIPANTS: 'voice.participants',
   GROUP_DELETED: 'group.deleted',
   MEMBER_LEFT: 'member.left',
+  FILE_SIGNAL: 'file.signal',
 } as const;
 
 // Event Payload Schemas
-export const ClientMsgSendPayloadSchema = z.object({
-  channelId: z.string(),
-  content: z.string().min(1).max(4000),
-  replyTo: z.string().nullable().optional(),
-});
+export const ClientMsgSendPayloadSchema = z
+  .object({
+    channelId: z.string(),
+    content: z.string().max(4000).default(''),
+    attachments: z.array(AttachmentSchema).default([]),
+    replyTo: z.string().nullable().optional(),
+  })
+  .refine(
+    (data) => data.content.trim().length > 0 || (data.attachments && data.attachments.length > 0),
+    {
+      message: 'Mesaj içeriği veya en az bir dosya/görsel gereklidir',
+    },
+  );
 
 export const ClientMsgEditPayloadSchema = z.object({
   messageId: z.string(),
@@ -170,4 +180,21 @@ export const ServerMemberLeftPayloadSchema = z.object({
   userId: z.string(),
 });
 
-export { AuthPayloadSchema, GroupSnapshotSchema, ChannelSchema, GroupMemberSchema, MessageSchema };
+export const ClientFileSignalPayloadSchema = z.object({
+  targetUserId: z.string(),
+  signal: z.unknown(),
+});
+
+export const ServerFileSignalPayloadSchema = z.object({
+  fromUserId: z.string(),
+  signal: z.unknown(),
+});
+
+export {
+  AuthPayloadSchema,
+  GroupSnapshotSchema,
+  ChannelSchema,
+  GroupMemberSchema,
+  MessageSchema,
+  AttachmentSchema,
+};

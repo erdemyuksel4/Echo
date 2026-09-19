@@ -1,14 +1,144 @@
-import React, { useState } from 'react';
-import { CornerUpLeft, Pencil, Trash2, Smile } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import {
+  CornerUpLeft,
+  Pencil,
+  Trash2,
+  Smile,
+  FileText,
+  Download,
+  CheckCircle2,
+  AlertCircle,
+  Loader2,
+} from 'lucide-react';
 import {
   type Message,
   type GroupMember,
+  type Attachment,
   parseMarkdownTokens,
   type MarkdownToken,
 } from '@echo/shared';
 import { useAuthStore } from '../stores/useAuthStore';
 import { useChatStore } from '../stores/useChatStore';
 import { wsService } from '../services/websocket';
+import { p2pFileTransferService, type P2PTransferProgress } from '../services/p2pFileTransfer';
+import { ImageViewerModal } from './ImageViewerModal';
+
+function formatBytes(bytes: number, decimals = 1): string {
+  if (bytes === 0) return '0 B';
+  const k = 1024;
+  const dm = decimals < 0 ? 0 : decimals;
+  const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+}
+
+interface P2PFileCardProps {
+  attachment: Attachment;
+  authorId: string;
+  isAuthor: boolean;
+}
+
+const P2PFileCard: React.FC<P2PFileCardProps> = ({ attachment, authorId, isAuthor }) => {
+  const [progress, setProgress] = useState<P2PTransferProgress | undefined>(() =>
+    p2pFileTransferService.getProgress(attachment.id),
+  );
+
+  useEffect(() => {
+    const unsub = p2pFileTransferService.subscribe((p) => {
+      if (p.offerId === attachment.id) {
+        setProgress({ ...p });
+      }
+    });
+    return unsub;
+  }, [attachment.id]);
+
+  const handleDownload = () => {
+    if (!attachment.p2pOffer) return;
+    p2pFileTransferService.startDownload(
+      authorId,
+      attachment.id,
+      attachment.p2pOffer.fileHash,
+      attachment.name,
+      attachment.size,
+      attachment.mimeType,
+    );
+  };
+
+  const status = progress?.status || 'idle';
+  const percent = progress?.progress || 0;
+
+  return (
+    <div className="flex flex-col gap-2 max-w-sm rounded-xl border border-slate-700/80 bg-slate-950/80 p-3 shadow-md hover:border-indigo-500/50 transition">
+      <div className="flex items-center gap-3">
+        <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-indigo-600/20 text-indigo-400 border border-indigo-500/30">
+          <FileText className="h-5 w-5" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-xs font-semibold text-white truncate" title={attachment.name}>
+            {attachment.name}
+          </p>
+          <div className="flex items-center gap-2 text-[10px] text-slate-400">
+            <span>{formatBytes(attachment.size)}</span>
+            <span>•</span>
+            <span className="font-mono text-slate-500">
+              SHA: {attachment.p2pOffer?.fileHash.slice(0, 8)}...
+            </span>
+          </div>
+        </div>
+
+        {/* Download / Status Button */}
+        {isAuthor ? (
+          <div className="flex items-center gap-1.5 rounded-md bg-slate-800/80 px-2 py-1 text-[10px] text-emerald-400 border border-emerald-500/30">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            <span>Paylaşılıyor</span>
+          </div>
+        ) : status === 'completed' ? (
+          <div className="flex items-center gap-1 text-emerald-400 text-xs font-medium px-2 py-1">
+            <CheckCircle2 className="h-4 w-4" />
+            <span>İndirildi</span>
+          </div>
+        ) : status === 'transferring' ? (
+          <div className="flex items-center gap-1 text-indigo-400 text-xs font-mono font-bold">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            <span>%{percent}</span>
+          </div>
+        ) : status === 'connecting' ? (
+          <div className="flex items-center gap-1 text-amber-400 text-xs font-medium">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            <span>Bağlanıyor...</span>
+          </div>
+        ) : (
+          <button
+            onClick={handleDownload}
+            className="flex items-center gap-1 rounded-lg bg-indigo-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-indigo-500 transition shadow"
+            title="P2P İndir"
+          >
+            <Download className="h-3.5 w-3.5" />
+            <span>İndir</span>
+          </button>
+        )}
+      </div>
+
+      {/* Progress bar during transfer */}
+      {status === 'transferring' && (
+        <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
+          <div
+            className="bg-indigo-500 h-1.5 rounded-full transition-all duration-150"
+            style={{ width: `${percent}%` }}
+          />
+        </div>
+      )}
+
+      {/* Error message */}
+      {status === 'error' && progress?.error && (
+        <div className="flex items-center gap-1 text-[11px] text-rose-400 bg-rose-950/40 p-1.5 rounded border border-rose-800/40">
+          <AlertCircle className="h-3.5 w-3.5 flex-shrink-0" />
+          <span className="truncate">{progress.error}</span>
+        </div>
+      )}
+    </div>
+  );
+};
 
 const QUICK_EMOJIS = ['👍', '❤️', '😂', '🎉', '🔥', '🚀', '👀'];
 
@@ -32,6 +162,7 @@ export const ChatMessageItem: React.FC<Props> = ({
   const [editContent, setEditContent] = useState(message.content);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [revealedSpoilers, setRevealedSpoilers] = useState<Record<number, boolean>>({});
+  const [viewerImage, setViewerImage] = useState<{ url: string; name: string } | null>(null);
 
   const isAuthor = identity?.userId === message.authorId;
   const canDelete = isAuthor || currentUserRole === 'owner' || currentUserRole === 'admin';
@@ -345,7 +476,52 @@ export const ChatMessageItem: React.FC<Props> = ({
           </div>
         ) : (
           <div className="mt-0.5 text-xs text-slate-200 break-words leading-relaxed select-text">
-            {renderContentTokens(message.content)}
+            {message.content && renderContentTokens(message.content)}
+          </div>
+        )}
+
+        {/* Attachments Section */}
+        {message.attachments && message.attachments.length > 0 && (
+          <div className="mt-2 flex flex-col gap-2">
+            {message.attachments.map((att) => {
+              if (att.type === 'image' || att.type === 'gif') {
+                const imageUrl = att.url.startsWith('/')
+                  ? `http://localhost:8787${att.url}`
+                  : att.url;
+                return (
+                  <button
+                    key={att.id}
+                    className="relative max-w-sm overflow-hidden rounded-xl border border-slate-700/60 bg-slate-950/60 hover:border-indigo-500/50 transition cursor-zoom-in shadow group"
+                    onClick={() => setViewerImage({ url: imageUrl, name: att.name })}
+                    title="Büyütmek için tıkla"
+                  >
+                    {att.type === 'gif' && (
+                      <span className="absolute top-1.5 left-1.5 z-10 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-bold text-white uppercase">
+                        GIF
+                      </span>
+                    )}
+                    <img
+                      src={imageUrl}
+                      alt={att.name}
+                      loading="lazy"
+                      className="max-h-72 w-auto object-contain rounded-xl group-hover:opacity-95 transition"
+                      style={{ maxWidth: '100%' }}
+                    />
+                  </button>
+                );
+              }
+              if (att.type === 'file' && att.p2pOffer) {
+                return (
+                  <P2PFileCard
+                    key={att.id}
+                    attachment={att}
+                    authorId={message.authorId}
+                    isAuthor={isAuthor}
+                  />
+                );
+              }
+              return null;
+            })}
           </div>
         )}
 
@@ -374,6 +550,15 @@ export const ChatMessageItem: React.FC<Props> = ({
           </div>
         )}
       </div>
+
+      {/* Image Lightbox */}
+      {viewerImage && (
+        <ImageViewerModal
+          imageUrl={viewerImage.url}
+          imageName={viewerImage.name}
+          onClose={() => setViewerImage(null)}
+        />
+      )}
     </div>
   );
 };

@@ -6,3 +6,4 @@ export * from './schemas/protocol';
 export * from './schemas/voice';
 export * from './crypto/identity';
 export * from './markdown';
+export * from './schemas/media';
