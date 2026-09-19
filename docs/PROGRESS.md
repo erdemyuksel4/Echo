@@ -118,8 +118,13 @@ Bu dosya her faz ve görev sonunda güncellenir.
   - Bir kullanıcı davetle gruba katıldığında anlık `member.joined` yayını ve `#genel` kanalında otomatik hoş geldin duyuru mesajı (`🎉 **{displayName}** gruba katıldı. Hoş geldin!`) yayınlandı.
   - Ses kanalına katılma senaryosunda katılımcı senkronizasyonu düzeltildi (yeni gelen katılımcının mevcut herkesi, mevcutların da yeni geleni anında görmesi).
   - Ayarlar modalına (`SettingsModal`): Mikrofon aygıtı seçimi (Input Device dropdown), gerçek zamanlı yeşil seviye göstergeli interaktif mikrofon testi ("Mikrofonu Test Et"), çıkış ses seviyesi kaydırıcısı (%0-100) ve ses çalma testi eklendi.
+- [x] **Grup Silme ve Gruptan Ayrılma:**
+  - Sunucu: `DELETE /api/groups/:id` (Yalnızca grup sahibi silebilir, Ed25519 imzalı) ve `POST /api/groups/:id/leave` (Grup üyeleri ayrılabilir) uç noktaları eklendi.
+  - `GroupDO`: Grup silindiğinde tüm bağlı soketlere `group.deleted` yayını yapılması, Durable Object depolamasının temizlenmesi (`ctx.storage.deleteAll()`) ve tüm üyelerin `UserDO` kayıtlarından grubun silinmesi sağlandı.
+  - İstemci Arayüzü: Kanal listesi başlığında Discord tarzı açılır sunucu menüsü (Davet Et, Kanal Ekle, Grubu Sil / Gruptan Ayrıl) ve sol barda grup simgesine sağ tıklandığında çıkan bağlam menüsü eklendi.
+  - Onay Penceresi: `DeleteGroupModal` ile silme veya ayrılma öncesi kullanıcıya geri alınamazlık uyarısı ve net onay butonları sunuldu.
 - [x] **Test Doğrulamaları:**
   - `pnpm typecheck`: Monorepo genelinde sıfır hata ile geçti.
   - `pnpm lint`: Workspace genelinde sıfır hata ile geçti.
-  - `pnpm test`: 9 test dosyası, 34 testin tamamı (%100) başarıyla geçti.
+  - `pnpm test`: 9 test dosyası, 36 testin tamamı (%100) başarıyla geçti (grup silme ve ayrılma testleri dahil).
   - `apps/desktop` electron-vite derlemesi başarıyla tamamlandı.
