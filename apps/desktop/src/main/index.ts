@@ -2,6 +2,7 @@ import { app, shell, BrowserWindow, ipcMain } from 'electron';
 import { join } from 'path';
 import { electronApp, optimizer, is } from '@electron-toolkit/utils';
 import { APP_NAME, PROTOCOL_VERSION } from '@echo/shared';
+import { IdentityManager } from './identity';
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -69,6 +70,8 @@ if (!gotTheLock) {
       optimizer.watchWindowShortcuts(window);
     });
 
+    const identityManager = new IdentityManager();
+
     // Handle basic IPC for app info
     ipcMain.handle('app:get-info', () => {
       return {
@@ -77,6 +80,29 @@ if (!gotTheLock) {
         appVersion: app.getVersion(),
         platform: process.platform,
       };
+    });
+
+    // Handle Identity IPC
+    ipcMain.handle('identity:get', () => {
+      return identityManager.getIdentity();
+    });
+
+    ipcMain.handle(
+      'identity:create',
+      (_, { displayName, avatarColor }: { displayName: string; avatarColor: string }) => {
+        return identityManager.createIdentity(displayName, avatarColor);
+      },
+    );
+
+    ipcMain.handle(
+      'identity:signAuth',
+      (_, { targetId, timestamp }: { targetId: string; timestamp: number }) => {
+        return identityManager.signAuth(targetId, timestamp);
+      },
+    );
+
+    ipcMain.handle('identity:signPayload', (_, { payload }: { payload: string }) => {
+      return identityManager.signPayload(payload);
     });
 
     createWindow();

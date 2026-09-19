@@ -1,0 +1,243 @@
+import {
+  WsClientEvents,
+  WsServerEvents,
+  type WsEnvelope,
+  type GroupSnapshot,
+  type Message,
+  type Channel,
+} from '@echo/shared';
+import { useChatStore } from '../stores/useChatStore';
+
+class EchoWebSocketService {
+  private ws: WebSocket | null = null;
+  private currentGroupId: string | null = null;
+  private reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
+  private pingInterval: ReturnType<typeof setInterval> | null = null;
+  private reconnectAttempt = 0;
+  private isIntentionallyClosed = false;
+
+  connect(groupId: string): void {
+    if (this.currentGroupId === groupId && this.ws && this.ws.readyState === WebSocket.OPEN) {
+      return;
+    }
+
+    this.disconnect();
+    this.currentGroupId = groupId;
+    this.isIntentionallyClosed = false;
+
+    this.initSocket();
+  }
+
+  private initSocket(): void {
+    if (!this.currentGroupId) return;
+
+    useChatStore.getState().setConnectionStatus('connecting');
+
+    const wsUrl = `ws://localhost:8787/ws/group/${this.currentGroupId}`;
+    const socket = new WebSocket(wsUrl);
+    this.ws = socket;
+
+    socket.onopen = async () => {
+      if (this.ws !== socket) return;
+      this.reconnectAttempt = 0;
+
+      // Perform auth signature immediately
+      try {
+        const timestamp = Date.now();
+        const signed = await window.echoApi?.signAuth(this.currentGroupId!, timestamp);
+        if (!signed) {
+          throw new Error('İmzalama başarısız');
+        }
+
+        this.send(WsClientEvents.AUTH, {
+          userId: signed.userId,
+          pubkey: signed.pubkey,
+          ts: timestamp,
+          sig: signed.sig,
+        });
+
+        // Setup 30s ping
+        this.pingInterval = setInterval(() => {
+          if (this.ws?.readyState === WebSocket.OPEN) {
+            this.ws.send('ping');
+          }
+        }, 30_000);
+      } catch (err) {
+        console.error('Failed to sign auth for WebSocket:', err);
+        socket.close(4001, 'Auth sign failed');
+      }
+    };
+
+    socket.onmessage = (event) => {
+      if (this.ws !== socket) return;
+      if (event.data === 'pong') return; // Pong reply from DO hibernation auto-response
+
+      try {
+        const envelope: WsEnvelope = JSON.parse(event.data);
+        this.handleEvent(envelope);
+      } catch (err) {
+        console.warn('Failed to parse incoming WS message:', err);
+      }
+    };
+
+    socket.onclose = (event) => {
+      if (this.ws !== socket) return;
+      this.cleanupSocket();
+
+      useChatStore.getState().setConnectionStatus('disconnected');
+
+      if (!this.isIntentionallyClosed && event.code !== 4001 && event.code !== 4003) {
+        this.scheduleReconnect();
+      }
+    };
+
+    socket.onerror = (err) => {
+      console.warn('WebSocket error:', err);
+    };
+  }
+
+  private handleEvent(envelope: WsEnvelope): void {
+    const chatStore = useChatStore.getState();
+
+    switch (envelope.t) {
+      case WsServerEvents.AUTH_OK:
+        chatStore.setConnectionStatus('connected');
+        break;
+
+      case WsServerEvents.SNAPSHOT: {
+        const snapshot = envelope.d as GroupSnapshot;
+        chatStore.setSnapshot(snapshot.group, snapshot.channels, snapshot.members);
+
+        // Fetch history for first active channel
+        const activeChanId = chatStore.activeChannelId;
+        if (activeChanId) {
+          this.fetchHistory(activeChanId);
+        }
+        break;
+      }
+
+      case WsServerEvents.MSG_NEW: {
+        const message = envelope.d as Message;
+        chatStore.addMessage(message.channelId, message);
+        break;
+      }
+
+      case WsServerEvents.HISTORY_DATA: {
+        const data = envelope.d as { channelId: string; messages: Message[] };
+        chatStore.setHistory(data.channelId, data.messages);
+        break;
+      }
+
+      case WsServerEvents.TYPING_USER: {
+        const data = envelope.d as { channelId: string; displayName: string };
+        chatStore.setTypingUser(data.channelId, data.displayName);
+        break;
+      }
+
+      case WsServerEvents.PRESENCE_CHANGED: {
+        const data = envelope.d as { userId: string; status: 'online' | 'idle' | 'offline' };
+        chatStore.setMemberPresence(data.userId, data.status);
+        break;
+      }
+
+      case WsServerEvents.CHANNEL_CREATED: {
+        const channel = envelope.d as Channel;
+        chatStore.addChannel(channel);
+        break;
+      }
+
+      case WsServerEvents.CHANNEL_UPDATED: {
+        const data = envelope.d as { channelId: string; name: string };
+        chatStore.updateChannel(data.channelId, data.name);
+        break;
+      }
+
+      case WsServerEvents.CHANNEL_DELETED: {
+        const data = envelope.d as { channelId: string };
+        chatStore.removeChannel(data.channelId);
+        break;
+      }
+
+      case WsServerEvents.ERROR: {
+        const data = envelope.d as { code: string; message: string };
+        console.error('Server error:', data.code, data.message);
+        break;
+      }
+    }
+  }
+
+  sendMessage(channelId: string, content: string, replyTo?: string): void {
+    if (!content.trim()) return;
+    this.send(WsClientEvents.MSG_SEND, {
+      channelId,
+      content: content.trim(),
+      replyTo: replyTo ?? null,
+    });
+  }
+
+  sendTyping(channelId: string): void {
+    this.send(WsClientEvents.TYPING, { channelId });
+  }
+
+  fetchHistory(channelId: string, before?: string): void {
+    this.send(WsClientEvents.HISTORY_FETCH, {
+      channelId,
+      before,
+      limit: 50,
+    });
+  }
+
+  createChannel(name: string, type: 'text' | 'voice'): void {
+    this.send(WsClientEvents.CHANNEL_CREATE, {
+      name: name.trim().toLowerCase().replace(/\s+/g, '-'),
+      type,
+    });
+  }
+
+  deleteChannel(channelId: string): void {
+    this.send(WsClientEvents.CHANNEL_DELETE, { channelId });
+  }
+
+  private send(type: string, data: unknown): void {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      const payload: WsEnvelope = {
+        v: 1,
+        t: type,
+        d: data,
+      };
+      this.ws.send(JSON.stringify(payload));
+    }
+  }
+
+  private scheduleReconnect(): void {
+    this.reconnectAttempt++;
+    // Exponential backoff: 1s, 2s, 4s, 8s, 16s, capped at 30s
+    const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempt - 1), 30_000);
+    this.reconnectTimeout = setTimeout(() => {
+      this.initSocket();
+    }, delay);
+  }
+
+  private cleanupSocket(): void {
+    if (this.pingInterval) {
+      clearInterval(this.pingInterval);
+      this.pingInterval = null;
+    }
+    if (this.reconnectTimeout) {
+      clearTimeout(this.reconnectTimeout);
+      this.reconnectTimeout = null;
+    }
+  }
+
+  disconnect(): void {
+    this.isIntentionallyClosed = true;
+    this.cleanupSocket();
+    if (this.ws) {
+      this.ws.close(1000, 'Intentional close');
+      this.ws = null;
+    }
+    this.currentGroupId = null;
+  }
+}
+
+export const wsService = new EchoWebSocketService();
