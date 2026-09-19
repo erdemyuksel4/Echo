@@ -75,8 +75,17 @@ function createWindow(): void {
   }
 }
 
-// Single Instance Lock
-const gotTheLock = app.requestSingleInstanceLock();
+// Custom profile support for multi-user simulation (e.g. ECHO_PROFILE=user2)
+const profileArg = process.argv.find((a) => a.startsWith('--profile='));
+const profileName = process.env.ECHO_PROFILE || (profileArg ? profileArg.split('=')[1] : undefined);
+
+if (profileName) {
+  const customUserData = join(app.getPath('appData'), `Echo_${profileName}`);
+  app.setPath('userData', customUserData);
+}
+
+// Single Instance Lock (disabled or isolated when testing with custom profiles)
+const gotTheLock = profileName ? true : app.requestSingleInstanceLock();
 
 if (!gotTheLock) {
   app.quit();

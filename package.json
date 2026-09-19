@@ -7,6 +7,7 @@
     "dev": "concurrently -n server,desktop -c yellow,blue \"pnpm --filter @echo/server dev\" \"pnpm --filter @echo/desktop dev\"",
     "dev:server": "pnpm --filter @echo/server dev",
     "dev:desktop": "pnpm --filter @echo/desktop dev",
+    "dev:user2": "cross-env ECHO_PROFILE=user2 pnpm --filter @echo/desktop dev",
     "typecheck": "pnpm -r run typecheck",
     "test": "pnpm -r run test",
     "lint": "eslint .",
