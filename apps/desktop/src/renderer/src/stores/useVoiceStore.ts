@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 import type { VoiceParticipant, PeerDiagnosticsStats } from '@echo/shared';
 
+export type VoiceInputMode = 'vad' | 'ptt';
+
 export interface VoiceState {
   currentChannelId: string | null;
   currentChannelName: string | null;
@@ -9,6 +11,13 @@ export interface VoiceState {
   isDeafened: boolean;
   isSpeaking: boolean;
   pingMs: number;
+
+  // Push-to-Talk configuration
+  inputMode: VoiceInputMode;
+  pttKey: string;
+  pttKeyDisplay: string;
+  pttReleaseDelay: number;
+  isPttActive: boolean;
 
   // channelId -> VoiceParticipant[]
   channelParticipants: Record<string, VoiceParticipant[]>;
@@ -26,6 +35,11 @@ export interface VoiceState {
   setSpeaking: (speaking: boolean) => void;
   setPingMs: (ping: number) => void;
 
+  setInputMode: (mode: VoiceInputMode) => void;
+  setPttKey: (key: string, display: string) => void;
+  setPttReleaseDelay: (delay: number) => void;
+  setPttActive: (active: boolean) => void;
+
   setChannelParticipants: (channelId: string, participants: VoiceParticipant[]) => void;
   addChannelParticipant: (channelId: string, participant: VoiceParticipant) => void;
   removeChannelParticipant: (channelId: string, userId: string) => void;
@@ -39,6 +53,40 @@ export interface VoiceState {
   setDiagnosticsOpen: (open: boolean) => void;
 }
 
+const getInitialInputMode = (): VoiceInputMode => {
+  try {
+    const val = localStorage.getItem('echo_voice_input_mode');
+    return val === 'ptt' ? 'ptt' : 'vad';
+  } catch {
+    return 'vad';
+  }
+};
+
+const getInitialPttKey = (): string => {
+  try {
+    return localStorage.getItem('echo_voice_ptt_key') || 'KeyV';
+  } catch {
+    return 'KeyV';
+  }
+};
+
+const getInitialPttKeyDisplay = (): string => {
+  try {
+    return localStorage.getItem('echo_voice_ptt_display') || 'V';
+  } catch {
+    return 'V';
+  }
+};
+
+const getInitialPttReleaseDelay = (): number => {
+  try {
+    const val = localStorage.getItem('echo_voice_ptt_delay');
+    return val ? Number(val) : 200;
+  } catch {
+    return 200;
+  }
+};
+
 export const useVoiceStore = create<VoiceState>((set) => ({
   currentChannelId: null,
   currentChannelName: null,
@@ -47,6 +95,13 @@ export const useVoiceStore = create<VoiceState>((set) => ({
   isDeafened: false,
   isSpeaking: false,
   pingMs: 0,
+
+  inputMode: getInitialInputMode(),
+  pttKey: getInitialPttKey(),
+  pttKeyDisplay: getInitialPttKeyDisplay(),
+  pttReleaseDelay: getInitialPttReleaseDelay(),
+  isPttActive: false,
+
   channelParticipants: {},
   diagnostics: {},
   isDiagnosticsOpen: false,
@@ -79,6 +134,36 @@ export const useVoiceStore = create<VoiceState>((set) => ({
   setDeafened: (isDeafened) => set({ isDeafened, isMuted: isDeafened ? true : undefined }),
   setSpeaking: (isSpeaking) => set({ isSpeaking }),
   setPingMs: (pingMs) => set({ pingMs }),
+
+  setInputMode: (inputMode) => {
+    try {
+      localStorage.setItem('echo_voice_input_mode', inputMode);
+    } catch {
+      // Ignore
+    }
+    set({ inputMode });
+  },
+
+  setPttKey: (pttKey, pttKeyDisplay) => {
+    try {
+      localStorage.setItem('echo_voice_ptt_key', pttKey);
+      localStorage.setItem('echo_voice_ptt_display', pttKeyDisplay);
+    } catch {
+      // Ignore
+    }
+    set({ pttKey, pttKeyDisplay });
+  },
+
+  setPttReleaseDelay: (pttReleaseDelay) => {
+    try {
+      localStorage.setItem('echo_voice_ptt_delay', String(pttReleaseDelay));
+    } catch {
+      // Ignore
+    }
+    set({ pttReleaseDelay });
+  },
+
+  setPttActive: (isPttActive) => set({ isPttActive }),
 
   setChannelParticipants: (channelId, participants) =>
     set((state) => ({

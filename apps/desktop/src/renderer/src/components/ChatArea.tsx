@@ -264,13 +264,16 @@ export const ChatArea: React.FC = () => {
       {/* Message History */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {currentMessages.length === 0 ? (
-          <div className="flex h-full items-center justify-center text-slate-500">
-            <div className="text-center">
-              <h3 className="text-base font-bold text-white mb-1">
-                #{activeChannel.name} kanalına hoş geldiniz!
-              </h3>
-              <p className="text-xs">Bu kanalda henüz mesaj bulunmuyor. İlk mesajı siz yazın!</p>
+          <div className="flex h-full flex-col justify-end p-6 pb-8 select-none">
+            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-800 border border-slate-700/60 text-white mb-4 shadow-lg shadow-slate-950/40">
+              <Hash className="h-9 w-9 text-indigo-400" />
             </div>
+            <h2 className="text-2xl font-black text-white tracking-tight mb-2">
+              #{activeChannel.name} kanalına hoş geldin!
+            </h2>
+            <p className="text-xs text-slate-400 max-w-lg leading-relaxed">
+              Burası <span className="font-semibold text-slate-200">#{activeChannel.name}</span> kanalının başlangıcı. Arkadaşlarınla sohbet etmeye başlamak için ilk mesajı gönder veya görsel paylaş!
+            </p>
           </div>
         ) : (
           currentMessages.map((msg) => {

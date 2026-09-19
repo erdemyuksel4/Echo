@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { Radio } from 'lucide-react';
+import { Radio, WifiOff, Loader2 } from 'lucide-react';
 import { useAuthStore } from './stores/useAuthStore';
 import { useChatStore } from './stores/useChatStore';
+import { useVoiceStore } from './stores/useVoiceStore';
 import { OnboardingModal } from './components/OnboardingModal';
 import { Sidebar } from './components/Sidebar';
 import { ChannelList } from './components/ChannelList';
@@ -17,8 +18,64 @@ import { dmWebSocketService } from './services/dmWebsocket';
 
 export const App: React.FC = () => {
   const { identity, isLoaded, loadIdentity } = useAuthStore();
-  const { activeGroupId } = useChatStore();
+  const { activeGroupId, connectionStatus } = useChatStore();
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const { inputMode, pttKey, pttReleaseDelay, currentChannelId } = useVoiceStore();
+
+  // Global Push-to-Talk keydown and keyup listeners
+  useEffect(() => {
+    let pttTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (inputMode !== 'ptt' || !currentChannelId) return;
+
+      const target = e.target as HTMLElement | null;
+      const isInput =
+        target &&
+        (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable);
+      const isModifier =
+        [
+          'ControlLeft',
+          'ControlRight',
+          'AltLeft',
+          'AltRight',
+          'ShiftLeft',
+          'ShiftRight',
+          'CapsLock',
+        ].includes(e.code) || e.code.startsWith('F');
+
+      if (isInput && !isModifier) return;
+
+      if (e.code === pttKey) {
+        if (pttTimer) {
+          clearTimeout(pttTimer);
+          pttTimer = null;
+        }
+        webrtcService.setPttActive(true);
+      }
+    };
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (inputMode !== 'ptt' || !currentChannelId) return;
+
+      if (e.code === pttKey) {
+        if (pttTimer) clearTimeout(pttTimer);
+        pttTimer = setTimeout(() => {
+          webrtcService.setPttActive(false);
+          pttTimer = null;
+        }, pttReleaseDelay);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+      if (pttTimer) clearTimeout(pttTimer);
+    };
+  }, [inputMode, pttKey, pttReleaseDelay, currentChannelId]);
 
   useEffect(() => {
     loadIdentity();
@@ -104,8 +161,25 @@ export const App: React.FC = () => {
   }
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-slate-900 text-slate-100 select-none">
+    <div className="flex h-screen w-screen overflow-hidden bg-slate-900 text-slate-100 select-none relative">
       {!identity && <OnboardingModal />}
+
+      {/* Floating Reconnection / Offline Banner */}
+      {activeGroupId && connectionStatus !== 'connected' && (
+        <div className="fixed top-3 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 rounded-full bg-amber-500/90 backdrop-blur px-4 py-1.5 text-xs font-semibold text-slate-950 shadow-lg shadow-amber-500/20 animate-in fade-in slide-in-from-top-2">
+          {connectionStatus === 'connecting' ? (
+            <>
+              <Loader2 className="h-3.5 w-3.5 animate-spin text-slate-950" />
+              <span>Sunucuya bağlanılıyor...</span>
+            </>
+          ) : (
+            <>
+              <WifiOff className="h-3.5 w-3.5 text-slate-950" />
+              <span>Bağlantı koptu, yeniden bağlanılıyor...</span>
+            </>
+          )}
+        </div>
+      )}
 
       {/* Main Application Layout */}
       <Sidebar onOpenCreateModal={() => setShowCreateModal(true)} />

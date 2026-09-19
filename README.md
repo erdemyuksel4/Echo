@@ -70,6 +70,17 @@ Veya servisleri ayrı ayrı çalıştırmak için:
   pnpm test
   ```
 
+## Tek Tıkla Kurulum Paketi (.exe) Üretme ve Dağıtım
+
+Echo'yu arkadaşlarınıza göndermek üzere tek bir Windows kurulum paketine (`.exe`) dönüştürmek için:
+
+```powershell
+pnpm build:exe
+```
+
+- Çıktı: `apps/desktop/dist/Echo Setup 0.1.0.exe`
+- Arkadaşlarınıza dağıtım ve Windows SmartScreen uyarısını aşma rehberi için bkz: [Arkadaşlara Dağıtım Rehberi](docs/DISTRIBUTION.md).
+
 ## Güvenlik ve Mimari
 
 - Masaüstü: `contextIsolation: true`, `nodeIntegration: false`, `sandbox: true`. Preload IPC köprüsü tiplidir.

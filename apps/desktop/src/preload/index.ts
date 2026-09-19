@@ -28,6 +28,8 @@ export interface EchoApi {
   setBadgeCount: (count: number) => Promise<boolean>;
   copyToClipboard: (text: string) => Promise<boolean>;
   getDesktopSources: () => Promise<ScreenShareSource[]>;
+  getLoginItemSettings: () => Promise<{ openAtLogin: boolean }>;
+  setLoginItemSettings: (openAtLogin: boolean) => Promise<boolean>;
 }
 
 const echoApi: EchoApi = {
@@ -57,6 +59,12 @@ const echoApi: EchoApi = {
   },
   getDesktopSources: (): Promise<ScreenShareSource[]> => {
     return ipcRenderer.invoke('desktop:getSources');
+  },
+  getLoginItemSettings: (): Promise<{ openAtLogin: boolean }> => {
+    return ipcRenderer.invoke('desktop:getLoginItemSettings');
+  },
+  setLoginItemSettings: (openAtLogin: boolean): Promise<boolean> => {
+    return ipcRenderer.invoke('desktop:setLoginItemSettings', { openAtLogin });
   },
 };
 

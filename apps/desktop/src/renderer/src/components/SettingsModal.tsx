@@ -9,9 +9,13 @@ import {
   Headphones,
   Play,
   Square,
+  Keyboard,
+  Sliders,
+  Laptop,
 } from 'lucide-react';
 import { soundService } from '../services/sound';
 import { webrtcService } from '../services/webrtc';
+import { useVoiceStore } from '../stores/useVoiceStore';
 
 interface Props {
   isOpen: boolean;
@@ -41,6 +45,63 @@ export const SettingsModal: React.FC<Props> = ({ isOpen, onClose }) => {
   const [isTestingMic, setIsTestingMic] = useState(false);
   const [micLevel, setMicLevel] = useState(0);
 
+  const {
+    inputMode,
+    pttKeyDisplay,
+    pttReleaseDelay,
+    setInputMode,
+    setPttReleaseDelay,
+  } = useVoiceStore();
+
+  const [isRecordingPttKey, setIsRecordingPttKey] = useState(false);
+  const [autoStartEnabled, setAutoStartEnabled] = useState(false);
+
+  useEffect(() => {
+    if (isOpen && window.echoApi?.getLoginItemSettings) {
+      void window.echoApi.getLoginItemSettings().then((settings) => {
+        setAutoStartEnabled(Boolean(settings?.openAtLogin));
+      });
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isRecordingPttKey) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      let display = e.key.toUpperCase();
+      if (e.code.startsWith('Key')) {
+        display = e.code.replace('Key', '');
+      } else if (e.code === 'Space') {
+        display = 'Boşluk (Space)';
+      } else if (e.code === 'ControlRight') {
+        display = 'Sağ Ctrl';
+      } else if (e.code === 'ControlLeft') {
+        display = 'Sol Ctrl';
+      } else if (e.code === 'AltRight') {
+        display = 'Sağ Alt';
+      } else if (e.code === 'AltLeft') {
+        display = 'Sol Alt';
+      } else if (e.code === 'ShiftRight') {
+        display = 'Sağ Shift';
+      } else if (e.code === 'ShiftLeft') {
+        display = 'Sol Shift';
+      } else if (e.code === 'CapsLock') {
+        display = 'Caps Lock';
+      }
+
+      useVoiceStore.getState().setPttKey(e.code, display);
+      setIsRecordingPttKey(false);
+    };
+
+    window.addEventListener('keydown', handleKeyDown, { once: true });
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isRecordingPttKey]);
+
   useEffect(() => {
     if (isOpen) {
       void webrtcService.getAudioDevices().then(({ inputs, outputs }) => {
@@ -53,6 +114,7 @@ export const SettingsModal: React.FC<Props> = ({ isOpen, onClose }) => {
     } else {
       setIsTestingMic(false);
       setMicLevel(0);
+      setIsRecordingPttKey(false);
     }
   }, [isOpen, selectedInputId]);
 
@@ -86,6 +148,14 @@ export const SettingsModal: React.FC<Props> = ({ isOpen, onClose }) => {
       localStorage.setItem('echo_notifications_enabled', String(next));
     } catch {
       // Ignore
+    }
+  };
+
+  const handleToggleAutoStart = async () => {
+    const next = !autoStartEnabled;
+    setAutoStartEnabled(next);
+    if (window.echoApi?.setLoginItemSettings) {
+      await window.echoApi.setLoginItemSettings(next);
     }
   };
 
@@ -255,6 +325,97 @@ export const SettingsModal: React.FC<Props> = ({ isOpen, onClose }) => {
                   />
                 </div>
               </div>
+
+              {/* Voice Transmission Mode (VAD vs PTT) */}
+              <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4 space-y-4">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-indigo-600/20 text-indigo-400">
+                    <Sliders className="h-5 w-5" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="text-sm font-semibold text-white">Ses İletim Modu</h3>
+                    <p className="text-xs text-slate-400">Sesinizin kanala nasıl aktarılacağını seçin</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setInputMode('vad');
+                      webrtcService.setInputMode('vad');
+                    }}
+                    className={`flex flex-col items-start gap-1 p-3 rounded-xl border text-left transition ${
+                      inputMode === 'vad'
+                        ? 'border-indigo-500 bg-indigo-950/30 text-white shadow-sm shadow-indigo-500/10'
+                        : 'border-slate-800 bg-slate-900/60 text-slate-400 hover:border-slate-700 hover:text-slate-300'
+                    }`}
+                  >
+                    <span className="text-xs font-bold">Ses Etkinliği (VAD)</span>
+                    <span className="text-[11px] text-slate-400">Konuştuğunuzda otomatik algılanır</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setInputMode('ptt');
+                      webrtcService.setInputMode('ptt');
+                    }}
+                    className={`flex flex-col items-start gap-1 p-3 rounded-xl border text-left transition ${
+                      inputMode === 'ptt'
+                        ? 'border-indigo-500 bg-indigo-950/30 text-white shadow-sm shadow-indigo-500/10'
+                        : 'border-slate-800 bg-slate-900/60 text-slate-400 hover:border-slate-700 hover:text-slate-300'
+                    }`}
+                  >
+                    <span className="text-xs font-bold">Bas-Konuş (Push-to-Talk)</span>
+                    <span className="text-[11px] text-slate-400">Belirlenen tuşa basarak konuşun</span>
+                  </button>
+                </div>
+
+                {inputMode === 'ptt' && (
+                  <div className="pt-3 space-y-3 border-t border-slate-800/80 animate-in fade-in duration-150">
+                    {/* Keybinding recorder */}
+                    <div className="flex items-center justify-between gap-4">
+                      <div>
+                        <div className="text-xs font-semibold text-white">Bas-Konuş Tuşu</div>
+                        <div className="text-[11px] text-slate-400">Konuşmak için basılı tutacağınız tuş</div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setIsRecordingPttKey(true)}
+                        className={`flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-mono font-bold transition border ${
+                          isRecordingPttKey
+                            ? 'border-amber-500 bg-amber-500/20 text-amber-300 animate-pulse'
+                            : 'border-slate-700 bg-slate-800 text-slate-200 hover:border-indigo-500 hover:bg-slate-750'
+                        }`}
+                      >
+                        <Keyboard className="h-3.5 w-3.5 text-indigo-400" />
+                        <span>{isRecordingPttKey ? 'Bir tuşa basın...' : pttKeyDisplay}</span>
+                      </button>
+                    </div>
+
+                    {/* Release delay */}
+                    <div className="space-y-1 pt-1">
+                      <div className="flex justify-between text-xs text-slate-400">
+                        <span>Bırakma Gecikmesi</span>
+                        <span className="font-mono text-slate-200 font-semibold">{pttReleaseDelay} ms</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="50"
+                        max="1000"
+                        step="50"
+                        value={pttReleaseDelay}
+                        onChange={(e) => setPttReleaseDelay(Number(e.target.value))}
+                        className="w-full accent-indigo-500 h-2 bg-slate-800 rounded-lg cursor-pointer"
+                      />
+                      <p className="text-[10px] text-slate-500">
+                        Tuşu bıraktıktan sonra sesinizin ani kesilmemesi için beklenen süre.
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
@@ -265,6 +426,30 @@ export const SettingsModal: React.FC<Props> = ({ isOpen, onClose }) => {
             </div>
 
             <div className="space-y-3">
+              {/* Windows Auto-Start Toggle */}
+              <div className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-sky-600/20 text-sky-400">
+                    <Laptop className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-semibold text-white">Windows ile Birlikte Başlat</h3>
+                    <p className="text-xs text-slate-400">Bilgisayar açıldığında Echo otomatik başlasın</p>
+                  </div>
+                </div>
+                <button
+                  onClick={handleToggleAutoStart}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                    autoStartEnabled ? 'bg-indigo-600' : 'bg-slate-700'
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                      autoStartEnabled ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+              </div>
               {/* Sound Toggle */}
               <div className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-950/60 p-4">
                 <div className="flex items-center gap-3">

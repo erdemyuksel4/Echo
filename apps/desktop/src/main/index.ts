@@ -262,6 +262,20 @@ if (!gotTheLock) {
       }));
     });
 
+    // Handle Auto-Start (Windows Login Item)
+    ipcMain.handle('desktop:getLoginItemSettings', () => {
+      const settings = app.getLoginItemSettings();
+      return { openAtLogin: settings.openAtLogin };
+    });
+
+    ipcMain.handle('desktop:setLoginItemSettings', (_, { openAtLogin }: { openAtLogin: boolean }) => {
+      app.setLoginItemSettings({
+        openAtLogin,
+        openAsHidden: true,
+      });
+      return true;
+    });
+
     createTray();
     createWindow();
 

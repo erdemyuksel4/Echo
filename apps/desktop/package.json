@@ -7,6 +7,7 @@
     "dev": "electron-vite dev",
     "dev:user2": "cross-env ECHO_PROFILE=user2 electron-vite dev",
     "build": "electron-vite build",
+    "build:exe": "electron-vite build && electron-builder --win nsis",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "preview": "electron-vite preview"
   },
@@ -25,10 +26,43 @@
     "@vitejs/plugin-react": "^4.3.4",
     "autoprefixer": "^10.4.20",
     "electron": "^34.2.0",
+    "electron-builder": "^26.15.3",
     "electron-vite": "^2.3.0",
     "postcss": "^8.5.3",
     "tailwindcss": "^3.4.17",
     "typescript": "^5.7.3",
     "vite": "^6.1.1"
+  },
+  "build": {
+    "appId": "com.echo.app",
+    "productName": "Echo",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "out/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "resources/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": "always",
+      "createStartMenuShortcut": true,
+      "shortcutName": "Echo",
+      "uninstallDisplayName": "Echo",
+      "runAfterFinish": true
+    }
   }
 }

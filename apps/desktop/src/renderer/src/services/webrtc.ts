@@ -80,11 +80,8 @@ class WebRTCVoiceService {
         video: false,
       });
 
-      // Apply current mute state
-      const isMuted = voiceStore.isMuted || voiceStore.isDeafened;
-      this.localStream.getAudioTracks().forEach((track) => {
-        track.enabled = !isMuted;
-      });
+      // Apply current mute / PTT state
+      this.updateAudioTrackState();
 
       // 2. Setup VAD (Voice Activity Detection)
       this.setupVAD(this.localStream);
@@ -376,16 +373,48 @@ class WebRTCVoiceService {
     return pc;
   }
 
+  updateAudioTrackState(): void {
+    const store = useVoiceStore.getState();
+    const isMuted = store.isMuted || store.isDeafened;
+    const canTransmit = !isMuted && (store.inputMode === 'vad' || store.isPttActive);
+
+    if (this.localStream) {
+      this.localStream.getAudioTracks().forEach((t) => {
+        t.enabled = canTransmit;
+      });
+    }
+
+    if (!canTransmit && this.lastSpeakingState) {
+      if (this.speakingSilenceTimer) {
+        clearTimeout(this.speakingSilenceTimer);
+        this.speakingSilenceTimer = null;
+      }
+      this.setLocalSpeaking(false);
+    }
+  }
+
+  setPttActive(active: boolean): void {
+    const store = useVoiceStore.getState();
+    if (store.isPttActive === active) return;
+    store.setPttActive(active);
+    this.updateAudioTrackState();
+
+    if (store.inputMode === 'ptt' && !store.isMuted && !store.isDeafened) {
+      this.setLocalSpeaking(active);
+    }
+  }
+
+  setInputMode(mode: 'vad' | 'ptt'): void {
+    const store = useVoiceStore.getState();
+    store.setInputMode(mode);
+    this.updateAudioTrackState();
+  }
+
   toggleMute(): void {
     const store = useVoiceStore.getState();
     const newMuted = !store.isMuted;
     store.setMuted(newMuted);
-
-    if (this.localStream) {
-      this.localStream.getAudioTracks().forEach((t) => {
-        t.enabled = !newMuted && !store.isDeafened;
-      });
-    }
+    this.updateAudioTrackState();
 
     if (this.currentChannelId) {
       wsService.sendVoiceState(this.currentChannelId, {
@@ -400,13 +429,7 @@ class WebRTCVoiceService {
     const store = useVoiceStore.getState();
     const newDeafened = !store.isDeafened;
     store.setDeafened(newDeafened);
-
-    // When deafened, also mute microphone
-    if (this.localStream) {
-      this.localStream.getAudioTracks().forEach((t) => {
-        t.enabled = !newDeafened && !store.isMuted;
-      });
-    }
+    this.updateAudioTrackState();
 
     // Mute all remote audio elements
     this.peerAudioElements.forEach((audio) => {
@@ -438,9 +461,18 @@ class WebRTCVoiceService {
         if (!this.analyser || !this.currentChannelId) return;
 
         const store = useVoiceStore.getState();
-        if (store.isMuted || store.isDeafened) {
+        const canTransmit = !store.isMuted && !store.isDeafened && (store.inputMode === 'vad' || store.isPttActive);
+        if (!canTransmit) {
           if (this.lastSpeakingState) {
             this.setLocalSpeaking(false);
+          }
+          return;
+        }
+
+        // In PTT mode, speaking state is driven directly by PTT button activation
+        if (store.inputMode === 'ptt') {
+          if (!this.lastSpeakingState && store.isPttActive) {
+            this.setLocalSpeaking(true);
           }
           return;
         }

@@ -13,8 +13,8 @@ Bu dosya her faz ve görev sonunda güncellenir.
 | Faz 4 | Medya                                   | Tamamlandı | `faz-4-medya`          | Görsel/GIF yükleme (server), P2P dosya paylaşımı (WebRTC DataChannel), lightbox görüntüleyici, sürükle-bırak, Ctrl+V paste, Giphy picker |
 | Faz 5 | DM                                      | Tamamlandı | `faz-5-dm`             | UserDO çift taraflı yazım, /ws/user WS endpoint, dm_threads, dm_messages, DmChatArea, MemberList DM başlatma |
 | Faz 6 | Ekran paylaşımı (mesh)                  | Tamamlandı | `faz-6-ekran-paylasimi`| desktopCapturer, 720p30/1080p kalite ön ayarları, ScreenShareTransport, MeshTransport, ScreenShareViewer |
-| Faz 7 | SFU (kapılı)                            | Başlanmadı | -                      | -                                                                          |
-| Faz 8 | Cilalama ve dağıtım                     | Başlanmadı | -                      | -                                                                          |
+| Faz 7 | SFU (kapılı)                            | Atlandı    | -                      | Patron kararıyla şimdilik atlandı (P2P Mesh yeterli)                       |
+| Faz 8 | Cilalama ve dağıtım                     | Tamamlandı | `faz-8-cilalama-dagitim`| Bas-konuş, Windows ile başlat, boş durumlar, NSIS tek tıkla .exe kurulumu  |
 | Faz 9 | Kamera (opsiyonel)                      | Başlanmadı | -                      | -                                                                          |
 
 ## Faz 0 — Kabul Kriterleri ve Gerçekleşenler
@@ -221,5 +221,33 @@ Bu dosya her faz ve görev sonunda güncellenir.
   - `pnpm typecheck`: Monorepo genelinde sıfır hata ile geçti.
   - `pnpm lint`: Workspace genelinde sıfır hata ile geçti.
   - `pnpm test`: 14 test dosyası, 60 testin tamamı (%100) başarıyla geçti.
+
+## Faz 8 — Kabul Kriterleri ve Gerçekleşenler
+
+- [x] **Bas-Konuş (Push-to-Talk) & Ses Ayarları:**
+  - `useVoiceStore`: `inputMode` ('vad' | 'ptt'), `pttKey`, `pttKeyDisplay`, `pttReleaseDelay`, `isPttActive` durumları eklendi ve `localStorage` ile kalıcı hale getirildi.
+  - `webrtcService`: Bas-konuş aktifken mikrofon parçasını dinamik olarak susturma/açma (`updateAudioTrackState`), basılı tutulduğunda konuşma algılama ve bırakıldığında VAD senkronizasyonu.
+  - `SettingsModal`: Ses iletim modu seçici (VAD vs PTT), dinamik tuş kaydedici (Keyboard recorder; Space, Ctrl, CapsLock, V vb.) ve ayarlanabilir bırakma gecikmesi kaydırıcısı (50-1000 ms).
+  - `App.tsx`: Global pencere `keydown` ve `keyup` dinleyicileri (yazı kutularında doğal yazımı engellemez, tuş bırakıldığında gecikmeyle mikrofonu kapatır).
+- [x] **Sistem Entegrasyonu (Windows ile Başlatma & Oturum Ayarları):**
+  - Electron Ana Süreci: `desktop:getLoginItemSettings` ve `desktop:setLoginItemSettings` (`app.setLoginItemSettings` ile Windows başlangıç kaydı) IPC uç noktaları.
+  - Preload: `getLoginItemSettings()` ve `setLoginItemSettings(openAtLogin: boolean)` güvenli contextBridge metotları.
+  - `SettingsModal`: "Windows ile Birlikte Başlat" toggle anahtarı.
+- [x] **Arayüz ve Boş Durum (Empty State) Cilası:**
+  - `ChatArea`: Henüz mesaj yazılmamış kanallarda Discord tarzı büyük `#` simgeli ve başlatan açıklamalı hoş geldin kartı.
+  - `App.tsx`: Sunucu bağlantısı koptuğunda veya yeniden bağlanılırken ekranın üstünde zarif sarı uyarı afişi ("Sunucuya bağlanılıyor..." / "Bağlantı koptu, yeniden bağlanılıyor...").
+- [x] **Tek Tıkla Kurulan `.exe` Paketi (`electron-builder` + NSIS):**
+  - Modern Echo uygulama ikonu oluşturuldu (`apps/desktop/build/icon.png`).
+  - `apps/desktop/package.json` ve kök `package.json` içine `"build:exe"` derleme script'i ve NSIS paketleyici yapılandırması eklendi.
+  - `pnpm build:exe` ile tek tıkla kurulan bağımsız `apps/desktop/dist/Echo Setup 0.1.0.exe` (84.3 MB) paketi başarıyla üretildi.
+  - NSIS paketi: Masaüstü kısayolu, Başlat menüsü kısayolu ve temiz kaldırıcı (uninstaller) içerir.
+- [x] **Arkadaşlara Dağıtım & SmartScreen Rehberi:**
+  - `docs/DISTRIBUTION.md`: Arkadaşlara `.exe` dosyasını iletme (Drive, WeTransfer vb.), Windows SmartScreen mavi ekranını ("Ek bilgi" -> "Yine de çalıştır") aşma adımları ve ilk açılışta davet koduyla katılma rehberi hazırlandı.
+  - `README.md` kurulum ve dağıtım bölümleri güncellendi.
+- [x] **Test Doğrulamaları:**
+  - `pnpm typecheck`: Monorepo genelinde sıfır hata ile geçti.
+  - `pnpm lint`: Workspace genelinde sıfır hata ile geçti.
+  - `pnpm test`: 14 test dosyası, 60 testin tamamı (%100) başarıyla geçti.
+  - `Echo Setup 0.1.0.exe` derleme çıktısı doğrudan test edildi ve doğrulandı.
 
 
