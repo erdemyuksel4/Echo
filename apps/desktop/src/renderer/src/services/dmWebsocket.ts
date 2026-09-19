@@ -1,7 +1,8 @@
 import { WsClientEvents, WsServerEvents } from '@echo/shared';
 import type { WsEnvelope, DmMessage, DmThread } from '@echo/shared';
-import { useDmStore } from '../stores/useDmStore';
 import { useAuthStore } from '../stores/useAuthStore';
+import { useDmStore } from '../stores/useDmStore';
+import { SERVER_HTTP_URL, SERVER_WS_URL } from '../config';
 
 class DmWebSocketService {
   private ws: WebSocket | null = null;
@@ -43,7 +44,7 @@ class DmWebSocketService {
         color: identity.avatarColor,
       });
 
-      const wsUrl = `ws://localhost:8787/ws/user?${params.toString()}`;
+      const wsUrl = `${SERVER_WS_URL}/ws/user?${params.toString()}`;
       const socket = new WebSocket(wsUrl);
       this.ws = socket;
 
@@ -125,7 +126,7 @@ class DmWebSocketService {
     if (!identity) return;
 
     try {
-      const res = await fetch(`http://localhost:8787/api/users/${identity.userId}/dm-threads`);
+      const res = await fetch(`${SERVER_HTTP_URL}/api/users/${identity.userId}/dm-threads`);
       if (res.ok) {
         const threads = (await res.json()) as DmThread[];
         useDmStore.getState().setThreads(threads);

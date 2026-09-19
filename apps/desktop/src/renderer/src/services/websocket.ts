@@ -17,6 +17,7 @@ import { useAuthStore } from '../stores/useAuthStore';
 import { useVoiceStore } from '../stores/useVoiceStore';
 import { useScreenShareStore } from '../stores/useScreenShareStore';
 import { soundService } from './sound';
+import { SERVER_WS_URL } from '../config';
 import { webrtcService } from './webrtc';
 import { p2pFileTransferService } from './p2pFileTransfer';
 import { screenShareTransport } from './screenShare/transport';
@@ -46,7 +47,7 @@ class EchoWebSocketService {
 
     useChatStore.getState().setConnectionStatus('connecting');
 
-    const wsUrl = `ws://localhost:8787/ws/group/${this.currentGroupId}`;
+    const wsUrl = `${SERVER_WS_URL}/ws/group/${this.currentGroupId}`;
     const socket = new WebSocket(wsUrl);
     this.ws = socket;
 

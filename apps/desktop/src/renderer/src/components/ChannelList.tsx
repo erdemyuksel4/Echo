@@ -24,6 +24,7 @@ import { webrtcService } from '../services/webrtc';
 import { SettingsModal } from './SettingsModal';
 import { VoicePanel } from './VoicePanel';
 import { DeleteGroupModal } from './DeleteGroupModal';
+import { SERVER_HTTP_URL } from '../config';
 
 export const ChannelList: React.FC = () => {
   const { identity } = useAuthStore();
@@ -166,7 +167,7 @@ export const ChannelList: React.FC = () => {
     let code = defaultInviteCode;
     if (!code && activeGroupMeta?.id) {
       try {
-        const res = await fetch(`http://localhost:8787/api/groups/${activeGroupMeta.id}/invite`);
+        const res = await fetch(`${SERVER_HTTP_URL}/api/groups/${activeGroupMeta.id}/invite`);
         if (res.ok) {
           const data = (await res.json()) as { inviteCode?: string };
           if (data.inviteCode) {

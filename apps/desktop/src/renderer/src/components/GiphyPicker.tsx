@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Search, X, Loader2 } from 'lucide-react';
 import type { GiphyItem } from '@echo/shared';
+import { SERVER_HTTP_URL } from '../config';
 
 interface GiphyPickerProps {
   onSelect: (gif: GiphyItem) => void;
@@ -40,8 +41,8 @@ export const GiphyPicker: React.FC<GiphyPickerProps> = ({ onSelect, onClose }) =
       setLoading(true);
       try {
         const endpoint = query.trim()
-          ? `http://localhost:8787/api/giphy/search?q=${encodeURIComponent(query.trim())}&limit=24`
-          : `http://localhost:8787/api/giphy/search?limit=24`;
+          ? `${SERVER_HTTP_URL}/api/giphy/search?q=${encodeURIComponent(query.trim())}&limit=24`
+          : `${SERVER_HTTP_URL}/api/giphy/search?limit=24`;
 
         const res = await fetch(endpoint);
         if (res.ok && !cancelled) {

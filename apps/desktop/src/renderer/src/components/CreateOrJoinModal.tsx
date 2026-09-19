@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { SERVER_HTTP_URL } from '../config';
 import { useAuthStore } from '../stores/useAuthStore';
 import { useChatStore } from '../stores/useChatStore';
 import { wsService } from '../services/websocket';
@@ -32,7 +33,7 @@ export const CreateOrJoinModal: React.FC<Props> = ({ isOpen, onClose }) => {
       const signed = await window.echoApi?.signPayload(payload);
       if (!signed) throw new Error('İmzalama başarısız oldu');
 
-      const res = await fetch('http://localhost:8787/api/groups', {
+      const res = await fetch(`${SERVER_HTTP_URL}/api/groups`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -82,7 +83,7 @@ export const CreateOrJoinModal: React.FC<Props> = ({ isOpen, onClose }) => {
       const signed = await window.echoApi?.signPayload(payload);
       if (!signed) throw new Error('İmzalama başarısız oldu');
 
-      const res = await fetch('http://localhost:8787/api/groups/join', {
+      const res = await fetch(`${SERVER_HTTP_URL}/api/groups/join`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

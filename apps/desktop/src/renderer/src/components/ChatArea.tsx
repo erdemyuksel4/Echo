@@ -8,6 +8,7 @@ import { ChatMessageItem } from './ChatMessageItem';
 import { GiphyPicker } from './GiphyPicker';
 import { uploadImageAttachment } from '../services/imageCompression';
 import { p2pFileTransferService } from '../services/p2pFileTransfer';
+import { SERVER_HTTP_URL } from '../config';
 
 export const ChatArea: React.FC = () => {
   const { identity } = useAuthStore();
@@ -347,7 +348,7 @@ export const ChatArea: React.FC = () => {
               <div key={att.id} className="relative group flex items-center gap-2 rounded-lg bg-slate-900 border border-slate-700 px-2 py-1.5">
                 {att.type === 'image' || att.type === 'gif' ? (
                   <img
-                    src={att.url.startsWith('/') ? `http://localhost:8787${att.url}` : att.url}
+                    src={att.url.startsWith('/') ? `${SERVER_HTTP_URL}${att.url}` : att.url}
                     alt={att.name}
                     className="h-10 w-10 object-cover rounded"
                   />

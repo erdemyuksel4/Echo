@@ -12,6 +12,7 @@ import { DirectMessagesView } from './components/DirectMessagesView';
 import { CreateOrJoinModal } from './components/CreateOrJoinModal';
 import { ScreenShareViewer } from './components/ScreenShareViewer';
 import { webrtcService } from './services/webrtc';
+import { SERVER_HTTP_URL } from './config';
 
 import { wsService } from './services/websocket';
 import { dmWebSocketService } from './services/dmWebsocket';
@@ -93,7 +94,7 @@ export const App: React.FC = () => {
   useEffect(() => {
     if (!identity) return;
 
-    void fetch(`http://localhost:8787/api/users/${identity.userId}/groups`)
+    void fetch(`${SERVER_HTTP_URL}/api/users/${identity.userId}/groups`)
       .then((res) => (res.ok ? res.json() : []))
       .then((serverGroups: { id: string; name: string }[]) => {
         if (serverGroups && serverGroups.length > 0) {

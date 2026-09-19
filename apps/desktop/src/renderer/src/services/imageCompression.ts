@@ -1,4 +1,5 @@
 import type { Attachment } from '@echo/shared';
+import { SERVER_HTTP_URL } from '../config';
 
 const MAX_IMAGE_DIMENSION = 1920;
 const CHUNK_SIZE_BYTES = 180 * 1024; // ~180KB binary -> ~240KB Base64 (well under SQLite 256KB row limit)
@@ -131,7 +132,7 @@ export async function processImageForUpload(file: File): Promise<CompressedImage
 export async function uploadImageAttachment(groupId: string, file: File): Promise<Attachment> {
   const payload = await processImageForUpload(file);
 
-  const res = await fetch(`http://localhost:8787/api/groups/${groupId}/attachments`, {
+  const res = await fetch(`${SERVER_HTTP_URL}/api/groups/${groupId}/attachments`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

@@ -4,6 +4,7 @@ import { useChatStore } from '../stores/useChatStore';
 import { useVoiceStore } from '../stores/useVoiceStore';
 import { wsService } from '../services/websocket';
 import { webrtcService } from '../services/webrtc';
+import { SERVER_HTTP_URL } from '../config';
 
 interface Props {
   isOpen: boolean;
@@ -41,8 +42,8 @@ export const DeleteGroupModal: React.FC<Props> = ({
       }
 
       const url = isOwner
-        ? `http://localhost:8787/api/groups/${groupId}`
-        : `http://localhost:8787/api/groups/${groupId}/leave`;
+        ? `${SERVER_HTTP_URL}/api/groups/${groupId}`
+        : `${SERVER_HTTP_URL}/api/groups/${groupId}/leave`;
 
       const method = isOwner ? 'DELETE' : 'POST';
 

@@ -22,6 +22,7 @@ import { useChatStore } from '../stores/useChatStore';
 import { wsService } from '../services/websocket';
 import { p2pFileTransferService, type P2PTransferProgress } from '../services/p2pFileTransfer';
 import { ImageViewerModal } from './ImageViewerModal';
+import { SERVER_HTTP_URL } from '../config';
 
 function formatBytes(bytes: number, decimals = 1): string {
   if (bytes === 0) return '0 B';
@@ -486,7 +487,7 @@ export const ChatMessageItem: React.FC<Props> = ({
             {message.attachments.map((att) => {
               if (att.type === 'image' || att.type === 'gif') {
                 const imageUrl = att.url.startsWith('/')
-                  ? `http://localhost:8787${att.url}`
+                  ? `${SERVER_HTTP_URL}${att.url}`
                   : att.url;
                 return (
                   <button

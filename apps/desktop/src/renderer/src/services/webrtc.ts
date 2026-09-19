@@ -6,6 +6,7 @@ import type {
 import { useVoiceStore } from '../stores/useVoiceStore';
 import { useAuthStore } from '../stores/useAuthStore';
 import { wsService } from './websocket';
+import { SERVER_HTTP_URL } from '../config';
 
 interface PreviousPeerStats {
   bytesReceived: number;
@@ -40,7 +41,7 @@ class WebRTCVoiceService {
 
   async init(): Promise<void> {
     try {
-      const res = await fetch('http://localhost:8787/api/turn');
+      const res = await fetch(`${SERVER_HTTP_URL}/api/turn`);
       if (res.ok) {
         const data = (await res.json()) as { iceServers?: RTCIceServer[] };
         if (data.iceServers && data.iceServers.length > 0) {
