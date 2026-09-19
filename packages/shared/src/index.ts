@@ -4,6 +4,7 @@ export * from './schemas/group';
 export * from './schemas/message';
 export * from './schemas/protocol';
 export * from './schemas/voice';
+export * from './schemas/dm';
 export * from './crypto/identity';
 export * from './markdown';
 export * from './schemas/media';

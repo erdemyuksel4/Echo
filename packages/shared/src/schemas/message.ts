@@ -58,3 +58,19 @@ export const HistoryResultSchema = z.object({
 });
 
 export type HistoryResult = z.infer<typeof HistoryResultSchema>;
+
+// ── Direct Message ──────────────────────────────────────────────────────────
+
+export const DmMessageSchema = z.object({
+  id: z.string(),
+  fromUserId: z.string(),
+  toUserId: z.string(),
+  fromName: z.string(),
+  fromColor: z.string(),
+  content: z.string().max(MAX_MESSAGE_LENGTH).default(''),
+  attachments: z.array(AttachmentSchema).default([]),
+  createdAt: z.number().int().positive(),
+  deleted: z.boolean().default(false),
+});
+
+export type DmMessage = z.infer<typeof DmMessageSchema>;

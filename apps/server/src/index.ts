@@ -470,4 +470,92 @@ app.get('/api/giphy/search', async (c) => {
   }
 });
 
+// ── DM: Helper — check common group membership ───────────────────────────────
+
+async function hasCommonGroup(
+  env: Env,
+  userIdA: string,
+  userIdB: string,
+): Promise<boolean> {
+  try {
+    const [stubA, stubB] = [
+      env.USER_DO.get(env.USER_DO.idFromName(userIdA)),
+      env.USER_DO.get(env.USER_DO.idFromName(userIdB)),
+    ];
+    const [resA, resB] = await Promise.all([
+      stubA.fetch('http://do/internal/memberships'),
+      stubB.fetch('http://do/internal/memberships'),
+    ]);
+    const memA = (await resA.json()) as { group_id: string }[];
+    const memB = (await resB.json()) as { group_id: string }[];
+    const setA = new Set(memA.map((m) => m.group_id));
+    return memB.some((m) => setA.has(m.group_id));
+  } catch {
+    return false;
+  }
+}
+
+// ── DM: User WebSocket endpoint ──────────────────────────────────────────────
+// Auth: same signed header as group WS. Tags: [userId, displayName, color]
+
+app.get('/ws/user', async (c) => {
+  const userId = c.req.query('userId');
+  const pubkey = c.req.query('pubkey');
+  const ts = parseInt(c.req.query('ts') ?? '0', 10);
+  const sig = c.req.query('sig') ?? '';
+  const displayName = c.req.query('displayName') ?? 'Bilinmiyor';
+  const color = c.req.query('color') ?? '#6366f1';
+
+  if (!userId || !pubkey) {
+    return c.text('userId and pubkey required', 400);
+  }
+
+  if (Math.abs(Date.now() - ts) > 60_000) {
+    return c.text('Request expired', 400);
+  }
+
+  const derivedId = deriveUserId(pubkey);
+  if (derivedId !== userId) {
+    return c.text('userId mismatch', 401);
+  }
+
+  const payload = `echo-auth|user|${ts}`;
+  if (!verifySignature(payload, sig, pubkey)) {
+    return c.text('Invalid signature', 401);
+  }
+
+  const userDoId = c.env.USER_DO.idFromName(userId);
+  const userStub = c.env.USER_DO.get(userDoId);
+
+  // Build URL for UserDO WebSocket with user tags in query string
+  const doUrl = new URL(c.req.url);
+  doUrl.pathname = '/internal/ws';
+  doUrl.search = `?userId=${encodeURIComponent(userId)}&displayName=${encodeURIComponent(displayName)}&color=${encodeURIComponent(color)}`;
+
+  return userStub.fetch(new Request(doUrl.toString(), c.req.raw));
+});
+
+// ── DM: Get thread list ──────────────────────────────────────────────────────
+
+app.get('/api/users/:userId/dm-threads', async (c) => {
+  const userId = c.req.param('userId');
+  const userDoId = c.env.USER_DO.idFromName(userId);
+  const userStub = c.env.USER_DO.get(userDoId);
+  const res = await userStub.fetch('http://do/internal/dm/threads');
+  const threads = await res.json();
+  return c.json(threads);
+});
+
+// ── DM: Check if DM is allowed (common group check) ─────────────────────────
+
+app.get('/api/dm/check', async (c) => {
+  const userIdA = c.req.query('userIdA') ?? '';
+  const userIdB = c.req.query('userIdB') ?? '';
+  if (!userIdA || !userIdB) {
+    return c.json({ allowed: false, reason: 'Missing userId' }, 400);
+  }
+  const allowed = await hasCommonGroup(c.env, userIdA, userIdB);
+  return c.json({ allowed });
+});
+
 export default app;

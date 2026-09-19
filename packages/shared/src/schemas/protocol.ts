@@ -1,7 +1,8 @@
 import { z } from 'zod';
 import { AuthPayloadSchema } from './auth';
 import { GroupSnapshotSchema, ChannelSchema, GroupMemberSchema } from './group';
-import { MessageSchema, AttachmentSchema } from './message';
+import { MessageSchema, AttachmentSchema, DmMessageSchema } from './message';
+import { DmThreadSchema } from './dm';
 
 // Standard Envelope
 export const WsEnvelopeSchema = z.object({
@@ -39,6 +40,9 @@ export const WsClientEvents = {
   VOICE_SIGNAL: 'voice.signal',
   VOICE_STATE: 'voice.state',
   FILE_SIGNAL: 'file.signal',
+  DM_SEND: 'dm.send',
+  DM_HISTORY_FETCH: 'dm.history_fetch',
+  DM_READ_MARK: 'dm.read_mark',
 } as const;
 
 // Server to Client Events
@@ -68,6 +72,9 @@ export const WsServerEvents = {
   GROUP_DELETED: 'group.deleted',
   MEMBER_LEFT: 'member.left',
   FILE_SIGNAL: 'file.signal',
+  DM_NEW: 'dm.new',
+  DM_READ: 'dm.read',
+  DM_SNAPSHOT: 'dm.snapshot',
 } as const;
 
 // Event Payload Schemas
@@ -190,6 +197,39 @@ export const ServerFileSignalPayloadSchema = z.object({
   signal: z.unknown(),
 });
 
+// ── DM Payload Schemas ───────────────────────────────────────────────────────
+
+export const ClientDmSendPayloadSchema = z
+  .object({
+    toUserId: z.string(),
+    content: z.string().max(4000).default(''),
+  })
+  .refine((d) => d.content.trim().length > 0, {
+    message: 'DM içeriği boş olamaz',
+  });
+
+export const ClientDmHistoryFetchPayloadSchema = z.object({
+  peerId: z.string(),
+  before: z.string().optional(),
+  limit: z.number().int().min(1).max(100).default(50),
+});
+
+export const ClientDmReadMarkPayloadSchema = z.object({
+  peerId: z.string(),
+  lastReadId: z.string(),
+});
+
+export const ServerDmNewPayloadSchema = DmMessageSchema;
+
+export const ServerDmSnapshotPayloadSchema = z.object({
+  threads: z.array(DmThreadSchema),
+});
+
+export const ServerDmReadPayloadSchema = z.object({
+  peerId: z.string(),
+  lastReadId: z.string(),
+});
+
 export {
   AuthPayloadSchema,
   GroupSnapshotSchema,
@@ -197,4 +237,6 @@ export {
   GroupMemberSchema,
   MessageSchema,
   AttachmentSchema,
+  DmMessageSchema,
+  DmThreadSchema,
 };

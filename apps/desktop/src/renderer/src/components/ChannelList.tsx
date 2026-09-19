@@ -11,10 +11,12 @@ import {
   ChevronDown,
   Trash2,
   LogOut,
+  MessageSquare,
 } from 'lucide-react';
 import { useChatStore } from '../stores/useChatStore';
 import { useAuthStore } from '../stores/useAuthStore';
 import { useVoiceStore } from '../stores/useVoiceStore';
+import { useDmStore } from '../stores/useDmStore';
 import { wsService } from '../services/websocket';
 import { webrtcService } from '../services/webrtc';
 import { SettingsModal } from './SettingsModal';
@@ -49,6 +51,7 @@ export const ChannelList: React.FC = () => {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
 
   const isOwner = activeGroupMeta ? identity?.userId === activeGroupMeta.ownerId : false;
+  const { threads, activePeer, setActivePeer } = useDmStore();
 
   if (!activeGroupMeta) {
     return (
@@ -59,19 +62,69 @@ export const ChannelList: React.FC = () => {
         </div>
 
         {/* DM Navigation Items */}
-        <div className="flex-1 overflow-y-auto px-2 py-3 space-y-2">
-          <div className="rounded-lg bg-slate-800/60 px-3 py-2 text-xs font-medium text-white flex items-center gap-2">
-            <span className="h-2 w-2 rounded-full bg-emerald-400" />
-            <span>Arkadaşlar (Çevrimiçi)</span>
-          </div>
+        <div className="flex-1 overflow-y-auto px-2 py-3 space-y-1">
+          <button
+            onClick={() => setActivePeer(null)}
+            className={`w-full rounded-lg px-3 py-2 text-xs font-medium flex items-center gap-2.5 transition text-left ${
+              !activePeer
+                ? 'bg-indigo-600/20 text-indigo-300 font-semibold'
+                : 'text-slate-300 hover:bg-slate-800/60 hover:text-white'
+            }`}
+          >
+            <MessageSquare className="h-4 w-4 text-indigo-400" />
+            <span>Ana Sayfa & Arkadaşlar</span>
+          </button>
 
           <div className="pt-4 px-2">
-            <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2">
-              Sohbetler
+            <div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2">
+              <span>Direkt Mesajlar</span>
+              {threads.length > 0 && <span>({threads.length})</span>}
             </div>
-            <p className="text-[11px] text-slate-400 leading-relaxed">
-              Özel mesajlaşmak için bir gruba girip üye listesinden arkadaşlarınızı seçebilirsiniz.
-            </p>
+
+            {threads.length === 0 ? (
+              <p className="text-[11px] text-slate-500 leading-relaxed px-1">
+                Henüz aktif direkt mesajınız yok. Bir gruptan arkadaş seçip mesaj gönderebilirsiniz.
+              </p>
+            ) : (
+              <div className="space-y-0.5">
+                {threads.map((thread) => {
+                  const isActive = activePeer?.peerId === thread.peerId;
+                  return (
+                    <button
+                      key={thread.peerId}
+                      onClick={() =>
+                        setActivePeer({
+                          peerId: thread.peerId,
+                          peerName: thread.peerName,
+                          peerColor: thread.peerColor,
+                        })
+                      }
+                      className={`group flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-left transition ${
+                        isActive
+                          ? 'bg-slate-800 text-white font-medium'
+                          : 'text-slate-400 hover:bg-slate-800/40 hover:text-slate-200'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div
+                          className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full text-[11px] font-bold text-white shadow"
+                          style={{ backgroundColor: thread.peerColor || '#6366f1' }}
+                        >
+                          {thread.peerName.charAt(0).toUpperCase()}
+                        </div>
+                        <span className="truncate text-xs">{thread.peerName}</span>
+                      </div>
+
+                      {thread.unreadCount > 0 && (
+                        <span className="flex-shrink-0 rounded-full bg-indigo-600 px-1.5 py-0.2 text-[10px] font-bold text-white">
+                          {thread.unreadCount}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
 

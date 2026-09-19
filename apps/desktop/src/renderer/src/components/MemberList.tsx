@@ -1,8 +1,10 @@
 import React from 'react';
-import { Crown, Shield } from 'lucide-react';
+import { Crown, Shield, MessageSquare } from 'lucide-react';
 import { useChatStore } from '../stores/useChatStore';
 import { useAuthStore } from '../stores/useAuthStore';
 import { useVoiceStore } from '../stores/useVoiceStore';
+import { useDmStore } from '../stores/useDmStore';
+import { wsService } from '../services/websocket';
 
 export const MemberList: React.FC = () => {
   const { members, activeGroupId } = useChatStore();
@@ -71,6 +73,26 @@ export const MemberList: React.FC = () => {
             )}
           </div>
         </div>
+
+        {!isLocal && (
+          <button
+            onClick={() => {
+              useDmStore.getState().setActivePeer({
+                peerId: member.userId,
+                peerName: member.displayName,
+                peerColor: avatarColor,
+              });
+              useChatStore.getState().setActiveGroup(null);
+              useChatStore.getState().setActiveChannel(null);
+              useChatStore.setState({ activeGroupMeta: null });
+              wsService.disconnect();
+            }}
+            className="rounded p-1 text-slate-500 hover:text-indigo-400 hover:bg-slate-800 transition"
+            title="Mesaj Gönder"
+          >
+            <MessageSquare className="h-3.5 w-3.5" />
+          </button>
+        )}
       </div>
     );
   };

@@ -12,6 +12,7 @@ import { CreateOrJoinModal } from './components/CreateOrJoinModal';
 import { webrtcService } from './services/webrtc';
 
 import { wsService } from './services/websocket';
+import { dmWebSocketService } from './services/dmWebsocket';
 
 export const App: React.FC = () => {
   const { identity, isLoaded, loadIdentity } = useAuthStore();
@@ -22,6 +23,13 @@ export const App: React.FC = () => {
     loadIdentity();
     void webrtcService.init();
   }, [loadIdentity]);
+
+  // Connect DM WebSocket as soon as identity is available
+  useEffect(() => {
+    if (identity) {
+      dmWebSocketService.connect();
+    }
+  }, [identity]);
 
   // Load and sync user's groups on startup
   useEffect(() => {
