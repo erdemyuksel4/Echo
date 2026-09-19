@@ -512,7 +512,19 @@ export class GroupDO extends DurableObject<Env> {
       `SELECT code FROM invites WHERE revoked = 0 ORDER BY created_at ASC LIMIT 1`,
     );
     const inviteRows = [...inviteCursor] as { code: string }[];
-    const inviteCode = inviteRows[0]?.code;
+    let inviteCode = inviteRows[0]?.code;
+
+    if (!inviteCode && groupMeta.id && groupMeta.id !== 'unknown') {
+      inviteCode = `ECHO-${groupMeta.id.toLowerCase()}-${ulid().substring(0, 6)}`;
+      const secretHash = bytesToHex(sha256(new TextEncoder().encode(inviteCode)));
+      this.sql.exec(
+        `INSERT INTO invites (code, secret_hash, created_by, created_at, uses) VALUES (?, ?, ?, ?, 0)`,
+        inviteCode,
+        secretHash,
+        groupMeta.ownerId || 'system',
+        Date.now(),
+      );
+    }
 
     return {
       group: groupMeta,

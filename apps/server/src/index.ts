@@ -330,6 +330,23 @@ app.post('/api/groups/:id/leave', async (c) => {
   return c.json({ success: true, groupId });
 });
 
+// Get active invite code for group
+app.get('/api/groups/:id/invite', async (c) => {
+  const groupId = c.req.param('id');
+  if (!groupId) {
+    return c.json({ error: 'Grup ID zorunludur' }, 400);
+  }
+
+  const groupDoId = c.env.GROUP_DO.idFromName(groupId.toLowerCase());
+  const groupStub = c.env.GROUP_DO.get(groupDoId);
+  const snapRes = await groupStub.fetch('http://do/internal/snapshot');
+  if (!snapRes.ok) {
+    return c.json({ error: 'Grup bulunamadı' }, 404);
+  }
+  const snapshot = (await snapRes.json()) as { inviteCode?: string };
+  return c.json({ inviteCode: snapshot.inviteCode ?? `ECHO-${groupId.toLowerCase()}` });
+});
+
 // User memberships
 app.get('/api/users/:userId/groups', async (c) => {
   const userId = c.req.param('userId');

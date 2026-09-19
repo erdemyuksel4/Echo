@@ -1,7 +1,7 @@
 import { existsSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import { app, shell, BrowserWindow, ipcMain, Tray, Menu, nativeImage, Notification, session } from 'electron';
+import { app, shell, BrowserWindow, ipcMain, Tray, Menu, nativeImage, Notification, session, clipboard } from 'electron';
 import { electronApp, optimizer, is } from '@electron-toolkit/utils';
 import { APP_NAME, PROTOCOL_VERSION } from '@echo/shared';
 import { IdentityManager } from './identity';
@@ -237,6 +237,11 @@ if (!gotTheLock) {
       if (app.setBadgeCount) {
         app.setBadgeCount(count);
       }
+      return true;
+    });
+
+    ipcMain.handle('desktop:copyToClipboard', (_, { text }: { text: string }) => {
+      clipboard.writeText(text);
       return true;
     });
 

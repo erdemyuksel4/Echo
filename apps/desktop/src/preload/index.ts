@@ -26,6 +26,7 @@ export interface EchoApi {
   signPayload: (payload: string) => Promise<SignedAuthResult | null>;
   showNotification: (options: { title: string; body: string; silent?: boolean }) => Promise<boolean>;
   setBadgeCount: (count: number) => Promise<boolean>;
+  copyToClipboard: (text: string) => Promise<boolean>;
 }
 
 const echoApi: EchoApi = {
@@ -49,6 +50,9 @@ const echoApi: EchoApi = {
   },
   setBadgeCount: (count: number): Promise<boolean> => {
     return ipcRenderer.invoke('desktop:setBadge', { count });
+  },
+  copyToClipboard: (text: string): Promise<boolean> => {
+    return ipcRenderer.invoke('desktop:copyToClipboard', { text });
   },
 };
 

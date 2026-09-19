@@ -106,9 +106,61 @@ export const ChannelList: React.FC = () => {
     );
   }
 
-  const handleCopyInvite = () => {
-    if (defaultInviteCode) {
-      navigator.clipboard.writeText(defaultInviteCode);
+  const handleCopyInvite = async () => {
+    let code = defaultInviteCode;
+    if (!code && activeGroupMeta?.id) {
+      try {
+        const res = await fetch(`http://localhost:8787/api/groups/${activeGroupMeta.id}/invite`);
+        if (res.ok) {
+          const data = (await res.json()) as { inviteCode?: string };
+          if (data.inviteCode) {
+            code = data.inviteCode;
+            useChatStore.getState().setDefaultInviteCode(code);
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    if (!code && activeGroupMeta?.id) {
+      code = `ECHO-${activeGroupMeta.id.toLowerCase()}`;
+    }
+
+    if (!code) return;
+
+    let success = false;
+    if (window.echoApi?.copyToClipboard) {
+      try {
+        success = await window.echoApi.copyToClipboard(code);
+      } catch (err) {
+        console.warn('Native clipboard copy failed:', err);
+      }
+    }
+
+    if (!success) {
+      try {
+        await navigator.clipboard.writeText(code);
+        success = true;
+      } catch (err) {
+        console.warn('navigator.clipboard failed:', err);
+        const textArea = document.createElement('textarea');
+        textArea.value = code;
+        textArea.style.position = 'fixed';
+        textArea.style.opacity = '0';
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        try {
+          success = document.execCommand('copy');
+        } catch (_e) {
+          void _e;
+        }
+        document.body.removeChild(textArea);
+      }
+    }
+
+    if (success) {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     }
@@ -127,62 +179,78 @@ export const ChannelList: React.FC = () => {
 
   return (
     <div className="flex h-full w-60 flex-col bg-slate-900 border-r border-slate-800/60 select-none">
-      {/* Group Header with Dropdown */}
+      {/* Group Header */}
       <div className="relative border-b border-slate-800/80">
-        <button
-          type="button"
-          onClick={() => setShowGroupMenu((prev) => !prev)}
-          className="flex h-14 w-full items-center justify-between px-4 text-left transition hover:bg-slate-800/40"
-        >
-          <h1 className="truncate font-bold text-white text-sm" title={activeGroupMeta.name}>
-            {activeGroupMeta.name}
-          </h1>
-          <div className="flex items-center gap-1.5">
-            {defaultInviteCode && (
-              <span
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleCopyInvite();
-                }}
-                className="flex items-center gap-1 rounded-md bg-slate-800 px-2 py-1 text-[11px] font-medium text-slate-300 transition hover:bg-slate-700 hover:text-white cursor-pointer"
-                title={`Davet Kodunu Kopyala (${defaultInviteCode})`}
-              >
-                {copied ? (
-                  <Check className="h-3.5 w-3.5 text-emerald-400" />
-                ) : (
-                  <Share2 className="h-3.5 w-3.5 text-indigo-400" />
-                )}
-                <span>{copied ? 'Kopyalandı' : 'Davet'}</span>
-              </span>
-            )}
+        <div className="flex h-14 w-full items-center justify-between px-3">
+          {/* Group dropdown trigger */}
+          <button
+            type="button"
+            onClick={() => setShowGroupMenu((prev) => !prev)}
+            className="flex items-center gap-1.5 min-w-0 flex-1 px-1.5 py-1.5 rounded-md hover:bg-slate-800/50 transition text-left"
+          >
+            <h1 className="truncate font-bold text-white text-sm" title={activeGroupMeta.name}>
+              {activeGroupMeta.name}
+            </h1>
             <ChevronDown
-              className={`h-4 w-4 text-slate-400 transition-transform duration-150 ${
+              className={`h-4 w-4 shrink-0 text-slate-400 transition-transform duration-150 ${
                 showGroupMenu ? 'rotate-180 text-white' : ''
               }`}
             />
-          </div>
-        </button>
+          </button>
+
+          {/* Dedicated Invite Button */}
+          <button
+            type="button"
+            onClick={handleCopyInvite}
+            className={`flex items-center gap-1 shrink-0 rounded-md px-2 py-1 text-[11px] font-medium transition ${
+              copied
+                ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                : 'bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white border border-slate-700/60'
+            }`}
+            title={
+              defaultInviteCode
+                ? `Davet Kodunu Kopyala (${defaultInviteCode})`
+                : 'Davet Kodunu Kopyala'
+            }
+          >
+            {copied ? (
+              <Check className="h-3.5 w-3.5 text-emerald-400" />
+            ) : (
+              <Share2 className="h-3.5 w-3.5 text-indigo-400" />
+            )}
+            <span>{copied ? 'Kopyalandı!' : 'Davet'}</span>
+          </button>
+        </div>
 
         {/* Group Dropdown Menu */}
         {showGroupMenu && (
-          <div className="absolute left-2 right-2 top-14 z-40 rounded-lg bg-slate-950 p-1.5 border border-slate-800 shadow-2xl space-y-0.5">
-            {defaultInviteCode && (
-              <button
-                type="button"
-                onClick={() => {
-                  setShowGroupMenu(false);
-                  handleCopyInvite();
-                }}
-                className="flex w-full items-center justify-between rounded px-2.5 py-1.5 text-xs text-indigo-300 hover:bg-indigo-600/20 transition"
-              >
-                <span>{copied ? 'Kopyalandı!' : 'Davet Kodunu Kopyala'}</span>
-                {copied ? (
-                  <Check className="h-3.5 w-3.5 text-emerald-400" />
-                ) : (
-                  <Share2 className="h-3.5 w-3.5" />
+          <div className="absolute left-2 right-2 top-14 z-40 rounded-lg bg-slate-950 p-2 border border-slate-800 shadow-2xl space-y-1.5">
+            {/* Invite code visual box */}
+            <div className="rounded-md bg-slate-900/90 p-2 border border-slate-800/80">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-[10px] uppercase font-semibold text-slate-400 tracking-wider">
+                  Grup Davet Kodu
+                </span>
+                {copied && (
+                  <span className="text-[10px] text-emerald-400 font-medium">Kopyalandı!</span>
                 )}
-              </button>
-            )}
+              </div>
+              <div className="flex items-center gap-1.5">
+                <div className="flex-1 truncate rounded bg-slate-950 px-2 py-1 font-mono text-xs text-indigo-300 border border-slate-800 select-all">
+                  {defaultInviteCode || `ECHO-${activeGroupMeta.id.toLowerCase()}`}
+                </div>
+                <button
+                  type="button"
+                  onClick={handleCopyInvite}
+                  className="shrink-0 rounded bg-indigo-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-indigo-500 transition shadow"
+                >
+                  {copied ? <Check className="h-3.5 w-3.5" /> : 'Kopyala'}
+                </button>
+              </div>
+            </div>
+
+            <div className="h-px bg-slate-800/80 my-1" />
+
             <button
               type="button"
               onClick={() => {
