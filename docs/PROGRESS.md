@@ -53,6 +53,10 @@ Bu dosya her faz ve görev sonunda güncellenir.
 - [x] **Masaüstü Arayüzü (`apps/desktop`):**
   - Onboarding profil kurulum modalı.
   - Discord yerleşimi: Sol grup barı, kanal listesi, sohbet alanı, üye listesi.
+  - Direkt Mesajlar / Ana Sayfa görünümü: Sol menüden ana sayfaya geçildiğinde grup sohbeti yerine özel DM/Arkadaş merkezi görüntüleme.
+  - Grup oluşturma ve katılma modalı: Başarılı işlem sonrası otomatik kapanma ve temizleme.
+  - Yazıyor göstergesi: Mesaj gönderildiğinde anlık sıfırlanma ve zıplayan 3 nokta animasyonu.
+  - Görsel İyileştirmeler: Discord tarzı açılış yükleme ekranı, yumuşak belirsiz (indeterminate) progress bar ve canlı sinyal göstergesi.
   - Otomatik yeniden bağlanma (üstel geri çekilme) ve bağlantı durumu göstergesi.
 - [x] **Test Doğrulamaları:**
   - `pnpm typecheck`: Sıfır hata ile geçti.

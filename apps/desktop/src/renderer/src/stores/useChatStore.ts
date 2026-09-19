@@ -75,10 +75,16 @@ export const useChatStore = create<ChatState>((set) => ({
     set((state) => {
       const list = state.messages[channelId] ?? [];
       if (list.some((m) => m.id === message.id)) return state;
+      const currentTyping = state.typingUsers[channelId] ?? [];
+      const updatedTyping = currentTyping.filter((name) => name !== message.authorName);
       return {
         messages: {
           ...state.messages,
           [channelId]: [...list, message],
+        },
+        typingUsers: {
+          ...state.typingUsers,
+          [channelId]: updatedTyping,
         },
       };
     }),

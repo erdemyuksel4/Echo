@@ -53,6 +53,9 @@ export const CreateOrJoinModal: React.FC<Props> = ({ isOpen, onClose }) => {
       setActiveGroup(data.groupId);
       setDefaultInviteCode(data.inviteCode);
       wsService.connect(data.groupId);
+      setGroupName('');
+      setError(null);
+      onClose();
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Bir hata oluştu';
       if (msg.toLowerCase().includes('fetch') || msg.includes('Failed to fetch')) {
@@ -100,6 +103,9 @@ export const CreateOrJoinModal: React.FC<Props> = ({ isOpen, onClose }) => {
       addGroup({ id: grp.id, name: grp.name });
       setActiveGroup(grp.id);
       wsService.connect(grp.id);
+      setInviteCode('');
+      setError(null);
+      onClose();
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Bir hata oluştu';
       if (msg.toLowerCase().includes('fetch') || msg.includes('Failed to fetch')) {

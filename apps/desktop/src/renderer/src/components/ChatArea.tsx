@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Hash, Send } from 'lucide-react';
 import { useChatStore } from '../stores/useChatStore';
+import { useAuthStore } from '../stores/useAuthStore';
 import { wsService } from '../services/websocket';
 
 export const ChatArea: React.FC = () => {
+  const { identity } = useAuthStore();
   const { channels, activeChannelId, messages, typingUsers, connectionStatus, members } =
     useChatStore();
 
@@ -23,8 +25,22 @@ export const ChatArea: React.FC = () => {
     if (e) e.preventDefault();
     if (!activeChannelId || !inputContent.trim()) return;
 
-    wsService.sendMessage(activeChannelId, inputContent);
+    const content = inputContent;
     setInputContent('');
+    wsService.sendMessage(activeChannelId, content);
+
+    // Immediately clear current user's name from typing state
+    if (identity?.displayName) {
+      useChatStore.setState((state) => {
+        const current = state.typingUsers[activeChannelId] ?? [];
+        return {
+          typingUsers: {
+            ...state.typingUsers,
+            [activeChannelId]: current.filter((n) => n !== identity.displayName),
+          },
+        };
+      });
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -58,7 +74,14 @@ export const ChatArea: React.FC = () => {
   }
 
   return (
-    <div className="flex flex-1 flex-col h-full bg-slate-900">
+    <div className="flex flex-1 flex-col h-full bg-slate-900 relative">
+      {/* Top Indeterminate Progress Line when connecting */}
+      {connectionStatus === 'connecting' && (
+        <div className="h-0.5 w-full bg-slate-800/80 overflow-hidden absolute top-0 left-0 right-0 z-10">
+          <div className="h-full w-1/3 bg-gradient-to-r from-indigo-500 via-purple-500 to-indigo-400 rounded-full animate-indeterminate" />
+        </div>
+      )}
+
       {/* Top Header */}
       <div className="flex h-14 items-center justify-between border-b border-slate-800/80 px-4 shadow-sm select-none">
         <div className="flex items-center gap-2">
@@ -66,25 +89,34 @@ export const ChatArea: React.FC = () => {
           <span className="font-bold text-white text-sm">{activeChannel.name}</span>
         </div>
 
-        {/* Connection Indicator */}
-        <div className="flex items-center gap-2 text-xs font-medium">
+        {/* Polished Connection Status Indicator */}
+        <div className="flex items-center gap-2">
           {connectionStatus === 'connected' && (
-            <span className="flex items-center gap-1.5 text-emerald-400">
-              <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-              Bağlı
-            </span>
+            <div className="flex items-center gap-2 rounded-full bg-emerald-950/60 border border-emerald-500/30 px-2.5 py-1 text-xs text-emerald-400 shadow-sm">
+              <span className="relative flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+              </span>
+              <span className="font-semibold text-[11px] tracking-wide">Bağlı</span>
+              {/* Signal Bars */}
+              <div className="flex items-end gap-0.5 ml-0.5 h-3" title="Sinyal Gücü: Mükemmel">
+                <span className="w-0.5 h-1.5 bg-emerald-400 rounded-full" />
+                <span className="w-0.5 h-2.5 bg-emerald-400 rounded-full" />
+                <span className="w-0.5 h-3.5 bg-emerald-400 rounded-full" />
+              </div>
+            </div>
           )}
           {connectionStatus === 'connecting' && (
-            <span className="flex items-center gap-1.5 text-amber-400">
-              <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
-              Bağlanıyor...
-            </span>
+            <div className="flex items-center gap-2 rounded-full bg-amber-950/60 border border-amber-500/30 px-2.5 py-1 text-xs text-amber-400 shadow-sm">
+              <span className="h-2 w-2 rounded-full bg-amber-400 animate-ping" />
+              <span className="font-semibold text-[11px] tracking-wide">Bağlanıyor...</span>
+            </div>
           )}
           {connectionStatus === 'disconnected' && (
-            <span className="flex items-center gap-1.5 text-rose-400">
+            <div className="flex items-center gap-2 rounded-full bg-rose-950/60 border border-rose-500/30 px-2.5 py-1 text-xs text-rose-400 shadow-sm">
               <span className="h-2 w-2 rounded-full bg-rose-500" />
-              Çevrimdışı
-            </span>
+              <span className="font-semibold text-[11px] tracking-wide">Çevrimdışı</span>
+            </div>
           )}
         </div>
       </div>
@@ -133,11 +165,18 @@ export const ChatArea: React.FC = () => {
       </div>
 
       {/* Typing Indicator */}
-      <div className="h-5 px-4 text-[11px] text-slate-400 italic">
+      <div className="h-5 px-4 text-[11px] text-slate-400 italic flex items-center">
         {currentTyping.length > 0 && (
-          <span>
-            {currentTyping.join(', ')} {currentTyping.length === 1 ? 'yazıyor...' : 'yazıyorlar...'}
-          </span>
+          <div className="flex items-center gap-1.5 text-indigo-400/90 not-italic">
+            <span className="flex gap-0.5 items-center">
+              <span className="h-1.5 w-1.5 rounded-full bg-indigo-400 animate-bounce [animation-delay:-0.3s]" />
+              <span className="h-1.5 w-1.5 rounded-full bg-indigo-400 animate-bounce [animation-delay:-0.15s]" />
+              <span className="h-1.5 w-1.5 rounded-full bg-indigo-400 animate-bounce" />
+            </span>
+            <span className="text-[11px] font-medium text-slate-300">
+              {currentTyping.join(', ')} {currentTyping.length === 1 ? 'yazıyor...' : 'yazıyorlar...'}
+            </span>
+          </div>
         )}
       </div>
 

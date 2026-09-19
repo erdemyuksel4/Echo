@@ -15,11 +15,44 @@ export const ChannelList: React.FC = () => {
 
   if (!activeGroupMeta) {
     return (
-      <div className="flex h-full w-60 flex-col bg-slate-900 border-r border-slate-800/60 p-4">
-        <h2 className="text-sm font-bold text-white mb-2">Echo</h2>
-        <p className="text-xs text-slate-400">
-          Bir gruba katılın veya soldaki (+) simgesiyle yeni bir grup oluşturun.
-        </p>
+      <div className="flex h-full w-60 flex-col bg-slate-900 border-r border-slate-800/60 select-none">
+        {/* DM Header */}
+        <div className="flex h-14 items-center border-b border-slate-800/80 px-4 shadow-sm">
+          <h1 className="font-bold text-white text-sm">Direkt Mesajlar</h1>
+        </div>
+
+        {/* DM Navigation Items */}
+        <div className="flex-1 overflow-y-auto px-2 py-3 space-y-2">
+          <div className="rounded-lg bg-slate-800/60 px-3 py-2 text-xs font-medium text-white flex items-center gap-2">
+            <span className="h-2 w-2 rounded-full bg-emerald-400" />
+            <span>Arkadaşlar (Çevrimiçi)</span>
+          </div>
+
+          <div className="pt-4 px-2">
+            <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2">
+              Sohbetler
+            </div>
+            <p className="text-[11px] text-slate-400 leading-relaxed">
+              Özel mesajlaşmak için bir gruba girip üye listesinden arkadaşlarınızı seçebilirsiniz.
+            </p>
+          </div>
+        </div>
+
+        {/* User Status Bar */}
+        <div className="flex h-14 items-center bg-slate-950/80 px-3 border-t border-slate-800/60">
+          <div
+            className="flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold text-white shadow"
+            style={{ backgroundColor: identity?.avatarColor ?? '#4f46e5' }}
+          >
+            {identity?.displayName.charAt(0).toUpperCase()}
+          </div>
+          <div className="ml-2.5 flex-1 min-w-0">
+            <div className="truncate text-xs font-semibold text-white">
+              {identity?.displayName}
+            </div>
+            <div className="text-[10px] text-emerald-400">Çevrimiçi</div>
+          </div>
+        </div>
       </div>
     );
   }
