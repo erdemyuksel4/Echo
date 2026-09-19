@@ -9,6 +9,15 @@ import { IdentityManager } from './identity';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
+// Custom profile support for multi-user simulation (e.g. --profile=user2 or ECHO_PROFILE=user2)
+const profileArg = process.argv.find((a) => a.startsWith('--profile='));
+const profileName = process.env.ECHO_PROFILE || (profileArg ? profileArg.split('=')[1] : undefined);
+
+if (profileName) {
+  const customUserData = join(app.getPath('appData'), `Echo_${profileName}`);
+  app.setPath('userData', customUserData);
+}
+
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let isQuitting = false;
@@ -39,7 +48,7 @@ function createTray(): void {
   );
 
   tray = new Tray(icon);
-  tray.setToolTip(APP_NAME);
+  tray.setToolTip(profileName ? `${APP_NAME} (${profileName})` : APP_NAME);
 
   const contextMenu = Menu.buildFromTemplate([
     {
@@ -74,13 +83,15 @@ function createTray(): void {
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
-    width: 1000,
-    height: 700,
-    minWidth: 800,
-    minHeight: 600,
+    width: 900,
+    height: 680,
+    minWidth: 700,
+    minHeight: 500,
+    x: profileName === 'user2' ? 940 : (profileName ? 980 : 30),
+    y: 50,
     show: false,
     autoHideMenuBar: true,
-    title: APP_NAME,
+    title: profileName ? `${APP_NAME} (${profileName})` : APP_NAME,
     webPreferences: {
       preload: getPreloadPath(),
       sandbox: true,
@@ -126,15 +137,6 @@ function createWindow(): void {
   } else {
     void mainWindow.loadFile(join(__dirname, '../renderer/index.html'));
   }
-}
-
-// Custom profile support for multi-user simulation (e.g. ECHO_PROFILE=user2)
-const profileArg = process.argv.find((a) => a.startsWith('--profile='));
-const profileName = process.env.ECHO_PROFILE || (profileArg ? profileArg.split('=')[1] : undefined);
-
-if (profileName) {
-  const customUserData = join(app.getPath('appData'), `Echo_${profileName}`);
-  app.setPath('userData', customUserData);
 }
 
 // Single Instance Lock (disabled or isolated when testing with custom profiles)
