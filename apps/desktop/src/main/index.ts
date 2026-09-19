@@ -1,3 +1,4 @@
+import { existsSync } from 'fs';
 import { app, shell, BrowserWindow, ipcMain } from 'electron';
 import { join } from 'path';
 import { electronApp, optimizer, is } from '@electron-toolkit/utils';
@@ -5,6 +6,12 @@ import { APP_NAME, PROTOCOL_VERSION } from '@echo/shared';
 import { IdentityManager } from './identity';
 
 let mainWindow: BrowserWindow | null = null;
+
+function getPreloadPath(): string {
+  const mjsPath = join(__dirname, '../preload/index.mjs');
+  if (existsSync(mjsPath)) return mjsPath;
+  return join(__dirname, '../preload/index.js');
+}
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
@@ -16,7 +23,7 @@ function createWindow(): void {
     autoHideMenuBar: true,
     title: APP_NAME,
     webPreferences: {
-      preload: join(__dirname, '../preload/index.js'),
+      preload: getPreloadPath(),
       sandbox: true,
       contextIsolation: true,
       nodeIntegration: false,
