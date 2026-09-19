@@ -160,6 +160,24 @@ export class GroupDO extends DurableObject<Env> {
       // Column already exists
     }
 
+    // Ensure at least one voice channel exists in existing groups
+    try {
+      const voiceCursor = this.sql.exec(`SELECT id FROM channels WHERE type = 'voice' LIMIT 1`);
+      if ([...voiceCursor].length === 0) {
+        const metaCursor = this.sql.exec(`SELECT id FROM group_meta LIMIT 1`);
+        if ([...metaCursor].length > 0) {
+          const voiceChanId = ulid();
+          this.sql.exec(
+            `INSERT INTO channels (id, name, type, position, created_at) VALUES (?, 'Genel Ses', 'voice', 1, ?)`,
+            voiceChanId,
+            Date.now(),
+          );
+        }
+      }
+    } catch {
+      // Ignore
+    }
+
     // Schedule 24-hour cleanup alarm if not scheduled
     this.ctx.storage.getAlarm().then((scheduled) => {
       if (!scheduled) {

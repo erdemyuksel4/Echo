@@ -34,6 +34,10 @@ class WebRTCVoiceService {
   private lastSpeakingState = false;
   private speakingSilenceTimer: ReturnType<typeof setTimeout> | null = null;
 
+  private selectedInputDeviceId: string | null = null;
+  private selectedOutputDeviceId: string | null = null;
+  private outputVolume = 1.0;
+
   async init(): Promise<void> {
     try {
       const res = await fetch('http://localhost:8787/api/turn');
@@ -61,13 +65,18 @@ class WebRTCVoiceService {
 
     try {
       // 1. Get microphone stream with Echo cancellation & Noise suppression
+      const audioConstraints: MediaTrackConstraints = {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+        channelCount: 1, // Opus mono
+      };
+      if (this.selectedInputDeviceId) {
+        audioConstraints.deviceId = { exact: this.selectedInputDeviceId };
+      }
+
       this.localStream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-          channelCount: 1, // Opus mono
-        },
+        audio: audioConstraints,
         video: false,
       });
 
@@ -284,6 +293,8 @@ class WebRTCVoiceService {
     peerId: string,
     candidateData: { candidate: string; sdpMid?: string | null; sdpMLineIndex?: number | null },
   ): Promise<void> {
+    if (!candidateData.candidate || candidateData.candidate.trim().length === 0) return;
+
     const pc = this.peers.get(peerId);
 
     const candidateInit: RTCIceCandidateInit = {
@@ -324,9 +335,9 @@ class WebRTCVoiceService {
       });
     }
 
-    // ICE Candidate generation
+    // ICE Candidate generation (only non-empty candidates)
     pc.onicecandidate = (event) => {
-      if (event.candidate && this.currentChannelId) {
+      if (event.candidate && event.candidate.candidate && this.currentChannelId) {
         wsService.sendVoiceSignal(this.currentChannelId, peerId, {
           type: 'candidate',
           candidate: event.candidate.candidate,
@@ -342,9 +353,12 @@ class WebRTCVoiceService {
       if (!audio) {
         audio = new Audio();
         audio.autoplay = true;
+        audio.style.display = 'none';
+        document.body.appendChild(audio);
         this.peerAudioElements.set(peerId, audio);
       }
       audio.srcObject = event.streams[0] ?? new MediaStream([event.track]);
+      audio.volume = this.outputVolume;
 
       // Apply deafen state
       const isDeafened = useVoiceStore.getState().isDeafened;
@@ -574,6 +588,124 @@ class WebRTCVoiceService {
     if (rttCount > 0) {
       useVoiceStore.getState().setPingMs(Math.round(totalRtt / rttCount));
     }
+  }
+
+  async getAudioDevices(): Promise<{ inputs: MediaDeviceInfo[]; outputs: MediaDeviceInfo[] }> {
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      return {
+        inputs: devices.filter((d) => d.kind === 'audioinput'),
+        outputs: devices.filter((d) => d.kind === 'audiooutput'),
+      };
+    } catch {
+      return { inputs: [], outputs: [] };
+    }
+  }
+
+  async setInputDevice(deviceId: string): Promise<void> {
+    this.selectedInputDeviceId = deviceId;
+    if (this.localStream && this.currentChannelId) {
+      try {
+        const newStream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            deviceId: { exact: deviceId },
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+            channelCount: 1,
+          },
+          video: false,
+        });
+
+        const newTrack = newStream.getAudioTracks()[0];
+        if (newTrack) {
+          for (const pc of this.peers.values()) {
+            const sender = pc.getSenders().find((s) => s.track?.kind === 'audio');
+            if (sender) {
+              await sender.replaceTrack(newTrack);
+            }
+          }
+          this.localStream.getAudioTracks().forEach((t) => t.stop());
+          this.localStream = newStream;
+          this.setupVAD(newStream);
+        }
+      } catch (err) {
+        console.warn('Failed to switch input device:', err);
+      }
+    }
+  }
+
+  setOutputVolume(volume: number): void {
+    this.outputVolume = Math.max(0, Math.min(1, volume));
+    this.peerAudioElements.forEach((audio) => {
+      audio.volume = this.outputVolume;
+    });
+  }
+
+  getOutputVolume(): number {
+    return this.outputVolume;
+  }
+
+  getInputDeviceId(): string | null {
+    return this.selectedInputDeviceId;
+  }
+
+  getOutputDeviceId(): string | null {
+    return this.selectedOutputDeviceId;
+  }
+
+  testMicrophone(onLevel: (rms: number) => void): () => void {
+    let active = true;
+    let testAudioContext: AudioContext | null = null;
+    let stream: MediaStream | null = null;
+    let interval: ReturnType<typeof setInterval> | null = null;
+
+    void (async () => {
+      try {
+        const constraints: MediaStreamConstraints = {
+          audio: this.selectedInputDeviceId
+            ? { deviceId: { exact: this.selectedInputDeviceId } }
+            : true,
+          video: false,
+        };
+        stream = await navigator.mediaDevices.getUserMedia(constraints);
+        if (!active) {
+          stream.getTracks().forEach((t) => t.stop());
+          return;
+        }
+
+        const AudioCtx =
+          window.AudioContext ||
+          (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+        testAudioContext = new AudioCtx();
+        const source = testAudioContext.createMediaStreamSource(stream);
+        const analyser = testAudioContext.createAnalyser();
+        analyser.fftSize = 256;
+        source.connect(analyser);
+
+        const buffer = new Float32Array(analyser.fftSize);
+        interval = setInterval(() => {
+          if (!active) return;
+          analyser.getFloatTimeDomainData(buffer);
+          let sum = 0;
+          for (let i = 0; i < buffer.length; i++) {
+            sum += buffer[i]! * buffer[i]!;
+          }
+          const rms = Math.sqrt(sum / buffer.length);
+          onLevel(Math.min(1, rms * 5));
+        }, 50);
+      } catch (err) {
+        console.warn('Mic test error:', err);
+      }
+    })();
+
+    return () => {
+      active = false;
+      if (interval) clearInterval(interval);
+      if (testAudioContext) void testAudioContext.close();
+      if (stream) stream.getTracks().forEach((t) => t.stop());
+      onLevel(0);
+    };
   }
 }
 

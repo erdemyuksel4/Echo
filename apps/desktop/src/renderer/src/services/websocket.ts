@@ -224,13 +224,33 @@ class EchoWebSocketService {
           displayName: string;
           currentParticipants: VoiceParticipant[];
         };
-        useVoiceStore.getState().addChannelParticipant(data.channelId, {
-          userId: data.userId,
-          displayName: data.displayName,
-          muted: false,
-          deafened: false,
-          speaking: false,
-        });
+        const myUserId = useAuthStore.getState().identity?.userId;
+        const voiceStore = useVoiceStore.getState();
+
+        if (data.userId === myUserId) {
+          // When current user joins, update full participant list including existing ones and self
+          const allParticipants: VoiceParticipant[] = [
+            ...data.currentParticipants.filter((p) => p.userId !== data.userId),
+            {
+              userId: data.userId,
+              displayName: data.displayName,
+              muted: voiceStore.isMuted,
+              deafened: voiceStore.isDeafened,
+              speaking: false,
+            },
+          ];
+          voiceStore.setChannelParticipants(data.channelId, allParticipants);
+        } else {
+          // Another user joined: add them to participants list
+          voiceStore.addChannelParticipant(data.channelId, {
+            userId: data.userId,
+            displayName: data.displayName,
+            muted: false,
+            deafened: false,
+            speaking: false,
+          });
+        }
+
         webrtcService.handleUserJoined(
           data.channelId,
           data.userId,
