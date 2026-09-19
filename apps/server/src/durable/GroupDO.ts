@@ -334,19 +334,21 @@ export class GroupDO extends DurableObject<Env> {
       return;
     }
 
-    // 2. Rate limiting check (5 msg per sec token bucket)
-    const now = Date.now();
-    if (now - session.lastMessageTime < 1000) {
-      session.messageCountWindow++;
-      if (session.messageCountWindow > 5) {
-        this.sendRateLimited(ws, 1000);
-        return;
+    // 2. Rate limiting check strictly for chat messages (5 msg/sec token bucket)
+    if (envelope.t === WsClientEvents.MSG_SEND) {
+      const now = Date.now();
+      if (now - session.lastMessageTime < 1000) {
+        session.messageCountWindow++;
+        if (session.messageCountWindow > 5) {
+          this.sendRateLimited(ws, 1000);
+          return;
+        }
+      } else {
+        session.lastMessageTime = now;
+        session.messageCountWindow = 1;
       }
-    } else {
-      session.lastMessageTime = now;
-      session.messageCountWindow = 1;
+      ws.serializeAttachment(session);
     }
-    ws.serializeAttachment(session);
 
     // 3. Event routing
     switch (envelope.t) {

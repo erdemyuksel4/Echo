@@ -175,7 +175,12 @@ class EchoWebSocketService {
     });
   }
 
+  private lastTypingSentTime = 0;
+
   sendTyping(channelId: string): void {
+    const now = Date.now();
+    if (now - this.lastTypingSentTime < 3000) return; // En fazla 3 saniyede bir
+    this.lastTypingSentTime = now;
     this.send(WsClientEvents.TYPING, { channelId });
   }
 
