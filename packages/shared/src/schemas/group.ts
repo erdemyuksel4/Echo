@@ -58,3 +58,19 @@ export const InviteDataSchema = z.object({
 });
 
 export type InviteData = z.infer<typeof InviteDataSchema>;
+
+export const DeleteGroupRequestSchema = z.object({
+  sig: z.string(),
+  pubkey: z.string(),
+  ts: z.number().int().positive(),
+});
+
+export type DeleteGroupRequest = z.infer<typeof DeleteGroupRequestSchema>;
+
+export const LeaveGroupRequestSchema = z.object({
+  sig: z.string(),
+  pubkey: z.string(),
+  ts: z.number().int().positive(),
+});
+
+export type LeaveGroupRequest = z.infer<typeof LeaveGroupRequestSchema>;

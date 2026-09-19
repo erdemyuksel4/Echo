@@ -4,6 +4,7 @@ import type { Channel, GroupMember, Message, GroupMeta } from '@echo/shared';
 export interface GroupItem {
   id: string;
   name: string;
+  ownerId?: string;
 }
 
 const loadInitialGroups = (): GroupItem[] => {
@@ -62,7 +63,9 @@ interface ChatState {
   addChannel: (channel: Channel) => void;
   removeChannel: (channelId: string) => void;
   updateChannel: (channelId: string, name: string) => void;
+  removeGroup: (groupId: string) => void;
   addMember: (member: GroupMember) => void;
+  removeMember: (userId: string) => void;
   setMemberPresence: (userId: string, status: 'online' | 'idle' | 'offline') => void;
   setTypingUser: (channelId: string, displayName: string) => void;
   setDefaultInviteCode: (code: string | null) => void;
@@ -122,9 +125,18 @@ export const useChatStore = create<ChatState>((set) => ({
     set((state) => {
       const updatedGroups = state.groups.some((g) => g.id === activeGroupMeta.id)
         ? state.groups.map((g) =>
-            g.id === activeGroupMeta.id ? { id: g.id, name: activeGroupMeta.name } : g,
+            g.id === activeGroupMeta.id
+              ? { id: g.id, name: activeGroupMeta.name, ownerId: activeGroupMeta.ownerId }
+              : g,
           )
-        : [...state.groups, { id: activeGroupMeta.id, name: activeGroupMeta.name }];
+        : [
+            ...state.groups,
+            {
+              id: activeGroupMeta.id,
+              name: activeGroupMeta.name,
+              ownerId: activeGroupMeta.ownerId,
+            },
+          ];
       try {
         localStorage.setItem('echo_groups', JSON.stringify(updatedGroups));
       } catch (e) {
@@ -146,6 +158,35 @@ export const useChatStore = create<ChatState>((set) => ({
     });
   },
 
+  removeGroup: (groupId) =>
+    set((state) => {
+      const updated = state.groups.filter((g) => g.id !== groupId);
+      try {
+        localStorage.setItem('echo_groups', JSON.stringify(updated));
+      } catch (e) {
+        void e;
+      }
+
+      if (state.activeGroupId === groupId) {
+        try {
+          localStorage.removeItem('echo_active_group_id');
+        } catch (e) {
+          void e;
+        }
+        return {
+          groups: updated,
+          activeGroupId: null,
+          activeGroupMeta: null,
+          channels: [],
+          members: [],
+          activeChannelId: null,
+          defaultInviteCode: null,
+        };
+      }
+
+      return { groups: updated };
+    }),
+
   addMember: (member) =>
     set((state) => {
       if (state.members.some((m) => m.userId === member.userId)) {
@@ -155,6 +196,11 @@ export const useChatStore = create<ChatState>((set) => ({
         members: [...state.members, member],
       };
     }),
+
+  removeMember: (userId) =>
+    set((state) => ({
+      members: state.members.filter((m) => m.userId !== userId),
+    })),
 
   setActiveChannel: (activeChannelId) =>
     set((state) => ({

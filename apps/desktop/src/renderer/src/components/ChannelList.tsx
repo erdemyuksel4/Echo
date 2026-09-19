@@ -8,6 +8,9 @@ import {
   Settings,
   MicOff,
   VolumeX,
+  ChevronDown,
+  Trash2,
+  LogOut,
 } from 'lucide-react';
 import { useChatStore } from '../stores/useChatStore';
 import { useAuthStore } from '../stores/useAuthStore';
@@ -16,6 +19,7 @@ import { wsService } from '../services/websocket';
 import { webrtcService } from '../services/webrtc';
 import { SettingsModal } from './SettingsModal';
 import { VoicePanel } from './VoicePanel';
+import { DeleteGroupModal } from './DeleteGroupModal';
 
 export const ChannelList: React.FC = () => {
   const { identity } = useAuthStore();
@@ -41,6 +45,10 @@ export const ChannelList: React.FC = () => {
   const [newChannelName, setNewChannelName] = useState('');
   const [newChannelType, setNewChannelType] = useState<'text' | 'voice'>('text');
   const [showSettings, setShowSettings] = useState(false);
+  const [showGroupMenu, setShowGroupMenu] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+
+  const isOwner = activeGroupMeta ? identity?.userId === activeGroupMeta.ownerId : false;
 
   if (!activeGroupMeta) {
     return (
@@ -119,24 +127,100 @@ export const ChannelList: React.FC = () => {
 
   return (
     <div className="flex h-full w-60 flex-col bg-slate-900 border-r border-slate-800/60 select-none">
-      {/* Group Header */}
-      <div className="flex h-14 items-center justify-between border-b border-slate-800/80 px-4 shadow-sm">
-        <h1 className="truncate font-bold text-white text-sm" title={activeGroupMeta.name}>
-          {activeGroupMeta.name}
-        </h1>
-        {defaultInviteCode && (
-          <button
-            onClick={handleCopyInvite}
-            className="flex items-center gap-1 rounded-md bg-slate-800 px-2 py-1 text-[11px] font-medium text-slate-300 transition hover:bg-slate-700 hover:text-white"
-            title={`Davet Kodunu Kopyala (${defaultInviteCode})`}
-          >
-            {copied ? (
-              <Check className="h-3.5 w-3.5 text-emerald-400" />
-            ) : (
-              <Share2 className="h-3.5 w-3.5 text-indigo-400" />
+      {/* Group Header with Dropdown */}
+      <div className="relative border-b border-slate-800/80">
+        <button
+          type="button"
+          onClick={() => setShowGroupMenu((prev) => !prev)}
+          className="flex h-14 w-full items-center justify-between px-4 text-left transition hover:bg-slate-800/40"
+        >
+          <h1 className="truncate font-bold text-white text-sm" title={activeGroupMeta.name}>
+            {activeGroupMeta.name}
+          </h1>
+          <div className="flex items-center gap-1.5">
+            {defaultInviteCode && (
+              <span
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleCopyInvite();
+                }}
+                className="flex items-center gap-1 rounded-md bg-slate-800 px-2 py-1 text-[11px] font-medium text-slate-300 transition hover:bg-slate-700 hover:text-white cursor-pointer"
+                title={`Davet Kodunu Kopyala (${defaultInviteCode})`}
+              >
+                {copied ? (
+                  <Check className="h-3.5 w-3.5 text-emerald-400" />
+                ) : (
+                  <Share2 className="h-3.5 w-3.5 text-indigo-400" />
+                )}
+                <span>{copied ? 'Kopyalandı' : 'Davet'}</span>
+              </span>
             )}
-            <span>{copied ? 'Kopyalandı' : 'Davet'}</span>
-          </button>
+            <ChevronDown
+              className={`h-4 w-4 text-slate-400 transition-transform duration-150 ${
+                showGroupMenu ? 'rotate-180 text-white' : ''
+              }`}
+            />
+          </div>
+        </button>
+
+        {/* Group Dropdown Menu */}
+        {showGroupMenu && (
+          <div className="absolute left-2 right-2 top-14 z-40 rounded-lg bg-slate-950 p-1.5 border border-slate-800 shadow-2xl space-y-0.5">
+            {defaultInviteCode && (
+              <button
+                type="button"
+                onClick={() => {
+                  setShowGroupMenu(false);
+                  handleCopyInvite();
+                }}
+                className="flex w-full items-center justify-between rounded px-2.5 py-1.5 text-xs text-indigo-300 hover:bg-indigo-600/20 transition"
+              >
+                <span>{copied ? 'Kopyalandı!' : 'Davet Kodunu Kopyala'}</span>
+                {copied ? (
+                  <Check className="h-3.5 w-3.5 text-emerald-400" />
+                ) : (
+                  <Share2 className="h-3.5 w-3.5" />
+                )}
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => {
+                setShowGroupMenu(false);
+                setShowAddChannel(true);
+              }}
+              className="flex w-full items-center justify-between rounded px-2.5 py-1.5 text-xs text-slate-300 hover:bg-slate-800 transition"
+            >
+              <span>Kanal Ekle</span>
+              <Plus className="h-3.5 w-3.5 text-slate-400" />
+            </button>
+            <div className="h-px bg-slate-800/80 my-1" />
+            {isOwner ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setShowGroupMenu(false);
+                  setShowDeleteModal(true);
+                }}
+                className="flex w-full items-center justify-between rounded px-2.5 py-1.5 text-xs text-rose-400 hover:bg-rose-500/20 transition font-medium"
+              >
+                <span>Grubu Sil</span>
+                <Trash2 className="h-3.5 w-3.5 text-rose-400" />
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  setShowGroupMenu(false);
+                  setShowDeleteModal(true);
+                }}
+                className="flex w-full items-center justify-between rounded px-2.5 py-1.5 text-xs text-amber-400 hover:bg-amber-500/20 transition font-medium"
+              >
+                <span>Gruptan Ayrıl</span>
+                <LogOut className="h-3.5 w-3.5 text-amber-400" />
+              </button>
+            )}
+          </div>
         )}
       </div>
 
@@ -379,6 +463,16 @@ export const ChannelList: React.FC = () => {
       </div>
 
       <SettingsModal isOpen={showSettings} onClose={() => setShowSettings(false)} />
+
+      {activeGroupMeta && (
+        <DeleteGroupModal
+          isOpen={showDeleteModal}
+          onClose={() => setShowDeleteModal(false)}
+          groupId={activeGroupMeta.id}
+          groupName={activeGroupMeta.name}
+          isOwner={isOwner}
+        />
+      )}
     </div>
   );
 };

@@ -367,6 +367,96 @@ export class GroupDO extends DurableObject<Env> {
       return Response.json(this.getGroupSnapshot());
     }
 
+    if (url.pathname === '/internal/delete' && request.method === 'POST') {
+      const { userId } = (await request.json()) as { userId: string };
+
+      const metaRows = [...this.sql.exec(`SELECT * FROM group_meta LIMIT 1`)];
+      const meta = metaRows[0] as { id: string; name: string; owner_id: string } | undefined;
+      if (!meta) {
+        return Response.json({ error: 'Grup bulunamadı' }, { status: 404 });
+      }
+
+      if (meta.owner_id !== userId) {
+        return Response.json({ error: 'Yalnızca grup sahibi grubu silebilir' }, { status: 403 });
+      }
+
+      // Collect all member IDs to clean up their UserDO records
+      const memberRows = [...this.sql.exec(`SELECT user_id FROM members`)] as { user_id: string }[];
+      const memberUserIds = memberRows.map((r) => r.user_id);
+
+      // 1. Broadcast group.deleted to all connected sockets
+      this.broadcast(WsServerEvents.GROUP_DELETED, { groupId: meta.id });
+
+      // 2. Close all sockets
+      for (const ws of this.ctx.getWebSockets()) {
+        try {
+          ws.close(1000, 'Group deleted');
+        } catch {
+          // ignore
+        }
+      }
+
+      // 3. Clear all voice room mappings
+      this.voiceRooms.clear();
+      this.userVoiceChannel.clear();
+
+      // 4. Delete all stored DO data
+      await this.ctx.storage.deleteAll();
+
+      return Response.json({ success: true, groupId: meta.id, memberUserIds });
+    }
+
+    if (url.pathname === '/internal/leave' && request.method === 'POST') {
+      const { userId } = (await request.json()) as { userId: string };
+
+      const metaRows = [...this.sql.exec(`SELECT * FROM group_meta LIMIT 1`)];
+      const meta = metaRows[0] as { id: string; name: string; owner_id: string } | undefined;
+      if (!meta) {
+        return Response.json({ error: 'Grup bulunamadı' }, { status: 404 });
+      }
+
+      if (meta.owner_id === userId) {
+        return Response.json(
+          { error: 'Grup sahibi gruptan ayrılamaz, grubu silebilirsiniz' },
+          { status: 400 },
+        );
+      }
+
+      const memberRows = [...this.sql.exec(`SELECT * FROM members WHERE user_id = ?`, userId)] as {
+        display_name: string;
+      }[];
+      if (memberRows.length === 0) {
+        return Response.json({ error: 'Bu grubun üyesi değilsiniz' }, { status: 400 });
+      }
+
+      const memberDisplayName = memberRows[0]!.display_name;
+
+      this.sql.exec(`DELETE FROM members WHERE user_id = ?`, userId);
+
+      // Leave any active voice channel
+      const currentChannelId = this.userVoiceChannel.get(userId);
+      if (currentChannelId) {
+        this.leaveVoiceRoom(userId, currentChannelId);
+      }
+
+      // Broadcast member.left to remaining sockets
+      this.broadcast(WsServerEvents.MEMBER_LEFT, { groupId: meta.id, userId });
+
+      // Close any websockets belonging to this user
+      for (const ws of this.ctx.getWebSockets()) {
+        try {
+          const attachment = ws.deserializeAttachment() as WsSessionAttachment | null;
+          if (attachment?.userId === userId) {
+            ws.close(1000, 'Left group');
+          }
+        } catch {
+          // ignore
+        }
+      }
+
+      return Response.json({ success: true, groupId: meta.id, displayName: memberDisplayName });
+    }
+
     return new Response('Not Found', { status: 404 });
   }
 

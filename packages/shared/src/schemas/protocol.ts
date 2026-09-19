@@ -64,6 +64,8 @@ export const WsServerEvents = {
   VOICE_SIGNAL: 'voice.signal',
   VOICE_STATE: 'voice.state',
   VOICE_PARTICIPANTS: 'voice.participants',
+  GROUP_DELETED: 'group.deleted',
+  MEMBER_LEFT: 'member.left',
 } as const;
 
 // Event Payload Schemas
@@ -157,6 +159,15 @@ export const ServerTypingPayloadSchema = z.object({
 export const ServerPresencePayloadSchema = z.object({
   userId: z.string(),
   status: z.enum(['online', 'idle', 'offline']),
+});
+
+export const ServerGroupDeletedPayloadSchema = z.object({
+  groupId: z.string(),
+});
+
+export const ServerMemberLeftPayloadSchema = z.object({
+  groupId: z.string(),
+  userId: z.string(),
 });
 
 export { AuthPayloadSchema, GroupSnapshotSchema, ChannelSchema, GroupMemberSchema, MessageSchema };

@@ -229,6 +229,21 @@ class EchoWebSocketService {
         break;
       }
 
+      case WsServerEvents.MEMBER_LEFT: {
+        const data = envelope.d as { groupId: string; userId: string };
+        chatStore.removeMember(data.userId);
+        break;
+      }
+
+      case WsServerEvents.GROUP_DELETED: {
+        const data = envelope.d as { groupId: string };
+        chatStore.removeGroup(data.groupId);
+        if (useVoiceStore.getState().currentChannelId) {
+          webrtcService.leave();
+        }
+        break;
+      }
+
       case WsServerEvents.VOICE_USER_JOINED: {
         const data = envelope.d as {
           channelId: string;

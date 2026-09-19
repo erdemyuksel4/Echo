@@ -68,4 +68,45 @@ describe('Server Group Routes', () => {
 
     expect(res.status).toBe(400);
   });
+
+  it('DELETE /api/groups/:id should reject invalid signature', async () => {
+    const keypair = generateKeyPair();
+    const ts = Date.now();
+    const wrongSig = '0'.repeat(128);
+
+    const res = await app.request('/api/groups/grp123', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        pubkey: keypair.publicKeyHex,
+        ts,
+        sig: wrongSig,
+      }),
+    });
+
+    expect(res.status).toBe(401);
+    const body = (await res.json()) as { error?: string };
+    expect(body.error).toBe('İmza doğrulanamadı');
+  });
+
+  it('POST /api/groups/:id/leave should reject expired timestamp', async () => {
+    const keypair = generateKeyPair();
+    const oldTs = Date.now() - 100_000;
+    const payload = `echo-leave-group|grp123|${oldTs}`;
+    const sig = signMessage(payload, keypair.privateKey);
+
+    const res = await app.request('/api/groups/grp123/leave', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        pubkey: keypair.publicKeyHex,
+        ts: oldTs,
+        sig,
+      }),
+    });
+
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error?: string };
+    expect(body.error).toBe('İstek zaman aşımına uğramış');
+  });
 });

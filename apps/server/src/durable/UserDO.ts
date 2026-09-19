@@ -37,6 +37,12 @@ export class UserDO extends DurableObject<Env> {
       return Response.json({ success: true });
     }
 
+    if (url.pathname === '/internal/remove-membership' && request.method === 'POST') {
+      const { groupId } = (await request.json()) as { groupId: string };
+      this.sql.exec(`DELETE FROM memberships WHERE group_id = ?`, groupId);
+      return Response.json({ success: true });
+    }
+
     if (url.pathname === '/internal/memberships' && request.method === 'GET') {
       const rows = [...this.sql.exec(`SELECT * FROM memberships ORDER BY joined_at DESC`)];
       return Response.json(rows);

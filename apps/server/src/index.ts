@@ -7,6 +7,8 @@ import {
   HealthResponseSchema,
   CreateGroupRequestSchema,
   JoinGroupRequestSchema,
+  DeleteGroupRequestSchema,
+  LeaveGroupRequestSchema,
   deriveUserId,
   verifySignature,
   type HealthResponse,
@@ -192,6 +194,140 @@ app.post('/api/groups/join', async (c) => {
   }
 
   return c.json(joinData);
+});
+
+// Delete group (Owner only)
+app.delete('/api/groups/:id', async (c) => {
+  const groupId = c.req.param('id');
+  if (!groupId) {
+    return c.json({ error: 'Grup ID zorunludur' }, 400);
+  }
+
+  let body: { sig: string; pubkey: string; ts: number };
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: 'Geçersiz JSON gövdesi' }, 400);
+  }
+
+  const parseResult = DeleteGroupRequestSchema.safeParse(body);
+  if (!parseResult.success) {
+    return c.json({ error: 'Geçersiz istek parametreleri' }, 400);
+  }
+
+  const { sig, pubkey, ts } = parseResult.data;
+
+  // Check timestamp freshness (+/- 60 sec)
+  if (Math.abs(Date.now() - ts) > 60_000) {
+    return c.json({ error: 'İstek zaman aşımına uğramış' }, 400);
+  }
+
+  // Verify signature: echo-delete-group|<groupId>|<ts>
+  const payload = `echo-delete-group|${groupId}|${ts}`;
+  if (!verifySignature(payload, sig, pubkey)) {
+    return c.json({ error: 'İmza doğrulanamadı' }, 401);
+  }
+
+  const userId = deriveUserId(pubkey);
+  const groupDoId = c.env.GROUP_DO.idFromName(groupId.toLowerCase());
+  const groupStub = c.env.GROUP_DO.get(groupDoId);
+
+  const delRes = await groupStub.fetch('http://do/internal/delete', {
+    method: 'POST',
+    body: JSON.stringify({ userId }),
+  });
+
+  if (!delRes.ok) {
+    const errData = (await delRes.json()) as { error?: string };
+    return c.json(
+      { error: errData.error ?? 'Grup silinemedi' },
+      delRes.status as 400 | 403 | 404,
+    );
+  }
+
+  const delData = (await delRes.json()) as { success: boolean; memberUserIds?: string[] };
+
+  // Remove membership from UserDO for all members
+  if (delData.memberUserIds && Array.isArray(delData.memberUserIds)) {
+    for (const memberId of delData.memberUserIds) {
+      try {
+        const uId = c.env.USER_DO.idFromName(memberId);
+        const uStub = c.env.USER_DO.get(uId);
+        await uStub.fetch('http://do/internal/remove-membership', {
+          method: 'POST',
+          body: JSON.stringify({ groupId }),
+        });
+      } catch (err) {
+        console.warn('Failed to remove membership from UserDO:', err);
+      }
+    }
+  }
+
+  return c.json({ success: true, groupId });
+});
+
+// Leave group (Non-owner member)
+app.post('/api/groups/:id/leave', async (c) => {
+  const groupId = c.req.param('id');
+  if (!groupId) {
+    return c.json({ error: 'Grup ID zorunludur' }, 400);
+  }
+
+  let body: { sig: string; pubkey: string; ts: number };
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: 'Geçersiz JSON gövdesi' }, 400);
+  }
+
+  const parseResult = LeaveGroupRequestSchema.safeParse(body);
+  if (!parseResult.success) {
+    return c.json({ error: 'Geçersiz istek parametreleri' }, 400);
+  }
+
+  const { sig, pubkey, ts } = parseResult.data;
+
+  // Check timestamp freshness (+/- 60 sec)
+  if (Math.abs(Date.now() - ts) > 60_000) {
+    return c.json({ error: 'İstek zaman aşımına uğramış' }, 400);
+  }
+
+  // Verify signature: echo-leave-group|<groupId>|<ts>
+  const payload = `echo-leave-group|${groupId}|${ts}`;
+  if (!verifySignature(payload, sig, pubkey)) {
+    return c.json({ error: 'İmza doğrulanamadı' }, 401);
+  }
+
+  const userId = deriveUserId(pubkey);
+  const groupDoId = c.env.GROUP_DO.idFromName(groupId.toLowerCase());
+  const groupStub = c.env.GROUP_DO.get(groupDoId);
+
+  const leaveRes = await groupStub.fetch('http://do/internal/leave', {
+    method: 'POST',
+    body: JSON.stringify({ userId }),
+  });
+
+  if (!leaveRes.ok) {
+    const errData = (await leaveRes.json()) as { error?: string };
+    return c.json(
+      { error: errData.error ?? 'Gruptan ayrılamadı' },
+      leaveRes.status as 400 | 403 | 404,
+    );
+  }
+
+  // Remove membership from UserDO for this user
+  try {
+    const uId = c.env.USER_DO.idFromName(userId);
+    const uStub = c.env.USER_DO.get(uId);
+    await uStub.fetch('http://do/internal/remove-membership', {
+      method: 'POST',
+      body: JSON.stringify({ groupId }),
+    });
+  } catch (err) {
+    console.warn('Failed to remove membership from UserDO:', err);
+  }
+
+  return c.json({ success: true, groupId });
 });
 
 // User memberships
