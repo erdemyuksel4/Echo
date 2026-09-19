@@ -1,9 +1,13 @@
 import { existsSync } from 'fs';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
 import { app, shell, BrowserWindow, ipcMain } from 'electron';
-import { join } from 'path';
 import { electronApp, optimizer, is } from '@electron-toolkit/utils';
 import { APP_NAME, PROTOCOL_VERSION } from '@echo/shared';
 import { IdentityManager } from './identity';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 let mainWindow: BrowserWindow | null = null;
 
