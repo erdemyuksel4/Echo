@@ -44,13 +44,11 @@ const echoApi: EchoApi = {
   },
 };
 
-if (process.contextIsolated) {
-  try {
-    contextBridge.exposeInMainWorld('echoApi', echoApi);
-  } catch (error) {
-    console.error('Failed to expose echoApi in main world:', error);
-  }
-} else {
+try {
+  contextBridge.exposeInMainWorld('echoApi', echoApi);
+} catch (error) {
+  console.error('[Echo Preload] Failed to expose echoApi via contextBridge:', error);
+  // Fallback for non-isolated context
   const globalScope = globalThis as Record<string, unknown>;
   globalScope['echoApi'] = echoApi;
 }

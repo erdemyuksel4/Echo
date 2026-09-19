@@ -12,9 +12,19 @@ const __dirname = dirname(__filename);
 let mainWindow: BrowserWindow | null = null;
 
 function getPreloadPath(): string {
+  const cjsPath = join(__dirname, '../preload/index.cjs');
+  if (existsSync(cjsPath)) {
+    console.log('[Echo Main] Preload found (cjs):', cjsPath);
+    return cjsPath;
+  }
   const mjsPath = join(__dirname, '../preload/index.mjs');
-  if (existsSync(mjsPath)) return mjsPath;
-  return join(__dirname, '../preload/index.js');
+  if (existsSync(mjsPath)) {
+    console.log('[Echo Main] Preload found (mjs):', mjsPath);
+    return mjsPath;
+  }
+  const jsPath = join(__dirname, '../preload/index.js');
+  console.log('[Echo Main] Preload fallback (js):', jsPath, 'exists:', existsSync(jsPath));
+  return jsPath;
 }
 
 function createWindow(): void {
@@ -33,6 +43,10 @@ function createWindow(): void {
       nodeIntegration: false,
       webSecurity: true,
     },
+  });
+
+  mainWindow.webContents.on('preload-error', (_event, preloadPath, error) => {
+    console.error('[Echo Main] PRELOAD SCRIPT ERROR at:', preloadPath, error);
   });
 
   mainWindow.on('ready-to-show', () => {
