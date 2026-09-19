@@ -254,6 +254,7 @@ Bu dosya her faz ve görev sonunda güncellenir.
   - **Global Ses Paneli Bilgilendirmesi:** `VoicePanel` başka sunucularda veya DM'deyken de sol altta bağlı kalır; kullanıcının hangi sunucu ve kanalda olduğunu açıkça belirtir (`{channelName} / {groupName}`).
   - **Katılımcı Senkronizasyonu & Boş Oda Temizliği:** `GroupDO.handleAuth` metodunda tüm ses kanallarının katılımcı listeleri (boş odalar için `[]` dahil) gönderilerek istemcideki eski/yetim katılımcı listeleri temizlendi.
   - **Anında Çıkış ve Kolaylık (Toggle):** `webrtcService.leave()` çağrıldığında kullanıcının kendi kaydı yerel Zustand store'dan anında silinir; `ChannelList` üzerinde aktif ses kanalına tekrar tıklandığında kolayca bağlantıyı kesme (toggle leave) özelliği eklendi.
+  - **Canlı Sunucu Güncellemesi:** Sunucu güncellemeleri Cloudflare Workers üzerine deploy edildi (`Version ID: 5d10a9a9-08ba-422c-9907-6dfca7d26926`), masaüstü kurulum paketi güncellendi ve kodlar GitHub'a pushlandı.
 
 
 
