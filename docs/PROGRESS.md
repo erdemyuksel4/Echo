@@ -10,7 +10,7 @@ Bu dosya her faz ve görev sonunda güncellenir.
 | Faz 1 | Kimlik, grup, kanal, yazılı sohbet      | Tamamlandı | `faz-1-kimlik-sohbet`  | Ed25519 kimlik, safeStorage, GroupDO SQLite, WebSocket hibernation, UI    |
 | Faz 2 | Zengin mesajlaşma ve bildirim           | Tamamlandı | `faz-2-zengin-mesajlasma` | Yanıtla, düzenle, sil, emoji tepkisi, safe Markdown/spoiler, tray, ses, bildirim |
 | Faz 3 | Sesli sohbet ve TURN                    | Tamamlandı | `faz-3-sesli-sohbet`   | WebRTC Tam Mesh, Cloudflare STUN/TURN, VAD konuşma halkası, ses paneli ve bağlantı tanı modalı |
-| Faz 4 | Medya                                   | Başlanmadı | -                      | -                                                                          |
+| Faz 4 | Medya                                   | Tamamlandı | `faz-4-medya`          | Görsel/GIF yükleme (server), P2P dosya paylaşımı (WebRTC DataChannel), lightbox görüntüleyici, sürükle-bırak, Ctrl+V paste, Giphy picker |
 | Faz 5 | DM                                      | Başlanmadı | -                      | -                                                                          |
 | Faz 6 | Ekran paylaşımı (mesh)                  | Başlanmadı | -                      | -                                                                          |
 | Faz 7 | SFU (kapılı)                            | Başlanmadı | -                      | -                                                                          |
@@ -128,3 +128,36 @@ Bu dosya her faz ve görev sonunda güncellenir.
   - `pnpm lint`: Workspace genelinde sıfır hata ile geçti.
   - `pnpm test`: 9 test dosyası, 36 testin tamamı (%100) başarıyla geçti (grup silme ve ayrılma testleri dahil).
   - `apps/desktop` electron-vite derlemesi başarıyla tamamlandı.
+
+## Faz 4 — Kabul Kriterleri ve Gerçekleşenler
+
+- [x] **Ortak Şemalar (`@echo/shared`):**
+  - `AttachmentTypeSchema`, `AttachmentSchema`, `P2POfferSchema`: Mesaj şemasına `attachments: Attachment[]` alanı eklendi.
+  - `AttachmentUploadRequestSchema`, `AttachmentUploadResponseSchema`, `GiphyItemSchema`, `GiphySearchResponseSchema`: Yeni `media.ts` şema modülü.
+  - Protokole `FILE_SIGNAL` olayı, `ClientFileSignalPayloadSchema`, `ServerFileSignalPayloadSchema` ve `ClientMsgSendPayloadSchema`'ya `attachments` alanı eklendi.
+  - 8 yeni birim testi eklendi.
+- [x] **Sunucu (`apps/server`):**
+  - SQLite'a `attachments` tablosu (metadata) ve `attachment_chunks` tablosu (binary chunks ≤180KB) eklendi.
+  - `POST /internal/attachments/upload`: Çok parçalı yükleme; FIFO gruplu kota yönetimi.
+  - `GET /internal/attachments/:id`: Binary chunk birleştirme ve akış.
+  - `POST /api/groups/:id/attachments` ve `GET /api/groups/:id/attachments/:id`: Harici HTTP API.
+  - `GET /api/giphy/search`: Giphy proxy (API anahtarı `.dev.vars`'ta, test için `c.env?.GIPHY_API_KEY` ile güvenli isteğe bağlı).
+  - `FILE_SIGNAL` WebSocket olayı: Hedef kullanıcıya doğrudan P2P sinyal rölesi.
+  - 90 günlük ek yük temizliği `alarm()` rutinine eklendi.
+  - 2 yeni test dosyası.
+- [x] **Masaüstü (`apps/desktop`):**
+  - `imageCompression.ts`: Canvas API ile sunucu taraflı işlem yapmadan WebP dönüşümü (max 1920px), GIF korunur; `uploadImageAttachment()` fonksiyonu.
+  - `p2pFileTransfer.ts`: WebRTC DataChannel ile P2P dosya transferi; SHA-256 bütünlük doğrulaması; `crypto.randomUUID()` ile benzersiz offer ID'leri.
+  - `GiphyPicker.tsx`: Arama ve trend GIF ızgarası; `onSelect` callback ile `Attachment` dönüşümü.
+  - `ImageViewerModal.tsx`: Tam ekran lightbox; zum artır/azalt, sıfırla, indir, Esc ile kapat.
+  - `ChatArea.tsx`: Sürükle-bırak yükleme, `Ctrl+V` ekran görüntüsü yapıştırma, dosya yükleme butonu, GIF seçici butonu, hazırlık eki tepsisi (staged attachment tray) ile önizleme ve silme.
+  - `ChatMessageItem.tsx`: Görsel/GIF küçük resim gösterimi (lightbox açılır), P2PFileCard bileşeni (ilerleme çubuğu, indirme butonu, durum rozetleri).
+  - `websocket.ts`: `FILE_SIGNAL` yönlendirme, `sendMessage()` fonksiyonuna `attachments` parametresi, `sendFileSignal()` metodu.
+- [x] **Test Doğrulamaları:**
+  - `pnpm typecheck`: Monorepo genelinde sıfır hata ile geçti.
+  - `pnpm lint`: Workspace genelinde sıfır hata ile geçti.
+  - `pnpm test`: 11 test dosyası, 46 testin tamamı (%100) başarıyla geçti.
+
+### Bilinen Limitler / Açık İşler
+- Görsel URL'leri `http://localhost:8787` ile hardcode edilmiş; canlıya almada `ARCHITECTURE.md`'de tanımlı gerçek Worker URL'sine güncellenmesi gerekir.
+- P2P dosya indirme, gönderen kullanıcı çevrimiçi olduğunda çalışır; çevrimdışıysa dosya alınamaz (P2P'nin doğal kısıtı).
