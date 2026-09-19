@@ -9,9 +9,10 @@ describe('Live Group Creation & Join Flow', () => {
     const createPayload = `echo-create-group|Oyun Odasi|${now}`;
     const createSig = signMessage(createPayload, owner.privateKey);
 
+    const serverUrl = process.env.TEST_SERVER_URL || 'http://127.0.0.1:8787';
     let createRes: Response;
     try {
-      createRes = await fetch('http://127.0.0.1:8787/api/groups', {
+      createRes = await fetch(`${serverUrl}/api/groups`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -23,7 +24,7 @@ describe('Live Group Creation & Join Flow', () => {
         }),
       });
     } catch {
-      // Local wrangler dev server is not actively running during CI/unit test run
+      // Server is not actively running during CI/unit test run
       return;
     }
 
@@ -44,7 +45,7 @@ describe('Live Group Creation & Join Flow', () => {
     const joinPayload = `echo-join-group|${createData.inviteCode}|${joinTs}`;
     const joinSig = signMessage(joinPayload, member.privateKey);
 
-    const joinRes = await fetch('http://127.0.0.1:8787/api/groups/join', {
+    const joinRes = await fetch(`${serverUrl}/api/groups/join`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -70,5 +71,73 @@ describe('Live Group Creation & Join Flow', () => {
     expect(joinData.snapshot.group.name).toBe('Oyun Odasi');
     expect(joinData.snapshot.members.length).toBe(2);
     expect(joinData.snapshot.channels.some((c) => c.name === 'genel')).toBe(true);
+
+    // 3. Connect via WebSocket to the live group as owner and authenticate
+    const wsUrl = serverUrl.replace(/^http/, 'ws') + `/ws/group/${createData.groupId}`;
+    console.log('Connecting to WebSocket:', wsUrl);
+
+    const wsPromise = new Promise<{ authOk: boolean; snapshotReceived: boolean }>((resolve, reject) => {
+      const ws = new WebSocket(wsUrl);
+      let authOk = false;
+      let snapshotReceived = false;
+
+      const timeout = setTimeout(() => {
+        ws.close();
+        reject(new Error(`WebSocket timeout. authOk=${authOk}, snapshotReceived=${snapshotReceived}`));
+      }, 10000);
+
+      ws.onopen = () => {
+        console.log('WS OPEN, sending auth...');
+        const authTs = Date.now();
+        const authPayload = `echo-auth|${createData.groupId}|${authTs}`;
+        const authSig = signMessage(authPayload, owner.privateKey);
+
+        ws.send(
+          JSON.stringify({
+            v: 1,
+            t: 'auth',
+            id: 'auth-1',
+            d: {
+              userId: createData.ownerId,
+              pubkey: owner.publicKeyHex,
+              ts: authTs,
+              sig: authSig,
+            },
+          }),
+        );
+      };
+
+      ws.onmessage = (event) => {
+        console.log('WS MSG:', event.data);
+        try {
+          const msg = JSON.parse(event.data as string);
+          if (msg.t === 'auth.ok') authOk = true;
+          if (msg.t === 'snapshot') snapshotReceived = true;
+          if (authOk && snapshotReceived) {
+            clearTimeout(timeout);
+            ws.close();
+            resolve({ authOk, snapshotReceived });
+          }
+        } catch (e) {
+          console.error('Parse error:', e);
+        }
+      };
+
+      ws.onerror = (err) => {
+        console.error('WS ERR:', err);
+      };
+
+      ws.onclose = (event) => {
+        console.log('WS CLOSE:', event.code, event.reason);
+        clearTimeout(timeout);
+        if (!authOk || !snapshotReceived) {
+          reject(new Error(`WS closed early with code ${event.code}: ${event.reason}`));
+        }
+      };
+    });
+
+    const wsResult = await wsPromise;
+    expect(wsResult.authOk).toBe(true);
+    expect(wsResult.snapshotReceived).toBe(true);
   });
 });

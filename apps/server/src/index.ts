@@ -31,6 +31,38 @@ export const app = new Hono<{ Bindings: Env }>();
 
 app.use('*', cors());
 
+// Root landing page
+app.get('/', (c) => {
+  return c.html(`
+    <!DOCTYPE html>
+    <html lang="tr">
+      <head>
+        <title>Echo Server — Aktif</title>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <style>
+          * { box-sizing: border-box; }
+          body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f172a; color: #f8fafc; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; padding: 1rem; }
+          .card { background: #1e293b; padding: 2.5rem 2rem; border-radius: 1.25rem; box-shadow: 0 20px 35px -10px rgba(0,0,0,0.6); text-align: center; max-width: 440px; width: 100%; border: 1px solid #334155; }
+          .badge { display: inline-flex; align-items: center; gap: 0.5rem; background: rgba(16, 185, 129, 0.15); color: #34d399; font-weight: 600; font-size: 0.875rem; padding: 0.35rem 0.85rem; border-radius: 9999px; margin-bottom: 1.25rem; border: 1px solid rgba(16, 185, 129, 0.3); }
+          .dot { width: 8px; height: 8px; border-radius: 50%; background: #10b981; }
+          h1 { color: #818cf8; margin: 0 0 0.75rem 0; font-size: 1.75rem; }
+          p { color: #94a3b8; line-height: 1.6; margin: 0 0 1rem 0; font-size: 0.95rem; }
+          .meta { font-size: 0.8rem; color: #64748b; margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid #334155; }
+        </style>
+      </head>
+      <body>
+        <div class="card">
+          <div class="badge"><span class="dot"></span> Sunucu Aktif ve Çalışıyor</div>
+          <h1>Echo Server</h1>
+          <p>Echo arka plan sunucusu Cloudflare Workers & Durable Objects üzerinde başarıyla devrede.</p>
+          <div class="meta">Echo v0.1.0 • Cloudflare Workers (Free) • Durum: OK</div>
+        </div>
+      </body>
+    </html>
+  `);
+});
+
 // Health Check
 app.get('/api/turn', (c) => {
   return c.json({
