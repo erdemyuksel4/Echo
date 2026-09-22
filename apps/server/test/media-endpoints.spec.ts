@@ -12,7 +12,11 @@ describe('Faz 4 - Media Endpoints', () => {
               title: 'Funny Cat',
               images: {
                 original: { url: 'https://media.giphy.com/cat.gif', width: '400', height: '300' },
-                fixed_width: { url: 'https://media.giphy.com/cat-preview.gif', width: '200', height: '150' },
+                fixed_width: {
+                  url: 'https://media.giphy.com/cat-preview.gif',
+                  width: '200',
+                  height: '150',
+                },
               },
             },
           ],

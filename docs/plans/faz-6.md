@@ -3,6 +3,7 @@
 ## Hedef
 
 Discord benzeri ekran ve pencere paylaşımı altyapısını kurmak:
+
 1. **Kaynak Seçici & Yakalama (Electron Main & Renderer):**
    - Ana süreçte `desktopCapturer.getSources({ types: ['window', 'screen'] })` ile açık pencerelerin ve monitörlerin küçük resimli listesini alma.
    - Seçilen kaynağı `navigator.mediaDevices.getUserMedia` ile yakalama.
@@ -26,6 +27,7 @@ Discord benzeri ekran ve pencere paylaşımı altyapısını kurmak:
 ## Dokunulacak Dosyalar
 
 ### 1. Ortak Paket (`packages/shared`)
+
 - `packages/shared/src/schemas/screenshare.ts` (Yeni):
   - `ScreenQualityPresetSchema` ('720p30' | '1080p30' | '1080p60')
   - `ScreenShareSourceSchema` (id, name, thumbnailDataUrl, appIconDataUrl, isScreen)
@@ -36,12 +38,14 @@ Discord benzeri ekran ve pencere paylaşımı altyapısını kurmak:
 - `packages/shared/src/__tests__/screenshare.test.ts` (Yeni): Birim testleri.
 
 ### 2. Sunucu (`apps/server`)
+
 - `apps/server/src/durable/GroupDO.ts`:
   - Ses kanalındaki aktif ekran yayıncılarının ve izleyicilerinin takibi (`screenShares: Map<channelId, Map<userId, ScreenShareInfo>>`).
   - `share.start`, `share.stop`, `share.signal` olaylarının yönlendirilmesi ve kanaldaki diğer kullanıcılara yayını.
 - `apps/server/test/screenshare.spec.ts` (Yeni): Ekran paylaşımı sinyal yayını testleri.
 
 ### 3. Masaüstü Uygulaması (`apps/desktop`)
+
 - `apps/desktop/src/main/index.ts`:
   - `desktop:getSources` IPC işleyicisi (`desktopCapturer.getSources` ile pencereleri ve ekranları thumbnail ile alma).
 - `apps/desktop/src/preload/index.ts`:
@@ -66,14 +70,14 @@ Discord benzeri ekran ve pencere paylaşımı altyapısını kurmak:
 ## Riskler ve Önlemler
 
 1. **Windows Tam Ekran Oyunlarda Siyah Ekran:**
-   - *Risk:* Bazı DirectX/Vulkan tam ekran oyunlar pencere yakalama API'sinde siyah ekran dönebilir.
-   - *Önlem:* Kaynak seçici modalında kullanıcıya "Oyun paylaşıyorsanız lütfen 'Tüm Ekran' seçeneğini kullanın" uyarısı gösterilecek.
+   - _Risk:_ Bazı DirectX/Vulkan tam ekran oyunlar pencere yakalama API'sinde siyah ekran dönebilir.
+   - _Önlem:_ Kaynak seçici modalında kullanıcıya "Oyun paylaşıyorsanız lütfen 'Tüm Ekran' seçeneğini kullanın" uyarısı gösterilecek.
 2. **Mesh Bant Genişliği ve CPU Yükü:**
-   - *Risk:* 3 veya daha fazla kişi aynı anda izlediğinde upload ve CPU tüketimi artar.
-   - *Önlem:* Varsayılan kalite 720p30 (~2 Mbps) olarak tutulacak; H.264 donanım hızlandırma tercih edilecek; izleyici sayısı 2'yi geçtiğinde yayıncıya görsel uyarı verilecek.
+   - _Risk:_ 3 veya daha fazla kişi aynı anda izlediğinde upload ve CPU tüketimi artar.
+   - _Önlem:_ Varsayılan kalite 720p30 (~2 Mbps) olarak tutulacak; H.264 donanım hızlandırma tercih edilecek; izleyici sayısı 2'yi geçtiğinde yayıncıya görsel uyarı verilecek.
 3. **Sistem Sesi (Loopback Audio):**
-   - *Risk:* Windows'ta bazı aygıt kombinasyonlarında loopback ses yakalanamayabilir.
-   - *Önlem:* Sistem sesi opsiyonel onay kutusu olarak sunulacak, yakalanamazsa sessiz video akışına otomatik düşülecektir.
+   - _Risk:_ Windows'ta bazı aygıt kombinasyonlarında loopback ses yakalanamayabilir.
+   - _Önlem:_ Sistem sesi opsiyonel onay kutusu olarak sunulacak, yakalanamazsa sessiz video akışına otomatik düşülecektir.
 
 ---
 

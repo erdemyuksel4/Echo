@@ -34,6 +34,7 @@ Kullanıcıların Discord benzeri zengin medya alışverişi yapabilmesi:
 ## 2. Dokunulacak Dosyalar
 
 ### Ortak Paket (`packages/shared`)
+
 - `packages/shared/src/schemas/message.ts`:
   - `AttachmentSchema` (`id`, `name`, `size`, `mimeType`, `url`, `type: 'image' | 'gif' | 'file'`, `p2pOffer?: { fileHash, fileSize }`).
   - `MessageSchema` içine `attachments: z.array(AttachmentSchema).default([])` entegrasyonu.
@@ -43,6 +44,7 @@ Kullanıcıların Discord benzeri zengin medya alışverişi yapabilmesi:
   - Medya yükleme ve Giphy yanıt şemaları.
 
 ### Sunucu (`apps/server`)
+
 - `apps/server/src/durable/GroupDO.ts`:
   - `attachments` ve `attachment_chunks` SQLite tabloları.
   - Ek yükleme ve getirme uç noktaları (`/internal/attachments/upload`, `/internal/attachments/:id`).
@@ -53,6 +55,7 @@ Kullanıcıların Discord benzeri zengin medya alışverişi yapabilmesi:
   - `GET /api/giphy/search` (sunucu üzerinden güvenli proxy veya istemci doğrudan erişimi).
 
 ### Masaüstü Uygulaması (`apps/desktop`)
+
 - `apps/desktop/src/renderer/src/services/imageCompression.ts`:
   - İstemci tarafı WebP sıkıştırma ve boyutlandırma motoru.
 - `apps/desktop/src/renderer/src/services/p2pFileTransfer.ts`:
@@ -72,13 +75,13 @@ Kullanıcıların Discord benzeri zengin medya alışverişi yapabilmesi:
 
 ## 3. Riskler ve Önlemler
 
-| Risk | Önlem |
-| :--- | :--- |
-| Büyük resimler Cloudflare SQLite satır limitini aşabilir | İstemcide WebP ile ≤ 1 MB'a sıkıştırılır ve 256 KB parçalara bölünerek saklanır. |
-| GIF animasyonları WebP çevriminde kaybolabilir | MIME türü `image/gif` olan dosyalar WebP'ye dönüştürülmez, orijinal baytları korunur (≤ 4 MB). |
-| Giphy API anahtarı veya kota engeli | Varsayılan açık API anahtarı ve doğrudan arama fallback'i kurulur; arama yapılamazsa doğrudan URL yapıştırma desteklenir. |
-| P2P dosya transferinde bellek şişmesi | Veri tek seferde belleğe alınmaz; 16 KB parçalarla stream edilir ve aktarım bitene kadar `bufferedAmountLowThreshold` ile geri basınç uygulanır. |
-| Kötü amaçlı dosya yürütülmesi | Çalıştırılabilir (`.exe`, `.bat`, `.vbs`) dosyalar için indirme ve açma öncesinde kırmızı güvenlik uyarısı gösterilir. |
+| Risk                                                     | Önlem                                                                                                                                            |
+| :------------------------------------------------------- | :----------------------------------------------------------------------------------------------------------------------------------------------- |
+| Büyük resimler Cloudflare SQLite satır limitini aşabilir | İstemcide WebP ile ≤ 1 MB'a sıkıştırılır ve 256 KB parçalara bölünerek saklanır.                                                                 |
+| GIF animasyonları WebP çevriminde kaybolabilir           | MIME türü `image/gif` olan dosyalar WebP'ye dönüştürülmez, orijinal baytları korunur (≤ 4 MB).                                                   |
+| Giphy API anahtarı veya kota engeli                      | Varsayılan açık API anahtarı ve doğrudan arama fallback'i kurulur; arama yapılamazsa doğrudan URL yapıştırma desteklenir.                        |
+| P2P dosya transferinde bellek şişmesi                    | Veri tek seferde belleğe alınmaz; 16 KB parçalarla stream edilir ve aktarım bitene kadar `bufferedAmountLowThreshold` ile geri basınç uygulanır. |
+| Kötü amaçlı dosya yürütülmesi                            | Çalıştırılabilir (`.exe`, `.bat`, `.vbs`) dosyalar için indirme ve açma öncesinde kırmızı güvenlik uyarısı gösterilir.                           |
 
 ---
 

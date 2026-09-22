@@ -73,15 +73,12 @@ export const ScreenShareViewer: React.FC = () => {
           {viewingShare.isLoading ? (
             <div className="flex flex-col items-center justify-center gap-3 text-slate-400">
               <Loader2 className="h-10 w-10 animate-spin text-indigo-500" />
-              <span className="text-sm font-medium">{viewingShare.displayName} kullanıcısının yayınına bağlanılıyor...</span>
+              <span className="text-sm font-medium">
+                {viewingShare.displayName} kullanıcısının yayınına bağlanılıyor...
+              </span>
             </div>
           ) : (
-            <video
-              ref={videoRef}
-              autoPlay
-              playsInline
-              className="h-full w-full object-contain"
-            />
+            <video ref={videoRef} autoPlay playsInline className="h-full w-full object-contain" />
           )}
         </div>
 

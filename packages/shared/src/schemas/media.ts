@@ -4,7 +4,11 @@ import { AttachmentSchema } from './message';
 export const AttachmentUploadRequestSchema = z.object({
   filename: z.string().min(1).max(255),
   mimeType: z.string().min(1).max(100),
-  sizeBytes: z.number().int().positive().max(10 * 1024 * 1024), // Max 10MB per upload
+  sizeBytes: z
+    .number()
+    .int()
+    .positive()
+    .max(10 * 1024 * 1024), // Max 10MB per upload
   totalChunks: z.number().int().positive().max(50),
   chunks: z.array(
     z.object({

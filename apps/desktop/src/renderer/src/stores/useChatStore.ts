@@ -55,7 +55,11 @@ interface ChatState {
   addMessage: (channelId: string, message: Message) => void;
   updateMessage: (channelId: string, messageId: string, content: string, editedAt: number) => void;
   deleteMessage: (channelId: string, messageId: string) => void;
-  updateReactions: (channelId: string, messageId: string, reactions: Record<string, string[]>) => void;
+  updateReactions: (
+    channelId: string,
+    messageId: string,
+    reactions: Record<string, string[]>,
+  ) => void;
   setReplyingTo: (message: Message | null) => void;
   setEditingMessageId: (id: string | null) => void;
   markChannelRead: (channelId: string) => void;

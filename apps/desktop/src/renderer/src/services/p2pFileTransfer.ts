@@ -63,7 +63,14 @@ class P2PFileTransferService {
     return attachment;
   }
 
-  async startDownload(targetUserId: string, offerId: string, fileHash: string, fileName: string, totalBytes: number, mimeType: string): Promise<void> {
+  async startDownload(
+    targetUserId: string,
+    offerId: string,
+    fileHash: string,
+    fileName: string,
+    totalBytes: number,
+    mimeType: string,
+  ): Promise<void> {
     this.updateProgress({
       offerId,
       status: 'connecting',

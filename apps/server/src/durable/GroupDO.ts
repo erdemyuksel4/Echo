@@ -214,11 +214,14 @@ export class GroupDO extends DurableObject<Env> {
     }
 
     // Schedule 24-hour cleanup alarm if not scheduled
-    this.ctx.storage.getAlarm().then((scheduled) => {
-      if (!scheduled) {
-        this.ctx.storage.setAlarm(Date.now() + 24 * 60 * 60 * 1000);
-      }
-    }).catch(() => {});
+    this.ctx.storage
+      .getAlarm()
+      .then((scheduled) => {
+        if (!scheduled) {
+          this.ctx.storage.setAlarm(Date.now() + 24 * 60 * 60 * 1000);
+        }
+      })
+      .catch(() => {});
   }
 
   async alarm(): Promise<void> {
@@ -368,7 +371,9 @@ export class GroupDO extends DurableObject<Env> {
       this.broadcast(WsServerEvents.MEMBER_JOINED, newMember);
 
       // 2. Insert welcome system message in #genel and broadcast msg.new
-      const genelRows = [...this.sql.exec(`SELECT id FROM channels WHERE name = 'genel' LIMIT 1`)] as { id: string }[];
+      const genelRows = [
+        ...this.sql.exec(`SELECT id FROM channels WHERE name = 'genel' LIMIT 1`),
+      ] as { id: string }[];
       const genelChanId = genelRows[0]?.id;
       if (genelChanId) {
         const welcomeId = ulid();
@@ -859,9 +864,9 @@ export class GroupDO extends DurableObject<Env> {
     this.send(ws, WsServerEvents.SNAPSHOT, snapshot);
 
     // Send active voice participants across all voice channels (including empty ones to clear stale client state)
-    const voiceChanRows = [
-      ...this.sql.exec(`SELECT id FROM channels WHERE type = 'voice'`),
-    ] as { id: string }[];
+    const voiceChanRows = [...this.sql.exec(`SELECT id FROM channels WHERE type = 'voice'`)] as {
+      id: string;
+    }[];
     for (const chan of voiceChanRows) {
       const room = this.voiceRooms.get(chan.id);
       this.send(ws, WsServerEvents.VOICE_PARTICIPANTS, {
@@ -1007,7 +1012,11 @@ export class GroupDO extends DurableObject<Env> {
     const { channelId, messageId } = parse.data;
 
     const rows = [
-      ...this.sql.exec(`SELECT * FROM messages WHERE id = ? AND channel_id = ?`, messageId, channelId),
+      ...this.sql.exec(
+        `SELECT * FROM messages WHERE id = ? AND channel_id = ?`,
+        messageId,
+        channelId,
+      ),
     ] as unknown as SqlMessageRow[];
 
     if (rows.length === 0 || !rows[0]) {
@@ -1017,9 +1026,7 @@ export class GroupDO extends DurableObject<Env> {
 
     const msg = rows[0];
     const canDelete =
-      msg.author_id === session.userId ||
-      session.role === 'owner' ||
-      session.role === 'admin';
+      msg.author_id === session.userId || session.role === 'owner' || session.role === 'admin';
 
     if (!canDelete) {
       this.sendError(ws, 'FORBIDDEN', 'Bu mesajı silme yetkiniz yok');
@@ -1034,11 +1041,7 @@ export class GroupDO extends DurableObject<Env> {
     });
   }
 
-  private handleReactAdd(
-    ws: WebSocket,
-    session: WsSessionAttachment,
-    envelope: WsEnvelope,
-  ): void {
+  private handleReactAdd(ws: WebSocket, session: WsSessionAttachment, envelope: WsEnvelope): void {
     const parse = ClientReactAddPayloadSchema.safeParse(envelope.d);
     if (!parse.success) {
       this.sendError(ws, 'INVALID_PAYLOAD', 'Tepki parametreleri geçersiz');
@@ -1321,11 +1324,7 @@ export class GroupDO extends DurableObject<Env> {
     );
   }
 
-  private handleVoiceJoin(
-    ws: WebSocket,
-    session: WsSessionAttachment,
-    envelope: WsEnvelope,
-  ): void {
+  private handleVoiceJoin(ws: WebSocket, session: WsSessionAttachment, envelope: WsEnvelope): void {
     const parse = ClientVoiceJoinPayloadSchema.safeParse(envelope.d);
     if (!parse.success) {
       this.sendError(ws, 'INVALID_PAYLOAD', 'Ses kanalına katılım parametreleri geçersiz');
@@ -1333,7 +1332,9 @@ export class GroupDO extends DurableObject<Env> {
     }
 
     const { channelId } = parse.data;
-    const chanRows = [...this.sql.exec(`SELECT id, type FROM channels WHERE id = ?`, channelId)] as { id: string; type: string }[];
+    const chanRows = [
+      ...this.sql.exec(`SELECT id, type FROM channels WHERE id = ?`, channelId),
+    ] as { id: string; type: string }[];
     if (chanRows.length === 0 || chanRows[0]?.type !== 'voice') {
       this.sendError(ws, 'CHANNEL_NOT_FOUND', 'Ses kanalı bulunamadı');
       return;
@@ -1393,10 +1394,7 @@ export class GroupDO extends DurableObject<Env> {
     }
   }
 
-  private handleVoiceLeave(
-    session: WsSessionAttachment,
-    envelope: WsEnvelope,
-  ): void {
+  private handleVoiceLeave(session: WsSessionAttachment, envelope: WsEnvelope): void {
     const parse = ClientVoiceLeavePayloadSchema.safeParse(envelope.d);
     if (!parse.success) return;
 
@@ -1436,10 +1434,7 @@ export class GroupDO extends DurableObject<Env> {
     );
   }
 
-  private handleVoiceSignal(
-    session: WsSessionAttachment,
-    envelope: WsEnvelope,
-  ): void {
+  private handleVoiceSignal(session: WsSessionAttachment, envelope: WsEnvelope): void {
     const parse = ClientVoiceSignalPayloadSchema.safeParse(envelope.d);
     if (!parse.success) return;
 
@@ -1453,10 +1448,7 @@ export class GroupDO extends DurableObject<Env> {
     });
   }
 
-  private handleVoiceState(
-    session: WsSessionAttachment,
-    envelope: WsEnvelope,
-  ): void {
+  private handleVoiceState(session: WsSessionAttachment, envelope: WsEnvelope): void {
     const parse = ClientVoiceStatePayloadSchema.safeParse(envelope.d);
     if (!parse.success) return;
 
@@ -1484,10 +1476,7 @@ export class GroupDO extends DurableObject<Env> {
     });
   }
 
-  private handleFileSignal(
-    session: WsSessionAttachment,
-    envelope: WsEnvelope,
-  ): void {
+  private handleFileSignal(session: WsSessionAttachment, envelope: WsEnvelope): void {
     const parse = ClientFileSignalPayloadSchema.safeParse(envelope.d);
     if (!parse.success) return;
 
@@ -1541,10 +1530,7 @@ export class GroupDO extends DurableObject<Env> {
     this.broadcast(WsServerEvents.SHARE_STARTED, shareState, envelope.id);
   }
 
-  private handleShareStop(
-    session: WsSessionAttachment,
-    envelope: WsEnvelope,
-  ): void {
+  private handleShareStop(session: WsSessionAttachment, envelope: WsEnvelope): void {
     const parse = ClientShareStopPayloadSchema.safeParse(envelope.d);
     if (!parse.success) return;
 
@@ -1567,10 +1553,7 @@ export class GroupDO extends DurableObject<Env> {
     );
   }
 
-  private handleShareSignal(
-    session: WsSessionAttachment,
-    envelope: WsEnvelope,
-  ): void {
+  private handleShareSignal(session: WsSessionAttachment, envelope: WsEnvelope): void {
     const parse = ClientShareSignalPayloadSchema.safeParse(envelope.d);
     if (!parse.success) return;
 

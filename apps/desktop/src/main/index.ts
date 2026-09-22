@@ -1,7 +1,19 @@
 import { existsSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import { app, shell, BrowserWindow, ipcMain, Tray, Menu, nativeImage, Notification, session, clipboard, desktopCapturer } from 'electron';
+import {
+  app,
+  shell,
+  BrowserWindow,
+  ipcMain,
+  Tray,
+  Menu,
+  nativeImage,
+  Notification,
+  session,
+  clipboard,
+  desktopCapturer,
+} from 'electron';
 import { electronApp, optimizer, is } from '@electron-toolkit/utils';
 import { APP_NAME, PROTOCOL_VERSION } from '@echo/shared';
 import { IdentityManager } from './identity';
@@ -88,7 +100,7 @@ function createWindow(): void {
     height: 680,
     minWidth: 700,
     minHeight: 500,
-    x: profileName === 'user2' ? 940 : (profileName ? 980 : 30),
+    x: profileName === 'user2' ? 940 : profileName ? 980 : 30,
     y: 50,
     show: false,
     autoHideMenuBar: true,
@@ -99,6 +111,7 @@ function createWindow(): void {
       contextIsolation: true,
       nodeIntegration: false,
       webSecurity: true,
+      backgroundThrottling: false,
     },
   });
 
@@ -291,13 +304,16 @@ if (!gotTheLock) {
       return { openAtLogin: settings.openAtLogin };
     });
 
-    ipcMain.handle('desktop:setLoginItemSettings', (_, { openAtLogin }: { openAtLogin: boolean }) => {
-      app.setLoginItemSettings({
-        openAtLogin,
-        openAsHidden: true,
-      });
-      return true;
-    });
+    ipcMain.handle(
+      'desktop:setLoginItemSettings',
+      (_, { openAtLogin }: { openAtLogin: boolean }) => {
+        app.setLoginItemSettings({
+          openAtLogin,
+          openAsHidden: true,
+        });
+        return true;
+      },
+    );
 
     createTray();
     createWindow();

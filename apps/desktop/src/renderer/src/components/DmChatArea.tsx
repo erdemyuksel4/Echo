@@ -58,20 +58,38 @@ export const DmChatArea: React.FC<DmChatAreaProps> = ({ peer }) => {
         case 'text':
           return <span key={idx}>{token.content}</span>;
         case 'bold':
-          return <strong key={idx} className="font-bold text-white">{token.content}</strong>;
+          return (
+            <strong key={idx} className="font-bold text-white">
+              {token.content}
+            </strong>
+          );
         case 'italic':
-          return <em key={idx} className="italic text-slate-200">{token.content}</em>;
+          return (
+            <em key={idx} className="italic text-slate-200">
+              {token.content}
+            </em>
+          );
         case 'strike':
-          return <del key={idx} className="line-through text-slate-400">{token.content}</del>;
+          return (
+            <del key={idx} className="line-through text-slate-400">
+              {token.content}
+            </del>
+          );
         case 'code':
           return (
-            <code key={idx} className="rounded bg-slate-950 px-1.5 py-0.5 font-mono text-xs text-indigo-300 border border-slate-800">
+            <code
+              key={idx}
+              className="rounded bg-slate-950 px-1.5 py-0.5 font-mono text-xs text-indigo-300 border border-slate-800"
+            >
               {token.content}
             </code>
           );
         case 'codeblock':
           return (
-            <pre key={idx} className="my-2 overflow-x-auto rounded-lg border border-slate-800 bg-slate-950 p-3 font-mono text-xs text-slate-200 shadow-inner">
+            <pre
+              key={idx}
+              className="my-2 overflow-x-auto rounded-lg border border-slate-800 bg-slate-950 p-3 font-mono text-xs text-slate-200 shadow-inner"
+            >
               <code>{token.content}</code>
             </pre>
           );
@@ -82,7 +100,9 @@ export const DmChatArea: React.FC<DmChatAreaProps> = ({ peer }) => {
               key={idx}
               onClick={() => setRevealedSpoilers((prev) => ({ ...prev, [idx]: !prev[idx] }))}
               className={`cursor-pointer rounded px-1.5 py-0.5 transition ${
-                isRevealed ? 'bg-slate-800 text-slate-200' : 'bg-slate-700 text-transparent hover:bg-slate-600 select-none'
+                isRevealed
+                  ? 'bg-slate-800 text-slate-200'
+                  : 'bg-slate-700 text-transparent hover:bg-slate-600 select-none'
               }`}
             >
               {token.content}
@@ -180,7 +200,9 @@ export const DmChatArea: React.FC<DmChatAreaProps> = ({ peer }) => {
                 </div>
 
                 <div className={`max-w-[75%] ${isMe ? 'items-end' : 'items-start'}`}>
-                  <div className={`flex items-center gap-2 mb-1 ${isMe ? 'justify-end' : 'justify-start'}`}>
+                  <div
+                    className={`flex items-center gap-2 mb-1 ${isMe ? 'justify-end' : 'justify-start'}`}
+                  >
                     <span className="font-semibold text-xs text-white">
                       {isMe ? 'Sen' : msg.fromName}
                     </span>

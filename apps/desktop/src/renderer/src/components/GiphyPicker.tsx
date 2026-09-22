@@ -37,24 +37,27 @@ export const GiphyPicker: React.FC<GiphyPickerProps> = ({ onSelect, onClose }) =
   // Fetch GIFs (trending if empty, search if query typed)
   useEffect(() => {
     let cancelled = false;
-    const timer = setTimeout(async () => {
-      setLoading(true);
-      try {
-        const endpoint = query.trim()
-          ? `${SERVER_HTTP_URL}/api/giphy/search?q=${encodeURIComponent(query.trim())}&limit=24`
-          : `${SERVER_HTTP_URL}/api/giphy/search?limit=24`;
+    const timer = setTimeout(
+      async () => {
+        setLoading(true);
+        try {
+          const endpoint = query.trim()
+            ? `${SERVER_HTTP_URL}/api/giphy/search?q=${encodeURIComponent(query.trim())}&limit=24`
+            : `${SERVER_HTTP_URL}/api/giphy/search?limit=24`;
 
-        const res = await fetch(endpoint);
-        if (res.ok && !cancelled) {
-          const data = (await res.json()) as { results: GiphyItem[] };
-          setResults(data.results || []);
+          const res = await fetch(endpoint);
+          if (res.ok && !cancelled) {
+            const data = (await res.json()) as { results: GiphyItem[] };
+            setResults(data.results || []);
+          }
+        } catch (err) {
+          console.warn('Failed to load GIFs:', err);
+        } finally {
+          if (!cancelled) setLoading(false);
         }
-      } catch (err) {
-        console.warn('Failed to load GIFs:', err);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }, query ? 350 : 0);
+      },
+      query ? 350 : 0,
+    );
 
     return () => {
       cancelled = true;

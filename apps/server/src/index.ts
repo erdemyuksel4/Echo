@@ -273,10 +273,7 @@ app.delete('/api/groups/:id', async (c) => {
 
   if (!delRes.ok) {
     const errData = (await delRes.json()) as { error?: string };
-    return c.json(
-      { error: errData.error ?? 'Grup silinemedi' },
-      delRes.status as 400 | 403 | 404,
-    );
+    return c.json({ error: errData.error ?? 'Grup silinemedi' }, delRes.status as 400 | 403 | 404);
   }
 
   const delData = (await delRes.json()) as { success: boolean; memberUserIds?: string[] };
@@ -504,11 +501,7 @@ app.get('/api/giphy/search', async (c) => {
 
 // ── DM: Helper — check common group membership ───────────────────────────────
 
-async function hasCommonGroup(
-  env: Env,
-  userIdA: string,
-  userIdB: string,
-): Promise<boolean> {
+async function hasCommonGroup(env: Env, userIdA: string, userIdB: string): Promise<boolean> {
   try {
     const [stubA, stubB] = [
       env.USER_DO.get(env.USER_DO.idFromName(userIdA)),

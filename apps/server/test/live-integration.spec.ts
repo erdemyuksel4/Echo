@@ -76,65 +76,69 @@ describe('Live Group Creation & Join Flow', () => {
     const wsUrl = serverUrl.replace(/^http/, 'ws') + `/ws/group/${createData.groupId}`;
     console.log('Connecting to WebSocket:', wsUrl);
 
-    const wsPromise = new Promise<{ authOk: boolean; snapshotReceived: boolean }>((resolve, reject) => {
-      const ws = new WebSocket(wsUrl);
-      let authOk = false;
-      let snapshotReceived = false;
+    const wsPromise = new Promise<{ authOk: boolean; snapshotReceived: boolean }>(
+      (resolve, reject) => {
+        const ws = new WebSocket(wsUrl);
+        let authOk = false;
+        let snapshotReceived = false;
 
-      const timeout = setTimeout(() => {
-        ws.close();
-        reject(new Error(`WebSocket timeout. authOk=${authOk}, snapshotReceived=${snapshotReceived}`));
-      }, 10000);
+        const timeout = setTimeout(() => {
+          ws.close();
+          reject(
+            new Error(`WebSocket timeout. authOk=${authOk}, snapshotReceived=${snapshotReceived}`),
+          );
+        }, 10000);
 
-      ws.addEventListener('open', () => {
-        console.log('WS OPEN, sending auth...');
-        const authTs = Date.now();
-        const authPayload = `echo-auth|${createData.groupId}|${authTs}`;
-        const authSig = signMessage(authPayload, owner.privateKey);
+        ws.addEventListener('open', () => {
+          console.log('WS OPEN, sending auth...');
+          const authTs = Date.now();
+          const authPayload = `echo-auth|${createData.groupId}|${authTs}`;
+          const authSig = signMessage(authPayload, owner.privateKey);
 
-        ws.send(
-          JSON.stringify({
-            v: 1,
-            t: 'auth',
-            id: 'auth-1',
-            d: {
-              userId: createData.ownerId,
-              pubkey: owner.publicKeyHex,
-              ts: authTs,
-              sig: authSig,
-            },
-          }),
-        );
-      });
+          ws.send(
+            JSON.stringify({
+              v: 1,
+              t: 'auth',
+              id: 'auth-1',
+              d: {
+                userId: createData.ownerId,
+                pubkey: owner.publicKeyHex,
+                ts: authTs,
+                sig: authSig,
+              },
+            }),
+          );
+        });
 
-      ws.addEventListener('message', (event: MessageEvent) => {
-        console.log('WS MSG:', event.data);
-        try {
-          const msg = JSON.parse(event.data as string);
-          if (msg.t === 'auth.ok') authOk = true;
-          if (msg.t === 'snapshot') snapshotReceived = true;
-          if (authOk && snapshotReceived) {
-            clearTimeout(timeout);
-            ws.close();
-            resolve({ authOk, snapshotReceived });
+        ws.addEventListener('message', (event: MessageEvent) => {
+          console.log('WS MSG:', event.data);
+          try {
+            const msg = JSON.parse(event.data as string);
+            if (msg.t === 'auth.ok') authOk = true;
+            if (msg.t === 'snapshot') snapshotReceived = true;
+            if (authOk && snapshotReceived) {
+              clearTimeout(timeout);
+              ws.close();
+              resolve({ authOk, snapshotReceived });
+            }
+          } catch (e) {
+            console.error('Parse error:', e);
           }
-        } catch (e) {
-          console.error('Parse error:', e);
-        }
-      });
+        });
 
-      ws.addEventListener('error', (err: Event) => {
-        console.error('WS ERR:', err);
-      });
+        ws.addEventListener('error', (err: Event) => {
+          console.error('WS ERR:', err);
+        });
 
-      ws.addEventListener('close', (event: CloseEvent) => {
-        console.log('WS CLOSE:', event.code, event.reason);
-        clearTimeout(timeout);
-        if (!authOk || !snapshotReceived) {
-          reject(new Error(`WS closed early with code ${event.code}: ${event.reason}`));
-        }
-      });
-    });
+        ws.addEventListener('close', (event: CloseEvent) => {
+          console.log('WS CLOSE:', event.code, event.reason);
+          clearTimeout(timeout);
+          if (!authOk || !snapshotReceived) {
+            reject(new Error(`WS closed early with code ${event.code}: ${event.reason}`));
+          }
+        });
+      },
+    );
 
     const wsResult = await wsPromise;
     expect(wsResult.authOk).toBe(true);

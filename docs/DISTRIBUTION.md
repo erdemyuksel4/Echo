@@ -58,6 +58,6 @@ Echo açık kaynaklı ve bağımsız bir proje olduğu için yıllık yüzlerce 
 - Sol alttaki profil çubuğundaki **Ayarlar (Çark simgesi)** ile:
   - **Mikrofon & Hoparlör Seçimi:** Kullanılacak donanım aygıtı seçilebilir ve "Mikrofonu Test Et" ile yeşil ses çubuğundan canlı test edilebilir.
   - **Ses İletim Modu:**
-    - *Ses Etkinliği (VAD):* Discord'daki gibi konuştukça otomatik iletir.
-    - *Bas-Konuş (Push-to-Talk):* İstenen tuş (örn. V, CapsLock, Space) atanarak sadece basılı tutulduğunda ses iletilir.
+    - _Ses Etkinliği (VAD):_ Discord'daki gibi konuştukça otomatik iletir.
+    - _Bas-Konuş (Push-to-Talk):_ İstenen tuş (örn. V, CapsLock, Space) atanarak sadece basılı tutulduğunda ses iletilir.
   - **Windows ile Birlikte Başlat:** Bilgisayar her açıldığında Echo'nun arka planda otomatik başlaması tek tıkla açılabilir.

@@ -3,7 +3,8 @@
 ## Hedef
 
 Discord benzeri sesli kanal altyapısını kurmak:
-1. **WebRTC Tam Mesh Ses Motoru:** 
+
+1. **WebRTC Tam Mesh Ses Motoru:**
    - 10 kişiye kadar tam mesh ses bağlantısı (`RTCPeerConnection`).
    - "Perfect negotiation" deseni (yeni katılan kişi mevcut üyelere offer yollar, çakışma yaşanmaz).
    - Opus codec, mono, DTX ve FEC aktif; gürültü bastırma, yankı önleme ve otomatik kazanç kontrolü.
@@ -24,6 +25,7 @@ Discord benzeri sesli kanal altyapısını kurmak:
 ## Dokunulacak Dosyalar
 
 ### 1. Ortak Paket (`packages/shared`)
+
 - `packages/shared/src/schemas/voice.ts`:
   - `VoiceJoinPayloadSchema`, `VoiceLeavePayloadSchema`, `VoiceSignalPayloadSchema`, `VoiceStatePayloadSchema`.
   - WebRTC sinyal tipleri (`offer`, `answer`, `candidate`).
@@ -33,6 +35,7 @@ Discord benzeri sesli kanal altyapısını kurmak:
 - `packages/shared/src/index.ts`: Ses şemalarının dışa aktarımı.
 
 ### 2. Sunucu (`apps/server`)
+
 - `apps/server/src/index.ts`:
   - `GET /api/turn`: Cloudflare Calls TURN kimlik bilgilerini üreten (veya STUN listesi döndüren) endpoint.
 - `apps/server/src/durable/GroupDO.ts`:
@@ -43,6 +46,7 @@ Discord benzeri sesli kanal altyapısını kurmak:
   - `voice.signal`: Offer/Answer/ICE candidate paketlerini hedeflenen kullanıcıya iletme (`targetUserId`).
 
 ### 3. Masaüstü Uygulaması (`apps/desktop`)
+
 - `apps/desktop/src/renderer/src/services/webrtc.ts`:
   - `WebRtcVoiceService`: `RTCPeerConnection` havuzu, yerel mikrofon akışı (`navigator.mediaDevices.getUserMedia`), "perfect negotiation", ICE candidate yönetimi, `AudioContext` ses seviyesi dedektörü.
   - `getPeerStats()`: Eş başına RTT, packet loss ve candidate type istatistikleri.
@@ -62,14 +66,14 @@ Discord benzeri sesli kanal altyapısını kurmak:
 ## Riskler ve Önlemler
 
 1. **Simetrik NAT ve P2P Bağlantı Engeli:**
-   - *Risk:* Üniversite, yurt veya bazı mobil operatör ağlarında P2P STUN bağlantıları doğrudan kurulamaz.
-   - *Önlem:* Cloudflare STUN birincil olarak kullanılır. Cloudflare Calls TURN bilgileri yapılandırıldığında otomatik devreye girer. Bağlantı Tanı Paneli aday türünü (`host` / `srflx` / `relay`) net gösterir, böylece sorunun kaynağı kullanıcıya şeffafça açıklanır.
+   - _Risk:_ Üniversite, yurt veya bazı mobil operatör ağlarında P2P STUN bağlantıları doğrudan kurulamaz.
+   - _Önlem:_ Cloudflare STUN birincil olarak kullanılır. Cloudflare Calls TURN bilgileri yapılandırıldığında otomatik devreye girer. Bağlantı Tanı Paneli aday türünü (`host` / `srflx` / `relay`) net gösterir, böylece sorunun kaynağı kullanıcıya şeffafça açıklanır.
 2. **Yarış Durumu (Glare / Simultaneous Offer):**
-   - *Risk:* İki taraf aynı anda birbirine offer gönderirse WebRTC çakışması yaşanır.
-   - *Önlem:* Kuralımız nettir: **Yeni katılan kişi (veya ID'si alfabetik büyük olan) teklif (offer) yollar.** "Polite peer" (perfect negotiation) deseni uygulanarak çakışmalar matematiksel olarak önlenir.
+   - _Risk:_ İki taraf aynı anda birbirine offer gönderirse WebRTC çakışması yaşanır.
+   - _Önlem:_ Kuralımız nettir: **Yeni katılan kişi (veya ID'si alfabetik büyük olan) teklif (offer) yollar.** "Polite peer" (perfect negotiation) deseni uygulanarak çakışmalar matematiksel olarak önlenir.
 3. **Mikrofon İzinleri ve Electron Sandbox:**
-   - *Risk:* Electron sandbox içinde mikrofon izni verilmezse `getUserMedia` hata verir.
-   - *Önlem:* `apps/desktop/src/main/index.ts` içinde `session.defaultSession.setPermissionRequestHandler` ile `media` iznine açıkça izin verilir.
+   - _Risk:_ Electron sandbox içinde mikrofon izni verilmezse `getUserMedia` hata verir.
+   - _Önlem:_ `apps/desktop/src/main/index.ts` içinde `session.defaultSession.setPermissionRequestHandler` ile `media` iznine açıkça izin verilir.
 
 ---
 

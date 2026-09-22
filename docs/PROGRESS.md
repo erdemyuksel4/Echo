@@ -4,18 +4,18 @@ Bu dosya her faz ve görev sonunda güncellenir.
 
 ## Faz Durum Özeti
 
-| Faz   | Açıklama                                | Durum      | Dal                    | Notlar                                                                     |
-| ----- | --------------------------------------- | ---------- | ---------------------- | -------------------------------------------------------------------------- |
-| Faz 0 | İskelet (Monorepo, TS, Lint, Test, Dev) | Tamamlandı | `faz-0-iskelet`        | Monorepo, shared paket, sunucu ve masaüstü iskeleti kuruldu, testler geçti |
-| Faz 1 | Kimlik, grup, kanal, yazılı sohbet      | Tamamlandı | `faz-1-kimlik-sohbet`  | Ed25519 kimlik, safeStorage, GroupDO SQLite, WebSocket hibernation, UI    |
-| Faz 2 | Zengin mesajlaşma ve bildirim           | Tamamlandı | `faz-2-zengin-mesajlasma` | Yanıtla, düzenle, sil, emoji tepkisi, safe Markdown/spoiler, tray, ses, bildirim |
-| Faz 3 | Sesli sohbet ve TURN                    | Tamamlandı | `faz-3-sesli-sohbet`   | WebRTC Tam Mesh, Cloudflare STUN/TURN, VAD konuşma halkası, ses paneli ve bağlantı tanı modalı |
-| Faz 4 | Medya                                   | Tamamlandı | `faz-4-medya`          | Görsel/GIF yükleme (server), P2P dosya paylaşımı (WebRTC DataChannel), lightbox görüntüleyici, sürükle-bırak, Ctrl+V paste, Giphy picker |
-| Faz 5 | DM                                      | Tamamlandı | `faz-5-dm`             | UserDO çift taraflı yazım, /ws/user WS endpoint, dm_threads, dm_messages, DmChatArea, MemberList DM başlatma |
-| Faz 6 | Ekran paylaşımı (mesh)                  | Tamamlandı | `faz-6-ekran-paylasimi`| desktopCapturer, 720p30/1080p kalite ön ayarları, ScreenShareTransport, MeshTransport, ScreenShareViewer |
-| Faz 7 | SFU (kapılı)                            | Atlandı    | -                      | Patron kararıyla şimdilik atlandı (P2P Mesh yeterli)                       |
-| Faz 8 | Cilalama ve dağıtım                     | Tamamlandı | `faz-8-cilalama-dagitim`| Bas-konuş, Windows ile başlat, boş durumlar, NSIS tek tıkla .exe kurulumu  |
-| Faz 9 | Kamera (Webcam)                         | Tamamlandı | `faz-9-kamera`         | WebRTC 480p24 mesh kamera yayını, VoiceStageView video grid, Ayarlar kamera seçici & ayna testi |
+| Faz   | Açıklama                                | Durum      | Dal                       | Notlar                                                                                                                                   |
+| ----- | --------------------------------------- | ---------- | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| Faz 0 | İskelet (Monorepo, TS, Lint, Test, Dev) | Tamamlandı | `faz-0-iskelet`           | Monorepo, shared paket, sunucu ve masaüstü iskeleti kuruldu, testler geçti                                                               |
+| Faz 1 | Kimlik, grup, kanal, yazılı sohbet      | Tamamlandı | `faz-1-kimlik-sohbet`     | Ed25519 kimlik, safeStorage, GroupDO SQLite, WebSocket hibernation, UI                                                                   |
+| Faz 2 | Zengin mesajlaşma ve bildirim           | Tamamlandı | `faz-2-zengin-mesajlasma` | Yanıtla, düzenle, sil, emoji tepkisi, safe Markdown/spoiler, tray, ses, bildirim                                                         |
+| Faz 3 | Sesli sohbet ve TURN                    | Tamamlandı | `faz-3-sesli-sohbet`      | WebRTC Tam Mesh, Cloudflare STUN/TURN, VAD konuşma halkası, ses paneli ve bağlantı tanı modalı                                           |
+| Faz 4 | Medya                                   | Tamamlandı | `faz-4-medya`             | Görsel/GIF yükleme (server), P2P dosya paylaşımı (WebRTC DataChannel), lightbox görüntüleyici, sürükle-bırak, Ctrl+V paste, Giphy picker |
+| Faz 5 | DM                                      | Tamamlandı | `faz-5-dm`                | UserDO çift taraflı yazım, /ws/user WS endpoint, dm_threads, dm_messages, DmChatArea, MemberList DM başlatma                             |
+| Faz 6 | Ekran paylaşımı (mesh)                  | Tamamlandı | `faz-6-ekran-paylasimi`   | desktopCapturer, 720p30/1080p kalite ön ayarları, ScreenShareTransport, MeshTransport, ScreenShareViewer                                 |
+| Faz 7 | SFU (kapılı)                            | Atlandı    | -                         | Patron kararıyla şimdilik atlandı (P2P Mesh yeterli)                                                                                     |
+| Faz 8 | Cilalama ve dağıtım                     | Tamamlandı | `faz-8-cilalama-dagitim`  | Bas-konuş, Windows ile başlat, boş durumlar, NSIS tek tıkla .exe kurulumu                                                                |
+| Faz 9 | Kamera (Webcam)                         | Tamamlandı | `faz-9-kamera`            | WebRTC 480p24 mesh kamera yayını, VoiceStageView video grid, Ayarlar kamera seçici & ayna testi                                          |
 
 ## Faz 0 — Kabul Kriterleri ve Gerçekleşenler
 
@@ -69,7 +69,7 @@ Bu dosya her faz ve görev sonunda güncellenir.
 - [x] **Zengin Mesajlaşma (`@echo/shared`):**
   - Mesaj şemasına yanıt (`replyTo`, `replyToAuthorName`, `replyToContent`), düzenleme (`editedAt`), silme (`deleted`) ve emoji tepkileri (`reactions: Record<string, string[]>`) alanları eklendi.
   - Güvenli Markdown ayrıştırıcı (`parseMarkdownTokens`, `renderSafeHtml`): XSS açıklarına karşı (`<script>`, `onerror`, `javascript:`, `data:`) tam koruma.
-  - Discord tarzı biçimlendirme: Kalın (`**`), İtalik (`*` / `_`), Üstü çizili (`~~`), Satır içi kod (`` ` ``), Kod bloğu (```` ``` ````), Tıklanabilir Spoiler (`||...||`), Otomatik ve etiketli güvenli bağlantılar, `@kullanıcı` ve `@everyone` anmaları.
+  - Discord tarzı biçimlendirme: Kalın (`**`), İtalik (`*` / `_`), Üstü çizili (`~~`), Satır içi kod (`` ` ``), Kod bloğu (` ``` `), Tıklanabilir Spoiler (`||...||`), Otomatik ve etiketli güvenli bağlantılar, `@kullanıcı` ve `@everyone` anmaları.
 - [x] **Sunucu Mimarisi (`apps/server`):**
   - SQLite `reactions` tablosu (`message_id, user_id, emoji`).
   - Mesaj tablosu şema göçü (`reply_to_author_name`, `reply_to_content`).
@@ -159,6 +159,7 @@ Bu dosya her faz ve görev sonunda güncellenir.
   - `pnpm test`: 11 test dosyası, 46 testin tamamı (%100) başarıyla geçti.
 
 ### Bilinen Limitler / Açık İşler
+
 - Görsel URL'leri `http://localhost:8787` ile hardcode edilmiş; canlıya almada `ARCHITECTURE.md`'de tanımlı gerçek Worker URL'sine güncellenmesi gerekir.
 - P2P dosya indirme, gönderen kullanıcı çevrimiçi olduğunda çalışır; çevrimdışıysa dosya alınamaz (P2P'nin doğal kısıtı).
 
@@ -321,3 +322,17 @@ Bu dosya her faz ve görev sonunda güncellenir.
   - `pnpm test`: 14 test dosyası, 65 testin tamamı (%100) başarıyla geçti.
   - `pnpm --filter @echo/desktop build`: Electron derlemesi başarıyla tamamlandı.
 
+## Sekme & Ayarlar Geçişlerinde Sunucu Bağlantı Kopması Düzeltmesi
+
+- [x] **WebSocket Pre-Auth Mesaj Kuyruğu (`apps/desktop/src/renderer/src/services/websocket.ts`):**
+  - Kanal veya sekme geçişlerinde (`fetchHistory` vb.) kimlik doğrulaması (`AUTH_OK`) tamamlanmadan önce giden isteklerin Cloudflare DO tarafından `4001 Unauthorized` ile soketi kapatmasını önlemek için `pendingQueue` ve `isAuthenticated` kontrolü eklendi.
+  - Ön kimlik doğrulama tamamlanana kadar tüm giden mesajlar sıralı şekilde tamponlanır ve `AUTH_OK` alındığında otomatik olarak sırayla gönderilir.
+  - Olası anlık gecikmeler veya zaman damgası farklarında 4001 hatalarında hemen pes etmek yerine 3 denemeye kadar yeniden kimlik doğrulama ile bağlanma yeteneği getirildi.
+- [x] **Sekme ve Grup Arka Plan Soket Yönetimi (`websocket.ts` & `Sidebar.tsx`):**
+  - "Ana Sayfa" (DM) veya grup sekmeleri arasında geçiş yaparken soket gereksiz yere tamamen kapatılmak yerine hazırda (`OPEN`) tutulur. Böylece kullanıcı bir sekmeye veya gruba geri döndüğünde 0ms gecikmeyle bağlantı anında korunur.
+- [x] **Electron Arka Plan Kısıtlamasını Kapatma (`apps/desktop/src/main/index.ts`):**
+  - `backgroundThrottling: false` tanımlanarak, pencere odağı kaybolduğunda veya pencereler arası geçişte Chromium'un timer'ları ve WebSocket ping döngüsünü durdurması/yavaşlatması engellendi.
+- [x] **Ayarlar Cihaz Dinleme Döngüsü Düzeltmesi (`SettingsModal.tsx`):**
+  - Cihaz listeleme efektinin bağımlılıkları `[isOpen]` olarak izole edildi ve iç fonksiyonel state güncelleyicileriyle sonsuz tetiklenme/yeniden çizim döngüsü giderildi.
+- [x] **Protokol & Şema Birim Testleri (`packages/shared/src/__tests__/protocol.test.ts`):**
+  - `AuthPayload` ve `ClientHistoryFetchPayload` şemalarını doğrulayan birim testleri eklendi. Toplam 67 birim testinin tamamı başarıyla geçti.

@@ -28,7 +28,11 @@ export interface EchoApi {
   createIdentity: (displayName: string, avatarColor: string) => Promise<StoredIdentityProfile>;
   signAuth: (targetId: string, timestamp: number) => Promise<SignedAuthResult | null>;
   signPayload: (payload: string) => Promise<SignedAuthResult | null>;
-  showNotification: (options: { title: string; body: string; silent?: boolean }) => Promise<boolean>;
+  showNotification: (options: {
+    title: string;
+    body: string;
+    silent?: boolean;
+  }) => Promise<boolean>;
   setBadgeCount: (count: number) => Promise<boolean>;
   copyToClipboard: (text: string) => Promise<boolean>;
   openExternal: (url: string) => Promise<boolean>;
@@ -38,9 +42,13 @@ export interface EchoApi {
   checkForUpdates: () => Promise<void>;
   downloadUpdate: () => Promise<void>;
   quitAndInstall: () => void;
-  onUpdateStatus: (cb: (data: { status: string; version?: string; error?: string }) => void) => () => void;
+  onUpdateStatus: (
+    cb: (data: { status: string; version?: string; error?: string }) => void,
+  ) => () => void;
   onUpdateAvailable: (cb: (info: { version: string; releaseNotes?: string }) => void) => () => void;
-  onUpdateProgress: (cb: (progress: { percent: number; bytesPerSecond: number }) => void) => () => void;
+  onUpdateProgress: (
+    cb: (progress: { percent: number; bytesPerSecond: number }) => void,
+  ) => () => void;
   onUpdateDownloaded: (cb: (info: { version: string }) => void) => () => void;
 }
 
@@ -60,7 +68,11 @@ const echoApi: EchoApi = {
   signPayload: (payload: string): Promise<SignedAuthResult | null> => {
     return ipcRenderer.invoke('identity:signPayload', { payload });
   },
-  showNotification: (options: { title: string; body: string; silent?: boolean }): Promise<boolean> => {
+  showNotification: (options: {
+    title: string;
+    body: string;
+    silent?: boolean;
+  }): Promise<boolean> => {
     return ipcRenderer.invoke('desktop:notify', options);
   },
   setBadgeCount: (count: number): Promise<boolean> => {
@@ -104,7 +116,9 @@ const echoApi: EchoApi = {
       ipcRenderer.removeListener('updater:status', handler);
     };
   },
-  onUpdateAvailable: (cb: (info: { version: string; releaseNotes?: string }) => void): (() => void) => {
+  onUpdateAvailable: (
+    cb: (info: { version: string; releaseNotes?: string }) => void,
+  ): (() => void) => {
     const handler = (
       _event: Electron.IpcRendererEvent,
       info: { version: string; releaseNotes?: string },

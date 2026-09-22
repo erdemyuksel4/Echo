@@ -144,10 +144,13 @@ export function initAutoUpdater(window: BrowserWindow): void {
     }, 1500);
 
     // Periodic check every 10 minutes
-    setInterval(() => {
-      void autoUpdater.checkForUpdates().catch((err) => {
-        console.warn('[Echo Updater] Periodic check failed:', err);
-      });
-    }, 10 * 60 * 1000);
+    setInterval(
+      () => {
+        void autoUpdater.checkForUpdates().catch((err) => {
+          console.warn('[Echo Updater] Periodic check failed:', err);
+        });
+      },
+      10 * 60 * 1000,
+    );
   }
 }

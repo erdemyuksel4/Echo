@@ -1,7 +1,4 @@
-import {
-  SCREEN_QUALITY_PRESETS,
-  type ScreenQualityPreset,
-} from '@echo/shared';
+import { SCREEN_QUALITY_PRESETS, type ScreenQualityPreset } from '@echo/shared';
 import { wsService } from '../websocket';
 
 export interface ScreenShareTransport {
@@ -139,7 +136,9 @@ export class MeshScreenShareTransport implements ScreenShareTransport {
         // Publisher received answer from viewer
         const pc = this.viewerPcs.get(fromUserId);
         if (pc && signal.sdp) {
-          await pc.setRemoteDescription(new RTCSessionDescription({ type: 'answer', sdp: signal.sdp }));
+          await pc.setRemoteDescription(
+            new RTCSessionDescription({ type: 'answer', sdp: signal.sdp }),
+          );
         }
         break;
       }
@@ -162,7 +161,10 @@ export class MeshScreenShareTransport implements ScreenShareTransport {
     }
   }
 
-  private async handleWatchRequestFromViewer(viewerUserId: string, channelId: string): Promise<void> {
+  private async handleWatchRequestFromViewer(
+    viewerUserId: string,
+    channelId: string,
+  ): Promise<void> {
     if (!this.localStream) {
       console.warn('Watch request received but no local screen stream available');
       return;
@@ -196,7 +198,11 @@ export class MeshScreenShareTransport implements ScreenShareTransport {
     };
 
     pc.onconnectionstatechange = () => {
-      if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed' || pc.connectionState === 'closed') {
+      if (
+        pc.connectionState === 'disconnected' ||
+        pc.connectionState === 'failed' ||
+        pc.connectionState === 'closed'
+      ) {
         pc.close();
         this.viewerPcs.delete(viewerUserId);
       }
@@ -215,7 +221,11 @@ export class MeshScreenShareTransport implements ScreenShareTransport {
     }
   }
 
-  private async handleOfferFromPublisher(publisherUserId: string, channelId: string, sdp: string): Promise<void> {
+  private async handleOfferFromPublisher(
+    publisherUserId: string,
+    channelId: string,
+    sdp: string,
+  ): Promise<void> {
     let pc = this.watchingPcs.get(publisherUserId);
     if (!pc) {
       pc = new RTCPeerConnection({ iceServers: this.iceServers });
@@ -259,7 +269,10 @@ export class MeshScreenShareTransport implements ScreenShareTransport {
     try {
       const transceivers = pc.getTransceivers();
       for (const transceiver of transceivers) {
-        if (transceiver.receiver.track.kind === 'video' || transceiver.sender.track?.kind === 'video') {
+        if (
+          transceiver.receiver.track.kind === 'video' ||
+          transceiver.sender.track?.kind === 'video'
+        ) {
           const capabilities = RTCRtpReceiver.getCapabilities('video');
           if (capabilities?.codecs) {
             const preferred = capabilities.codecs.filter(

@@ -55,8 +55,8 @@ export const MemberList: React.FC = () => {
                 isSpeakingMember
                   ? 'text-emerald-300 font-semibold'
                   : member.status === 'online'
-                  ? 'text-slate-200'
-                  : 'text-slate-500'
+                    ? 'text-slate-200'
+                    : 'text-slate-500'
               }`}
             >
               {member.displayName}

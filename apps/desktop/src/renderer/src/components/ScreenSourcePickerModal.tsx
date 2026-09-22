@@ -10,7 +10,10 @@ interface ScreenSourcePickerModalProps {
   onClose: () => void;
 }
 
-export const ScreenSourcePickerModal: React.FC<ScreenSourcePickerModalProps> = ({ isOpen, onClose }) => {
+export const ScreenSourcePickerModal: React.FC<ScreenSourcePickerModalProps> = ({
+  isOpen,
+  onClose,
+}) => {
   const { currentChannelId } = useVoiceStore();
   const { startSharing } = useScreenShareStore();
 
@@ -98,7 +101,9 @@ export const ScreenSourcePickerModal: React.FC<ScreenSourcePickerModalProps> = (
             </div>
             <div>
               <h2 className="text-base font-bold text-white">Ekranını Paylaş</h2>
-              <p className="text-xs text-slate-400">Ses kanalındaki arkadaşlarına ekranını veya bir uygulamayı göster</p>
+              <p className="text-xs text-slate-400">
+                Ses kanalındaki arkadaşlarına ekranını veya bir uygulamayı göster
+              </p>
             </div>
           </div>
           <button
@@ -183,7 +188,11 @@ export const ScreenSourcePickerModal: React.FC<ScreenSourcePickerModalProps> = (
                     </div>
                     <div className="w-full flex items-center gap-1.5 px-1">
                       {source.appIconDataUrl && (
-                        <img src={source.appIconDataUrl} alt="" className="h-3.5 w-3.5 flex-shrink-0" />
+                        <img
+                          src={source.appIconDataUrl}
+                          alt=""
+                          className="h-3.5 w-3.5 flex-shrink-0"
+                        />
                       )}
                       <span className="truncate text-xs font-medium text-slate-200">
                         {source.name}
@@ -216,7 +225,11 @@ export const ScreenSourcePickerModal: React.FC<ScreenSourcePickerModalProps> = (
                         : 'border-slate-800 bg-slate-900 text-slate-400 hover:bg-slate-800 hover:text-white'
                     }`}
                   >
-                    {q === '720p30' ? '720p 30fps' : q === '1080p30' ? '1080p 30fps' : '1080p 60fps'}
+                    {q === '720p30'
+                      ? '720p 30fps'
+                      : q === '1080p30'
+                        ? '1080p 30fps'
+                        : '1080p 60fps'}
                   </button>
                 ))}
               </div>
@@ -259,7 +272,9 @@ export const ScreenSourcePickerModal: React.FC<ScreenSourcePickerModalProps> = (
             {quality === '1080p60' && (
               <div className="flex items-center gap-2 rounded-lg bg-amber-500/10 border border-amber-500/30 p-2.5 text-xs text-amber-300">
                 <AlertTriangle className="h-4 w-4 flex-shrink-0 text-amber-400" />
-                <span>1080p 60fps yüksek bilgisayar performansı ve yükleme (upload) hızı gerektirir.</span>
+                <span>
+                  1080p 60fps yüksek bilgisayar performansı ve yükleme (upload) hızı gerektirir.
+                </span>
               </div>
             )}
 

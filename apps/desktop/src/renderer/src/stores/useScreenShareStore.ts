@@ -24,7 +24,13 @@ interface ScreenShareStoreState {
   setViewingShare: (viewing: ViewingShareState | null) => void;
   setViewerCount: (count: number) => void;
 
-  startSharing: (channelId: string, stream: MediaStream, quality: ScreenQualityPreset, mode: 'motion' | 'detail', hasAudio: boolean) => Promise<void>;
+  startSharing: (
+    channelId: string,
+    stream: MediaStream,
+    quality: ScreenQualityPreset,
+    mode: 'motion' | 'detail',
+    hasAudio: boolean,
+  ) => Promise<void>;
   stopSharing: (channelId: string) => Promise<void>;
   watchStream: (targetUserId: string, displayName: string, channelId: string) => Promise<void>;
   stopWatching: () => void;

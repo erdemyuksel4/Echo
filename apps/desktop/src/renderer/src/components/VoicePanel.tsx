@@ -100,7 +100,10 @@ export const VoicePanel: React.FC = () => {
                   </span>
                 )}
               </div>
-              <div className="truncate text-[11px] text-slate-400 font-medium" title={`${currentChannelName ?? ''} / ${currentGroupName ?? 'Ses'}`}>
+              <div
+                className="truncate text-[11px] text-slate-400 font-medium"
+                title={`${currentChannelName ?? ''} / ${currentGroupName ?? 'Ses'}`}
+              >
                 {currentChannelName} {currentGroupName ? `/ ${currentGroupName}` : '/ RTC Mesh'}
               </div>
             </div>

@@ -60,7 +60,9 @@ export const CreateOrJoinModal: React.FC<Props> = ({ isOpen, onClose }) => {
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Bir hata oluştu';
       if (msg.toLowerCase().includes('fetch') || msg.includes('Failed to fetch')) {
-        setError('Sunucuya bağlanılamadı. Lütfen sunucunun (pnpm dev:server) çalıştığından emin olun.');
+        setError(
+          'Sunucuya bağlanılamadı. Lütfen sunucunun (pnpm dev:server) çalıştığından emin olun.',
+        );
       } else {
         setError(msg);
       }
@@ -111,7 +113,9 @@ export const CreateOrJoinModal: React.FC<Props> = ({ isOpen, onClose }) => {
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Bir hata oluştu';
       if (msg.toLowerCase().includes('fetch') || msg.includes('Failed to fetch')) {
-        setError('Sunucuya bağlanılamadı. Lütfen sunucunun (pnpm dev:server) çalıştığından emin olun.');
+        setError(
+          'Sunucuya bağlanılamadı. Lütfen sunucunun (pnpm dev:server) çalıştığından emin olun.',
+        );
       } else {
         setError(msg);
       }

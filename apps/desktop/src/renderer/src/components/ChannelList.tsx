@@ -39,13 +39,8 @@ export const ChannelList: React.FC = () => {
     unreadCounts,
   } = useChatStore();
 
-  const {
-    currentChannelId,
-    channelParticipants,
-    isSpeaking,
-    isMuted,
-    isDeafened,
-  } = useVoiceStore();
+  const { currentChannelId, channelParticipants, isSpeaking, isMuted, isDeafened } =
+    useVoiceStore();
 
   const [copied, setCopied] = useState(false);
   const [showAddChannel, setShowAddChannel] = useState(false);
@@ -152,9 +147,7 @@ export const ChannelList: React.FC = () => {
             {identity?.displayName.charAt(0).toUpperCase()}
           </div>
           <div className="ml-2.5 flex-1 min-w-0">
-            <div className="truncate text-xs font-semibold text-white">
-              {identity?.displayName}
-            </div>
+            <div className="truncate text-xs font-semibold text-white">{identity?.displayName}</div>
             <div className="text-[10px] text-emerald-400">Çevrimiçi</div>
           </div>
           <div className="flex items-center gap-0.5">
@@ -514,8 +507,8 @@ export const ChannelList: React.FC = () => {
                       activeChannelId === channel.id
                         ? 'bg-slate-800 text-white font-semibold'
                         : isVoiceActive
-                        ? 'bg-emerald-950/40 text-emerald-300 font-semibold border border-emerald-800/40'
-                        : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-200'
+                          ? 'bg-emerald-950/40 text-emerald-300 font-semibold border border-emerald-800/40'
+                          : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-200'
                     }`}
                   >
                     <Volume2
@@ -561,15 +554,15 @@ export const ChannelList: React.FC = () => {
                             </div>
                             <span
                               className={`truncate text-xs ${
-                                speaking
-                                  ? 'text-emerald-300 font-semibold'
-                                  : 'text-slate-300'
+                                speaking ? 'text-emerald-300 font-semibold' : 'text-slate-300'
                               }`}
                             >
                               {p.displayName} {isLocal && '(Sen)'}
                             </span>
 
-                            {activeShares.some((s) => s.channelId === channel.id && s.userId === p.userId) && (
+                            {activeShares.some(
+                              (s) => s.channelId === channel.id && s.userId === p.userId,
+                            ) && (
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();
@@ -669,4 +662,3 @@ export const ChannelList: React.FC = () => {
     </div>
   );
 };
-

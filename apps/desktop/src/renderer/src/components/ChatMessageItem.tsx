@@ -339,7 +339,9 @@ export const ChatMessageItem: React.FC<Props> = ({
         <div className="flex-1 font-medium leading-relaxed text-slate-200">
           {renderContentTokens(message.content)}
         </div>
-        <span className="text-[10px] text-slate-500 font-mono">{formatTime(message.createdAt)}</span>
+        <span className="text-[10px] text-slate-500 font-mono">
+          {formatTime(message.createdAt)}
+        </span>
       </div>
     );
   }
@@ -433,7 +435,9 @@ export const ChatMessageItem: React.FC<Props> = ({
         {/* Header (Author, Time, Edited tag) */}
         <div className="flex items-baseline gap-2">
           <span className="text-xs font-bold text-white select-none">{message.authorName}</span>
-          <span className="text-[10px] text-slate-500 select-none">{formatTime(message.createdAt)}</span>
+          <span className="text-[10px] text-slate-500 select-none">
+            {formatTime(message.createdAt)}
+          </span>
           {message.editedAt && (
             <span className="text-[10px] text-slate-500 italic select-none" title="Düzenlendi">
               (düzenlendi)
@@ -486,9 +490,7 @@ export const ChatMessageItem: React.FC<Props> = ({
           <div className="mt-2 flex flex-col gap-2">
             {message.attachments.map((att) => {
               if (att.type === 'image' || att.type === 'gif') {
-                const imageUrl = att.url.startsWith('/')
-                  ? `${SERVER_HTTP_URL}${att.url}`
-                  : att.url;
+                const imageUrl = att.url.startsWith('/') ? `${SERVER_HTTP_URL}${att.url}` : att.url;
                 return (
                   <button
                     key={att.id}

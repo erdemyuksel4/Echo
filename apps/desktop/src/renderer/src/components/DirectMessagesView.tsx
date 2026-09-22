@@ -36,11 +36,11 @@ export const DirectMessagesView: React.FC = () => {
           </div>
 
           <div>
-            <h2 className="text-xl font-bold text-white">
-              Hoş Geldin, {identity?.displayName}!
-            </h2>
+            <h2 className="text-xl font-bold text-white">Hoş Geldin, {identity?.displayName}!</h2>
             <p className="mt-2 text-xs text-slate-400 leading-relaxed">
-              Burası senin direkt mesajlar merkezin. Sol menüdeki listeden bir arkadaşını seçerek özel mesajlaşabilir ya da üyesi olduğun grupların üye listesinden birine mesaj atabilirsin.
+              Burası senin direkt mesajlar merkezin. Sol menüdeki listeden bir arkadaşını seçerek
+              özel mesajlaşabilir ya da üyesi olduğun grupların üye listesinden birine mesaj
+              atabilirsin.
             </p>
           </div>
 
@@ -68,9 +68,7 @@ export const DirectMessagesView: React.FC = () => {
           {/* Recent DM Threads Quick Links if available */}
           {threads.length > 0 && (
             <div className="rounded-xl border border-slate-800/80 bg-slate-950/40 p-4 text-left">
-              <div className="text-xs font-semibold text-slate-400 mb-2">
-                Son Görüşülenler
-              </div>
+              <div className="text-xs font-semibold text-slate-400 mb-2">Son Görüşülenler</div>
               <div className="space-y-1.5">
                 {threads.slice(0, 5).map((t) => (
                   <button

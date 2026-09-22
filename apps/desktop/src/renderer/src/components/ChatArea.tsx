@@ -273,7 +273,9 @@ export const ChatArea: React.FC = () => {
               #{activeChannel.name} kanalına hoş geldin!
             </h2>
             <p className="text-xs text-slate-400 max-w-lg leading-relaxed">
-              Burası <span className="font-semibold text-slate-200">#{activeChannel.name}</span> kanalının başlangıcı. Arkadaşlarınla sohbet etmeye başlamak için ilk mesajı gönder veya görsel paylaş!
+              Burası <span className="font-semibold text-slate-200">#{activeChannel.name}</span>{' '}
+              kanalının başlangıcı. Arkadaşlarınla sohbet etmeye başlamak için ilk mesajı gönder
+              veya görsel paylaş!
             </p>
           </div>
         ) : (
@@ -303,7 +305,8 @@ export const ChatArea: React.FC = () => {
               <span className="h-1.5 w-1.5 rounded-full bg-indigo-400 animate-bounce" />
             </span>
             <span className="text-[11px] font-medium text-slate-300">
-              {currentTyping.join(', ')} {currentTyping.length === 1 ? 'yazıyor...' : 'yazıyorlar...'}
+              {currentTyping.join(', ')}{' '}
+              {currentTyping.length === 1 ? 'yazıyor...' : 'yazıyorlar...'}
             </span>
           </div>
         )}
@@ -322,7 +325,8 @@ export const ChatArea: React.FC = () => {
             <div className="flex items-center gap-2 truncate">
               <CornerUpLeft className="h-3.5 w-3.5 text-indigo-400 flex-shrink-0" />
               <span>
-                <strong className="text-white">@{replyingTo.authorName}</strong> kullanıcısına yanıt veriliyor:
+                <strong className="text-white">@{replyingTo.authorName}</strong> kullanıcısına yanıt
+                veriliyor:
               </span>
               <span className="truncate italic text-slate-400 max-w-sm">
                 "{replyingTo.content}"
@@ -345,7 +349,10 @@ export const ChatArea: React.FC = () => {
             className={`flex flex-wrap gap-2 rounded-t-lg border-t border-x border-slate-800 bg-slate-950/80 px-3 py-2 ${replyingTo ? '' : ''}`}
           >
             {stagedAttachments.map((att) => (
-              <div key={att.id} className="relative group flex items-center gap-2 rounded-lg bg-slate-900 border border-slate-700 px-2 py-1.5">
+              <div
+                key={att.id}
+                className="relative group flex items-center gap-2 rounded-lg bg-slate-900 border border-slate-700 px-2 py-1.5"
+              >
                 {att.type === 'image' || att.type === 'gif' ? (
                   <img
                     src={att.url.startsWith('/') ? `${SERVER_HTTP_URL}${att.url}` : att.url}
@@ -395,8 +402,19 @@ export const ChatArea: React.FC = () => {
           >
             {isUploading ? (
               <svg className="h-4 w-4 animate-spin text-indigo-400" viewBox="0 0 24 24" fill="none">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                <circle
+                  className="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  strokeWidth="4"
+                />
+                <path
+                  className="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                />
               </svg>
             ) : (
               <Image className="h-4 w-4" />
@@ -431,7 +449,9 @@ export const ChatArea: React.FC = () => {
                   : `#${activeChannel.name} kanalına mesaj gönder`
               }
               className={`w-full border border-slate-800 bg-slate-950 px-4 py-3 pr-10 text-xs text-white placeholder-slate-500 focus:border-indigo-500 focus:outline-none shadow-inner ${
-                replyingTo || stagedAttachments.length > 0 ? 'rounded-b-lg border-t-0' : 'rounded-lg'
+                replyingTo || stagedAttachments.length > 0
+                  ? 'rounded-b-lg border-t-0'
+                  : 'rounded-lg'
               }`}
             />
             <button

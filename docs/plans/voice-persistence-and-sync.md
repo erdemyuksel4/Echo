@@ -1,6 +1,7 @@
 # Ses Kanalı Kalıcılığı ve Katılımcı Senkronizasyonu İyileştirme Planı
 
 ## Hedef
+
 1. Kullanıcı bir sunucuda ses kanalındayken başka sunuculara veya Direkt Mesajlara (DM) geçtiğinde ses kanalından düşmemesi (arka planda ses bağlantısının kesintisiz devam etmesi).
 2. Bir kullanıcı ses kanalından çıktığında katılımcı listesinin tüm istemcilerde anında ve doğru güncellenmesi; gir-çık yapıldığında kimin kanalda olduğunun tutarsızlaşması sorununun kökten çözülmesi.
 
@@ -55,14 +56,16 @@
 ---
 
 ## Riskler ve Önlemler
+
 - **Risk:** Kullanıcı arka arkaya farklı sunuculardaki ses kanallarına tıklarsa soketler karışabilir.
-  - *Önlem:* Yeni bir ses kanalına bağlanmadan önce mevcut ses kanalından temizce ayrılınır (`leaveVoice`), eski ses soketi kapatılır ve yenisine geçilir.
+  - _Önlem:_ Yeni bir ses kanalına bağlanmadan önce mevcut ses kanalından temizce ayrılınır (`leaveVoice`), eski ses soketi kapatılır ve yenisine geçilir.
 - **Risk:** Cloudflare Workers bağlantı sınırları.
-  - *Önlem:* İstemci aynı anda en fazla 2 soket (1 aktif sohbet + 1 arka plan ses) açık tutar. Aynı sunucudaysa tek soket paylaşılır.
+  - _Önlem:_ İstemci aynı anda en fazla 2 soket (1 aktif sohbet + 1 arka plan ses) açık tutar. Aynı sunucudaysa tek soket paylaşılır.
 
 ---
 
 ## Test Yöntemi
+
 1. `pnpm typecheck` ve `pnpm lint` ile statik kod doğrulaması.
 2. `pnpm test` ile mevcut ve yeni birim testlerinin çalıştırılması.
 3. Çoklu pencere / kullanıcı simülasyonu:

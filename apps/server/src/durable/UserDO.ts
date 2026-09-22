@@ -1,10 +1,6 @@
 import { DurableObject } from 'cloudflare:workers';
 import { WsClientEvents, WsServerEvents } from '@echo/shared';
-import type {
-  WsEnvelope,
-  DmMessage,
-  DmThread,
-} from '@echo/shared';
+import type { WsEnvelope, DmMessage, DmThread } from '@echo/shared';
 import {
   ClientDmSendPayloadSchema as DmSendSchema,
   ClientDmHistoryFetchPayloadSchema as DmHistorySchema,
@@ -256,10 +252,7 @@ export class UserDO extends DurableObject<Env> {
         peerId,
         lastReadId,
       );
-      this.sql.exec(
-        `UPDATE dm_threads SET unread_count = 0 WHERE peer_id = ?`,
-        peerId,
-      );
+      this.sql.exec(`UPDATE dm_threads SET unread_count = 0 WHERE peer_id = ?`, peerId);
       return Response.json({ success: true });
     }
 

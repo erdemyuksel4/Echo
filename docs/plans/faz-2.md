@@ -3,6 +3,7 @@
 ## Hedef
 
 Discord benzeri zengin yazılı mesajlaşma deneyimini ve masaüstü bildirim altyapısını kurmak:
+
 1. **Zengin Mesaj İşlemleri:** Mesaja yanıt verme (`replyTo`), mesaj düzenleme (`editedAt`), mesaj silme (`deletedAt`), emoji tepkileri (`reactions`), `@kullanıcı` ve `@everyone` anmaları, spoiler (`||metin||`), güvenli ve sanitize edilmiş Markdown ayrıştırma.
 2. **Bildirim ve Masaüstü Entegrasyonu:** Electron ana sürecinde Windows sistem bildirimleri (`Notification`), sistem tepsisi (Tray simgesi), arka planda çalışma (minimize to tray), bildirim sesleri, görev çubuğu rozeti.
 3. **Sunucu Tarafı Yetki ve Saklama:** Sadece kendi mesajını düzenleme/silme (veya kanal/grup yöneticisi silme yetkisi), emoji tepki ekleme/çıkarma, mesaj saklama temizliği için günlük `alarm()` rutini.
@@ -12,6 +13,7 @@ Discord benzeri zengin yazılı mesajlaşma deneyimini ve masaüstü bildirim al
 ## Dokunulacak Dosyalar
 
 ### 1. Ortak Paket (`packages/shared`)
+
 - `packages/shared/src/schemas.ts`:
   - `MessageSchema`: `replyToId?: string`, `replyToMessage?: Pick<Message, 'id' | 'authorName' | 'content'>`, `editedAt?: number`, `deletedAt?: number`, `reactions: Record<string, string[]>` (emoji -> userId listesi).
   - Yeni WebSocket olay şemaları: `MSG_EDIT`, `MSG_DELETE`, `REACT_ADD`, `REACT_REMOVE`, `READ_MARK`.
@@ -19,6 +21,7 @@ Discord benzeri zengin yazılı mesajlaşma deneyimini ve masaüstü bildirim al
   - Güvenli Markdown ayrıştırıcı ve HTML sanitize (XSS önleme: `<script>`, `onerror`, `javascript:` şemalarını temizler; `||spoiler||` ayrıştırır).
 
 ### 2. Sunucu (`apps/server`)
+
 - `apps/server/src/durable/GroupDO.ts`:
   - SQLite `reactions` tablosu (`message_id, user_id, emoji`).
   - `messages` tablosuna `reply_to_id`, `edited_at`, `deleted_at` alanları.
@@ -28,6 +31,7 @@ Discord benzeri zengin yazılı mesajlaşma deneyimini ve masaüstü bildirim al
   - `alarm()` metodu: 90 günden eski mesajları ve yetim tepkileri temizleyen günlük rutin.
 
 ### 3. Masaüstü Uygulaması (`apps/desktop`)
+
 - `apps/desktop/src/main/index.ts`:
   - Tray (sistem tepsisi) oluşturma ve yönetimi.
   - Pencere kapatıldığında tray'e küçülme (`close` olayını yakalama).
@@ -51,14 +55,14 @@ Discord benzeri zengin yazılı mesajlaşma deneyimini ve masaüstü bildirim al
 ## Riskler ve Önlemler
 
 1. **XSS Güvenlik Riski:**
-   - *Risk:* Kullanıcıların girdiği Markdown içerikleri veya özel HTML etiketleri (`<img onerror="...">`) renderer içinde zararlı JS çalıştırabilir.
-   - *Önlem:* Electron zaten `contextIsolation: true`, `sandbox: true` ile korunuyor. Buna ek olarak Markdown çıktısı kesinlikle `DOMPurify` ile sanitize edilecek, dış bağlantılar sadece `https:` kabul edilecek ve `shell.openExternal` ile varsayılan tarayıcıda açılacak.
+   - _Risk:_ Kullanıcıların girdiği Markdown içerikleri veya özel HTML etiketleri (`<img onerror="...">`) renderer içinde zararlı JS çalıştırabilir.
+   - _Önlem:_ Electron zaten `contextIsolation: true`, `sandbox: true` ile korunuyor. Buna ek olarak Markdown çıktısı kesinlikle `DOMPurify` ile sanitize edilecek, dış bağlantılar sadece `https:` kabul edilecek ve `shell.openExternal` ile varsayılan tarayıcıda açılacak.
 2. **Tepki/Düzenleme Yarış Durumu (Race Condition):**
-   - *Risk:* Bir mesaj silinirken aynı anda bir başkası tepki ekleyebilir veya düzenleyebilir.
-   - *Önlem:* Cloudflare Durable Objects tek iş parçacıklı (single-threaded actor) çalıştığı için tüm işlemler atomiktir. `messages` tablosunda `deleted_at IS NOT NULL` olan mesaja tepki veya düzenleme yapılması engellenir.
+   - _Risk:_ Bir mesaj silinirken aynı anda bir başkası tepki ekleyebilir veya düzenleyebilir.
+   - _Önlem:_ Cloudflare Durable Objects tek iş parçacıklı (single-threaded actor) çalıştığı için tüm işlemler atomiktir. `messages` tablosunda `deleted_at IS NOT NULL` olan mesaja tepki veya düzenleme yapılması engellenir.
 3. **Tepsi ve Windows Uyumluluğu:**
-   - *Risk:* Tray ikonu Windows görev çubuğunda simge bulunamazsa hata verebilir.
-   - *Önlem:* Fallback ikon oluşturulur ve pencerelerin küçülme davranışı test edilir.
+   - _Risk:_ Tray ikonu Windows görev çubuğunda simge bulunamazsa hata verebilir.
+   - _Önlem:_ Fallback ikon oluşturulur ve pencerelerin küçülme davranışı test edilir.
 
 ---
 

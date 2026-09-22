@@ -2,8 +2,13 @@ import { describe, it, expect } from 'vitest';
 import {
   WsEnvelopeSchema,
   ClientMsgSendPayloadSchema,
+  ClientHistoryFetchPayloadSchema,
   AuthPayloadSchema,
   WsClientEvents,
+  generateKeyPair,
+  signMessage,
+  buildAuthPayload,
+  deriveUserId,
 } from '../index';
 
 describe('Protocol Schemas', () => {
@@ -25,6 +30,33 @@ describe('Protocol Schemas', () => {
       const msgParsed = ClientMsgSendPayloadSchema.safeParse(parsed.data.d);
       expect(msgParsed.success).toBe(true);
     }
+  });
+
+  it('should validate valid auth payload', () => {
+    const keypair = generateKeyPair();
+    const ts = Date.now();
+    const userId = deriveUserId(keypair.publicKeyHex);
+    const payload = buildAuthPayload('group-1', ts);
+    const sig = signMessage(payload, keypair.privateKey);
+
+    const validAuth = {
+      userId,
+      pubkey: keypair.publicKeyHex,
+      ts,
+      sig,
+    };
+
+    const parsed = AuthPayloadSchema.safeParse(validAuth);
+    expect(parsed.success).toBe(true);
+  });
+
+  it('should validate ClientHistoryFetchPayloadSchema', () => {
+    const validFetch = {
+      channelId: 'chan-456',
+      limit: 50,
+    };
+    const parsed = ClientHistoryFetchPayloadSchema.safeParse(validFetch);
+    expect(parsed.success).toBe(true);
   });
 
   it('should reject invalid auth payload format', () => {

@@ -35,6 +35,7 @@ Echo uygulamasını arkadaş grubuna dağıtılabilir, stabil, tek tıkla kurula
 ## Dokunulacak Dosyalar
 
 ### 1. Masaüstü Ana Süreci & Preload (`apps/desktop`)
+
 - `apps/desktop/src/main/index.ts`:
   - `desktop:getLoginItemSettings` ve `desktop:setLoginItemSettings` IPC işleyicileri.
   - Bas-konuş ve pencere kısayol iyileştirmeleri.
@@ -42,6 +43,7 @@ Echo uygulamasını arkadaş grubuna dağıtılabilir, stabil, tek tıkla kurula
   - `getLoginItemSettings()`, `setLoginItemSettings(openAtLogin: boolean)` metotları.
 
 ### 2. Masaüstü Arayüzü & Durum Yönetimi (`apps/desktop/src/renderer`)
+
 - `apps/desktop/src/renderer/src/stores/useVoiceStore.ts`:
   - `inputMode`: `'vad' | 'ptt'`
   - `pttKey`: string (varsayılan `'KeyV'`)
@@ -61,6 +63,7 @@ Echo uygulamasını arkadaş grubuna dağıtılabilir, stabil, tek tıkla kurula
   - İnternet kopması / yeniden bağlanma durum çubuğu.
 
 ### 3. Paketleme & Dağıtım Konfigürasyonu
+
 - `apps/desktop/package.json`:
   - `electron-builder` bağımlılığı ve `build:exe` script'i.
   - `build` yapılandırması (appId: `com.echo.app`, productName: `Echo`, nsis ayarları, ikonlar).
@@ -72,14 +75,14 @@ Echo uygulamasını arkadaş grubuna dağıtılabilir, stabil, tek tıkla kurula
 ## Riskler ve Önlemler
 
 1. **Bas-Konuş Pencere Odağı Sınırı (Native vs Safe JS):**
-   - *Risk:* Electron'un yerleşik pencere dinleyicileri uygulama odaktayken harika çalışır. Ancak arka planda tam ekran oyundayken `keyup` yakalamak normalde C++ native modül (`uiohook-napi`) gerektirir. `AGENTS.md` gereğince native modüller Windows'ta derleme ve uyumluluk riski taşır.
-   - *Önlem:* İlk aşamada uygulamanın güvenli ve sıfır derleme hatasıyla çalışması için yerleşik Electron kısayol/pencere yapısı kullanılır. Native hook ihtiyacı patronun isteğine göre kontrollü olarak eklenebilir.
+   - _Risk:_ Electron'un yerleşik pencere dinleyicileri uygulama odaktayken harika çalışır. Ancak arka planda tam ekran oyundayken `keyup` yakalamak normalde C++ native modül (`uiohook-napi`) gerektirir. `AGENTS.md` gereğince native modüller Windows'ta derleme ve uyumluluk riski taşır.
+   - _Önlem:_ İlk aşamada uygulamanın güvenli ve sıfır derleme hatasıyla çalışması için yerleşik Electron kısayol/pencere yapısı kullanılır. Native hook ihtiyacı patronun isteğine göre kontrollü olarak eklenebilir.
 2. **Windows SmartScreen Uyarısı:**
-   - *Risk:* Kod imzalama sertifikası (yıllık yüzlerce dolar) kullanılmadığı için Windows ilk açılışta mavi "Kişisel bilgisayarınız korundu" uyarısı verir.
-   - *Önlem:* Arkadaşların korkmaması için açık ve ekran görüntülü adım adım aşma rehberi hazırlanacaktır ("Ek bilgi" -> "Yine de çalıştır").
+   - _Risk:_ Kod imzalama sertifikası (yıllık yüzlerce dolar) kullanılmadığı için Windows ilk açılışta mavi "Kişisel bilgisayarınız korundu" uyarısı verir.
+   - _Önlem:_ Arkadaşların korkmaması için açık ve ekran görüntülü adım adım aşma rehberi hazırlanacaktır ("Ek bilgi" -> "Yine de çalıştır").
 3. **Kurulum Boyutu & NSIS:**
-   - *Risk:* Paketleme sırasında gereksiz dosyalar `.exe`'ye dahil edilirse dosya boyutu şişebilir.
-   - *Önlem:* `electron-builder` files filtresiyle yalnızca `out/` ve gerekli üretim bağımlılıkları paketlenecektir (~70-80 MB).
+   - _Risk:_ Paketleme sırasında gereksiz dosyalar `.exe`'ye dahil edilirse dosya boyutu şişebilir.
+   - _Önlem:_ `electron-builder` files filtresiyle yalnızca `out/` ve gerekli üretim bağımlılıkları paketlenecektir (~70-80 MB).
 
 ---
 

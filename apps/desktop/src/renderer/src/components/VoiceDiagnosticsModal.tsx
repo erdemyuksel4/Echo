@@ -57,7 +57,8 @@ export const VoiceDiagnosticsModal: React.FC = () => {
             <div>
               <h2 className="text-base font-bold text-white">Ses Bağlantı Tanı Paneli</h2>
               <p className="text-xs text-slate-400">
-                Kanal: <span className="text-slate-200 font-medium">#{currentChannelName}</span> &bull; Ortalama Gecikme:{' '}
+                Kanal: <span className="text-slate-200 font-medium">#{currentChannelName}</span>{' '}
+                &bull; Ortalama Gecikme:{' '}
                 <span className={`font-semibold ${getRttColor(pingMs)}`}>{pingMs} ms</span>
               </p>
             </div>
@@ -80,7 +81,8 @@ export const VoiceDiagnosticsModal: React.FC = () => {
                 Kanalda henüz başka bir katılımcı yok
               </p>
               <p className="text-xs text-slate-500 mt-1 max-w-sm">
-                Başka bir kullanıcı bu ses kanalına katıldığında gerçek zamanlı WebRTC mesh istatistikleri burada listelenecektir.
+                Başka bir kullanıcı bu ses kanalına katıldığında gerçek zamanlı WebRTC mesh
+                istatistikleri burada listelenecektir.
               </p>
             </div>
           ) : (
@@ -93,7 +95,9 @@ export const VoiceDiagnosticsModal: React.FC = () => {
                   <div className="flex items-center gap-2">
                     <div className="h-2.5 w-2.5 rounded-full bg-emerald-400 shadow-sm shadow-emerald-400/50" />
                     <span className="font-semibold text-white text-sm">{peer.displayName}</span>
-                    <span className="text-[11px] text-slate-500 font-mono">({peer.peerId.slice(0, 10)}...)</span>
+                    <span className="text-[11px] text-slate-500 font-mono">
+                      ({peer.peerId.slice(0, 10)}...)
+                    </span>
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-slate-400 font-mono uppercase text-[10px] px-2 py-0.5 rounded bg-slate-800">
@@ -136,7 +140,8 @@ export const VoiceDiagnosticsModal: React.FC = () => {
                       <span>Bit Hızı</span>
                     </div>
                     <div className="text-base font-bold text-slate-200 font-mono">
-                      {peer.bitrateKbps} <span className="text-xs font-normal text-slate-400">kbps</span>
+                      {peer.bitrateKbps}{' '}
+                      <span className="text-xs font-normal text-slate-400">kbps</span>
                     </div>
                   </div>
 
@@ -150,7 +155,9 @@ export const VoiceDiagnosticsModal: React.FC = () => {
                       <div className="flex-1 bg-slate-800 h-2 rounded-full overflow-hidden">
                         <div
                           className="bg-emerald-400 h-full rounded-full transition-all duration-150"
-                          style={{ width: `${Math.min(100, Math.round((peer.audioLevel || 0) * 100))}%` }}
+                          style={{
+                            width: `${Math.min(100, Math.round((peer.audioLevel || 0) * 100))}%`,
+                          }}
                         />
                       </div>
                       <span className="text-xs font-mono text-slate-300">
@@ -163,10 +170,12 @@ export const VoiceDiagnosticsModal: React.FC = () => {
                 {(peer.localCandidateType || peer.remoteCandidateType) && (
                   <div className="mt-3 pt-2 border-t border-slate-800/40 flex items-center justify-between text-[11px] text-slate-400">
                     <span>
-                      Yerel Aday: <code className="text-slate-300">{peer.localCandidateType || 'n/a'}</code>
+                      Yerel Aday:{' '}
+                      <code className="text-slate-300">{peer.localCandidateType || 'n/a'}</code>
                     </span>
                     <span>
-                      Uzak Aday: <code className="text-slate-300">{peer.remoteCandidateType || 'n/a'}</code>
+                      Uzak Aday:{' '}
+                      <code className="text-slate-300">{peer.remoteCandidateType || 'n/a'}</code>
                     </span>
                   </div>
                 )}

@@ -193,12 +193,7 @@ export const VoiceStageView: React.FC<Props> = ({ channel }) => {
 
   const handleJoinOrLeave = () => {
     if (!isCurrentChannel && activeGroupMeta) {
-      void webrtcService.join(
-        activeGroupMeta.id,
-        activeGroupMeta.name,
-        channel.id,
-        channel.name,
-      );
+      void webrtcService.join(activeGroupMeta.id, activeGroupMeta.name, channel.id, channel.name);
     } else if (isCurrentChannel) {
       if (isSharing) {
         void stopSharing(channel.id);
@@ -213,12 +208,12 @@ export const VoiceStageView: React.FC<Props> = ({ channel }) => {
     count === 1
       ? 'grid-cols-1 max-w-2xl'
       : count === 2
-      ? 'grid-cols-1 md:grid-cols-2 max-w-4xl'
-      : count <= 4
-      ? 'grid-cols-2 max-w-4xl'
-      : count <= 6
-      ? 'grid-cols-2 lg:grid-cols-3 max-w-5xl'
-      : 'grid-cols-2 md:grid-cols-3 lg:grid-cols-4 max-w-6xl';
+        ? 'grid-cols-1 md:grid-cols-2 max-w-4xl'
+        : count <= 4
+          ? 'grid-cols-2 max-w-4xl'
+          : count <= 6
+            ? 'grid-cols-2 lg:grid-cols-3 max-w-5xl'
+            : 'grid-cols-2 md:grid-cols-3 lg:grid-cols-4 max-w-6xl';
 
   return (
     <div
@@ -285,7 +280,8 @@ export const VoiceStageView: React.FC<Props> = ({ channel }) => {
             <div>
               <h2 className="text-base font-bold text-white mb-1">Kanalda Kimse Yok</h2>
               <p className="text-xs text-slate-400 leading-relaxed">
-                Bu ses kanalında henüz kimse bulunmuyor. Konuşmayı başlatmak veya kamera açmak için aşağıdaki düğmeyle katılın.
+                Bu ses kanalında henüz kimse bulunmuyor. Konuşmayı başlatmak veya kamera açmak için
+                aşağıdaki düğmeyle katılın.
               </p>
             </div>
             <button
@@ -339,8 +335,14 @@ export const VoiceStageView: React.FC<Props> = ({ channel }) => {
               }`}
               title={isCameraActive ? 'Kamerayı Kapat' : 'Kamerayı Aç'}
             >
-              {isCameraActive ? <Video className="h-4 w-4" /> : <VideoOff className="h-4 w-4 text-slate-400" />}
-              <span className="hidden sm:inline">{isCameraActive ? 'Kamera Açık' : 'Kamera Aç'}</span>
+              {isCameraActive ? (
+                <Video className="h-4 w-4" />
+              ) : (
+                <VideoOff className="h-4 w-4 text-slate-400" />
+              )}
+              <span className="hidden sm:inline">
+                {isCameraActive ? 'Kamera Açık' : 'Kamera Aç'}
+              </span>
             </button>
 
             {/* Microphone Mute Button */}
@@ -359,7 +361,9 @@ export const VoiceStageView: React.FC<Props> = ({ channel }) => {
               ) : (
                 <Mic className="h-4 w-4 text-emerald-400" />
               )}
-              <span className="hidden sm:inline">{isMuted || isDeafened ? 'Susturuldu' : 'Sustur'}</span>
+              <span className="hidden sm:inline">
+                {isMuted || isDeafened ? 'Susturuldu' : 'Sustur'}
+              </span>
             </button>
 
             {/* Deafen Button */}

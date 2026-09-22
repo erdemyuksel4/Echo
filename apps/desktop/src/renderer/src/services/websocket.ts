@@ -29,6 +29,8 @@ interface ManagedSocket {
   reconnectTimeout: ReturnType<typeof setTimeout> | null;
   reconnectAttempt: number;
   isIntentionallyClosed: boolean;
+  isAuthenticated: boolean;
+  pendingQueue: WsEnvelope[];
 }
 
 class EchoWebSocketService {
@@ -37,24 +39,25 @@ class EchoWebSocketService {
   private lastTypingSentTime = 0;
 
   connect(groupId: string): void {
-    const prevActiveId = this.activeGroupId;
     this.activeGroupId = groupId;
 
-    // If previous active group is NOT where we are in a voice channel, close its socket
-    const voiceGroupId = useVoiceStore.getState().currentGroupId;
-    if (prevActiveId && prevActiveId !== groupId && prevActiveId !== voiceGroupId) {
-      this.closeSocket(prevActiveId);
-    }
-
     const existing = this.sockets.get(groupId);
-    if (existing && existing.ws.readyState === WebSocket.OPEN) {
-      useChatStore.getState().setConnectionStatus('connected');
-      return;
+    if (existing) {
+      if (existing.ws.readyState === WebSocket.OPEN) {
+        if (existing.isAuthenticated) {
+          useChatStore.getState().setConnectionStatus('connected');
+        } else {
+          useChatStore.getState().setConnectionStatus('connecting');
+        }
+        return;
+      }
+      if (existing.ws.readyState === WebSocket.CONNECTING) {
+        useChatStore.getState().setConnectionStatus('connecting');
+        return;
+      }
     }
 
-    if (!existing || existing.ws.readyState >= WebSocket.CLOSING) {
-      this.initSocket(groupId);
-    }
+    this.initSocket(groupId);
   }
 
   private initSocket(groupId: string): ManagedSocket {
@@ -85,6 +88,8 @@ class EchoWebSocketService {
       reconnectTimeout: null,
       reconnectAttempt: prev ? prev.reconnectAttempt : 0,
       isIntentionallyClosed: false,
+      isAuthenticated: false,
+      pendingQueue: [],
     };
     this.sockets.set(groupId, managed);
 
@@ -100,12 +105,17 @@ class EchoWebSocketService {
           throw new Error('İmzalama başarısız');
         }
 
-        this.sendToGroup(groupId, WsClientEvents.AUTH, {
-          userId: signed.userId,
-          pubkey: signed.pubkey,
-          ts: timestamp,
-          sig: signed.sig,
-        });
+        const authPayload: WsEnvelope = {
+          v: 1,
+          t: WsClientEvents.AUTH,
+          d: {
+            userId: signed.userId,
+            pubkey: signed.pubkey,
+            ts: timestamp,
+            sig: signed.sig,
+          },
+        };
+        socket.send(JSON.stringify(authPayload));
 
         // Setup 30s ping
         managed.pingInterval = setInterval(() => {
@@ -134,12 +144,16 @@ class EchoWebSocketService {
     socket.onclose = (event) => {
       if (managed.ws !== socket) return;
       this.cleanupSocketTimers(managed);
+      managed.isAuthenticated = false;
 
       if (groupId === this.activeGroupId) {
         useChatStore.getState().setConnectionStatus('disconnected');
       }
 
-      if (!managed.isIntentionallyClosed && event.code !== 4001 && event.code !== 4003) {
+      const isForbidden = event.code === 4003;
+      const isAuthExhausted = event.code === 4001 && managed.reconnectAttempt >= 3;
+
+      if (!managed.isIntentionallyClosed && !isForbidden && !isAuthExhausted) {
         this.scheduleReconnect(groupId);
       } else {
         this.sockets.delete(groupId);
@@ -158,11 +172,24 @@ class EchoWebSocketService {
     const isActive = groupId === this.activeGroupId;
 
     switch (envelope.t) {
-      case WsServerEvents.AUTH_OK:
+      case WsServerEvents.AUTH_OK: {
+        const managed = this.sockets.get(groupId);
+        if (managed) {
+          managed.isAuthenticated = true;
+          if (managed.pendingQueue.length > 0) {
+            for (const env of managed.pendingQueue) {
+              if (managed.ws.readyState === WebSocket.OPEN) {
+                managed.ws.send(JSON.stringify(env));
+              }
+            }
+            managed.pendingQueue = [];
+          }
+        }
         if (isActive) {
           chatStore.setConnectionStatus('connected');
         }
         break;
+      }
 
       case WsServerEvents.SNAPSHOT: {
         if (isActive) {
@@ -200,9 +227,15 @@ class EchoWebSocketService {
           const chanName = channel ? `#${channel.name}` : 'Sohbet';
           const isMentioned =
             currentUserName &&
-            (message.content.includes(`@${currentUserName}`) || message.content.includes('@everyone'));
+            (message.content.includes(`@${currentUserName}`) ||
+              message.content.includes('@everyone'));
 
-          if (document.hidden || !isActive || chatStore.activeChannelId !== message.channelId || isMentioned) {
+          if (
+            document.hidden ||
+            !isActive ||
+            chatStore.activeChannelId !== message.channelId ||
+            isMentioned
+          ) {
             void window.echoApi?.showNotification({
               title: `${message.authorName} (${chanName})`,
               body: message.content.slice(0, 120),
@@ -620,13 +653,30 @@ class EchoWebSocketService {
 
   private sendToGroup(groupId: string, type: string, data: unknown): void {
     const managed = this.sockets.get(groupId);
-    if (managed && managed.ws.readyState === WebSocket.OPEN) {
-      const payload: WsEnvelope = {
-        v: 1,
-        t: type,
-        d: data,
-      };
+    if (!managed) return;
+
+    const payload: WsEnvelope = {
+      v: 1,
+      t: type,
+      d: data,
+    };
+
+    if (type === WsClientEvents.AUTH) {
+      if (managed.ws.readyState === WebSocket.OPEN) {
+        managed.ws.send(JSON.stringify(payload));
+      }
+      return;
+    }
+
+    if (managed.ws.readyState === WebSocket.OPEN && managed.isAuthenticated) {
       managed.ws.send(JSON.stringify(payload));
+    } else if (
+      managed.ws.readyState === WebSocket.CONNECTING ||
+      (managed.ws.readyState === WebSocket.OPEN && !managed.isAuthenticated)
+    ) {
+      if (managed.pendingQueue.length < 50) {
+        managed.pendingQueue.push(payload);
+      }
     }
   }
 
@@ -658,7 +708,10 @@ class EchoWebSocketService {
     if (!managed) return;
     managed.isIntentionallyClosed = true;
     this.cleanupSocketTimers(managed);
-    if (managed.ws.readyState === WebSocket.OPEN || managed.ws.readyState === WebSocket.CONNECTING) {
+    if (
+      managed.ws.readyState === WebSocket.OPEN ||
+      managed.ws.readyState === WebSocket.CONNECTING
+    ) {
       try {
         managed.ws.close(1000, 'Intentional close');
       } catch {
@@ -669,15 +722,8 @@ class EchoWebSocketService {
   }
 
   disconnect(): void {
-    const prevActiveId = this.activeGroupId;
     this.activeGroupId = null;
     useChatStore.getState().setConnectionStatus('disconnected');
-
-    const voiceGroupId = useVoiceStore.getState().currentGroupId;
-    // Only close if we are NOT connected to a voice channel in this group!
-    if (prevActiveId && prevActiveId !== voiceGroupId) {
-      this.closeSocket(prevActiveId);
-    }
   }
 
   disconnectAll(): void {

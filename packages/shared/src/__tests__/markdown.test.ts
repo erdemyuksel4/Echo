@@ -39,7 +39,8 @@ describe('Markdown Sanitizer and Parser', () => {
   });
 
   it('parses bold, italic, strikethrough, inline code, and spoilers', () => {
-    const markdown = '**bold text** and *italic text* and ~~deleted text~~ with `code snippet` and ||secret||';
+    const markdown =
+      '**bold text** and *italic text* and ~~deleted text~~ with `code snippet` and ||secret||';
     const tokens = parseMarkdownTokens(markdown);
 
     expect(tokens.some((t) => t.type === 'bold' && t.content === 'bold text')).toBe(true);

@@ -1,8 +1,4 @@
-import type {
-  VoiceSignalData,
-  PeerDiagnosticsStats,
-  VoiceParticipant,
-} from '@echo/shared';
+import type { VoiceSignalData, PeerDiagnosticsStats, VoiceParticipant } from '@echo/shared';
 import { useVoiceStore } from '../stores/useVoiceStore';
 import { useAuthStore } from '../stores/useAuthStore';
 import { wsService } from './websocket';
@@ -487,7 +483,9 @@ class WebRTCVoiceService {
 
   private setupVAD(stream: MediaStream): void {
     try {
-      const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      const AudioCtx =
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
       this.audioContext = new AudioCtx();
       const source = this.audioContext.createMediaStreamSource(stream);
       this.analyser = this.audioContext.createAnalyser();
@@ -501,7 +499,8 @@ class WebRTCVoiceService {
         if (!this.analyser || !this.currentChannelId) return;
 
         const store = useVoiceStore.getState();
-        const canTransmit = !store.isMuted && !store.isDeafened && (store.inputMode === 'vad' || store.isPttActive);
+        const canTransmit =
+          !store.isMuted && !store.isDeafened && (store.inputMode === 'vad' || store.isPttActive);
         if (!canTransmit) {
           if (this.lastSpeakingState) {
             this.setLocalSpeaking(false);
@@ -597,7 +596,10 @@ class WebRTCVoiceService {
 
         // 1. Find nominated / succeeded candidate-pair
         stats.forEach((report) => {
-          if (report.type === 'candidate-pair' && (report.state === 'succeeded' || report.nominated)) {
+          if (
+            report.type === 'candidate-pair' &&
+            (report.state === 'succeeded' || report.nominated)
+          ) {
             rttMs = Math.round((report.currentRoundTripTime || 0) * 1000);
             if (rttMs > 0) {
               totalRtt += rttMs;
@@ -845,7 +847,9 @@ class WebRTCVoiceService {
             width: { ideal: 640 },
             height: { ideal: 480 },
             frameRate: { max: 24 },
-            ...(this.selectedVideoDeviceId ? { deviceId: { exact: this.selectedVideoDeviceId } } : {}),
+            ...(this.selectedVideoDeviceId
+              ? { deviceId: { exact: this.selectedVideoDeviceId } }
+              : {}),
           },
         };
         stream = await navigator.mediaDevices.getUserMedia(constraints);
@@ -881,7 +885,9 @@ class WebRTCVoiceService {
             width: { ideal: 640 },
             height: { ideal: 480 },
             frameRate: { max: 24 },
-            ...(this.selectedVideoDeviceId ? { deviceId: { exact: this.selectedVideoDeviceId } } : {}),
+            ...(this.selectedVideoDeviceId
+              ? { deviceId: { exact: this.selectedVideoDeviceId } }
+              : {}),
           },
         };
 

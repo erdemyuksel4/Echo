@@ -146,7 +146,9 @@ export const App: React.FC = () => {
 
           <div className="text-center space-y-1">
             <h1 className="text-2xl font-black tracking-wider text-white">ECHO</h1>
-            <p className="text-xs text-slate-400 font-medium">Güvenli, Dağıtık ve Kesintisiz İletişim</p>
+            <p className="text-xs text-slate-400 font-medium">
+              Güvenli, Dağıtık ve Kesintisiz İletişim
+            </p>
           </div>
 
           {/* Polished Discord-like Progress Bar */}

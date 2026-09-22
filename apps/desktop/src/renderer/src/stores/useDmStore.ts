@@ -132,15 +132,11 @@ export const useDmStore = create<DmState>((set) => ({
 
   markThreadRead: (peerId) =>
     set((state) => ({
-      threads: state.threads.map((t) =>
-        t.peerId === peerId ? { ...t, unreadCount: 0 } : t,
-      ),
+      threads: state.threads.map((t) => (t.peerId === peerId ? { ...t, unreadCount: 0 } : t)),
     })),
 
   clearUnread: (peerId) =>
     set((state) => ({
-      threads: state.threads.map((t) =>
-        t.peerId === peerId ? { ...t, unreadCount: 0 } : t,
-      ),
+      threads: state.threads.map((t) => (t.peerId === peerId ? { ...t, unreadCount: 0 } : t)),
     })),
 }));
