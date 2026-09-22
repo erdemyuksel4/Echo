@@ -287,6 +287,15 @@ Bu dosya her faz ve görev sonunda güncellenir.
   - `pnpm test`: Tüm paketlerdeki 65 testin tamamı (%100) başarıyla geçti.
   - `pnpm --filter @echo/desktop build`: Sıfır hata ile derlendi.
 
+## Otomatik Güncelleme Sistemi (Zero-Touch Discord-Tarzı Auto-Updater)
 
-
-
+- [x] **GitHub Releases & CI/CD Pipeline:**
+  - `.github/workflows/release.yml`: Her yeni tag pushlandığında (`v*.*.*`) GitHub Actions Windows runner üzerinde otomatik olarak Electron derlemesi (`pnpm build:exe`) yapar.
+  - `latest.yml`, `Echo.Setup.*.exe` ve `.blockmap` dosyalarını otomatik olarak GitHub Release varlığı olarak yayınlar.
+- [x] **Sıfır Dokunuş (Zero-Touch) Güncelleme Akışı:**
+  - `apps/desktop/src/main/updater.ts`: `autoDownload = true` ile güncelleme bulunduğunda arka planda otomatik indirilir.
+  - İndirme tamamlandığında (`update-downloaded`) kullanıcıya buton tıklatma zorunluluğu olmadan 1.5 saniye sonra otomatik olarak `autoUpdater.quitAndInstall(false, true)` çağrılır.
+  - Uygulama açılışında (1.5 sn sonra) ve 10 dakikada bir periyodik olarak sessizce güncelleme denetlenir.
+  - `UpdateNotification.tsx`: Kullanıcıya sürecin durumunu (İndiriliyor %X -> Güncellendi, yeniden başlatılıyor...) şık ve bilgilendirici olarak gösterir.
+- [x] **Otomatik Sürüm Yayınlama Aracı:**
+  - `scripts/bump-version.mjs` ve `pnpm release` komutu ile tek komutta tüm `package.json` sürümleri güncellenir, git commit ve tag oluşturulur ve GitHub'a pushlanır.

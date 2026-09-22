@@ -13,7 +13,7 @@ export function initAutoUpdater(window: BrowserWindow): void {
   }
   isInitialized = true;
 
-  autoUpdater.autoDownload = false;
+  autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
 
   autoUpdater.on('checking-for-update', () => {
@@ -24,7 +24,7 @@ export function initAutoUpdater(window: BrowserWindow): void {
   });
 
   autoUpdater.on('update-available', (info) => {
-    console.log('[Echo Updater] Update available:', info.version);
+    console.log('[Echo Updater] Update available, downloading automatically:', info.version);
     const releaseNotes =
       typeof info.releaseNotes === 'string'
         ? info.releaseNotes
@@ -78,6 +78,16 @@ export function initAutoUpdater(window: BrowserWindow): void {
         version: info.version,
       });
     }
+
+    // Seamless zero-touch auto-restart after a brief notification delay (1.5s)
+    setTimeout(() => {
+      console.log('[Echo Updater] Auto-installing update and restarting...');
+      try {
+        autoUpdater.quitAndInstall(false, true);
+      } catch (err) {
+        console.error('[Echo Updater] quitAndInstall failed:', err);
+      }
+    }, 1500);
   });
 
   autoUpdater.on('error', (err) => {
@@ -125,12 +135,19 @@ export function initAutoUpdater(window: BrowserWindow): void {
     autoUpdater.quitAndInstall();
   });
 
-  // Trigger initial check in production after window has loaded
+  // Trigger initial check in production shortly after window loads
   if (!is.dev) {
     setTimeout(() => {
       void autoUpdater.checkForUpdates().catch((err) => {
         console.warn('[Echo Updater] Initial background check failed:', err);
       });
-    }, 5000);
+    }, 1500);
+
+    // Periodic check every 10 minutes
+    setInterval(() => {
+      void autoUpdater.checkForUpdates().catch((err) => {
+        console.warn('[Echo Updater] Periodic check failed:', err);
+      });
+    }, 10 * 60 * 1000);
   }
 }

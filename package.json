@@ -1,6 +1,6 @@
 {
   "name": "echo-monorepo",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "type": "module",
   "scripts": {
@@ -9,6 +9,7 @@
     "dev:desktop": "pnpm --filter @echo/desktop dev",
     "dev:user2": "cross-env ECHO_PROFILE=user2 pnpm --filter @echo/desktop dev",
     "test:dual": "node scripts/dual-test.mjs",
+    "test:updater": "node scripts/test-auto-updater.mjs",
     "release": "node scripts/bump-version.mjs patch",
     "release:minor": "node scripts/bump-version.mjs minor",
     "build:exe": "pnpm --filter @echo/desktop build:exe",

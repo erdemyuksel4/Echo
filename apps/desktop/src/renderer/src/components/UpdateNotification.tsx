@@ -57,16 +57,6 @@ export const UpdateNotification: React.FC = () => {
     };
   }, []);
 
-  const handleDownload = async () => {
-    setStatus('downloading');
-    setProgress({ percent: 0, bytesPerSecond: 0 });
-    try {
-      await window.echoApi.downloadUpdate();
-    } catch (err) {
-      console.error('[Echo Updater] İndirme hatası:', err);
-    }
-  };
-
   const handleInstall = () => {
     window.echoApi.quitAndInstall();
   };
@@ -118,14 +108,14 @@ export const UpdateNotification: React.FC = () => {
 
           <div className="flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-2 min-w-0">
             <span className="text-xs font-semibold text-slate-100">
-              {status === 'available' && `Yeni Echo sürümü hazır: v${updateInfo?.version ?? ''}`}
+              {status === 'available' && `Yeni Echo sürümü indiriliyor: v${updateInfo?.version ?? ''}`}
               {status === 'downloading' && `Echo Güncelleniyor... %${progress.percent}`}
-              {status === 'downloaded' && 'Echo Güncellemesi Hazır!'}
+              {status === 'downloaded' && 'Echo Güncellendi! Yeniden başlatılıyor...'}
             </span>
 
             {status === 'available' && (
               <span className="text-[11px] text-slate-400 truncate">
-                Yeni özellikler ve iyileştirmeler için indirin.
+                Güncelleme otomatik olarak kurulacak.
               </span>
             )}
 
@@ -137,7 +127,7 @@ export const UpdateNotification: React.FC = () => {
 
             {status === 'downloaded' && (
               <span className="text-[11px] text-slate-400 truncate">
-                Kurulumu tamamlamak için uygulamayı yeniden başlatın.
+                Uygulama otomatik olarak yeniden açılacak.
               </span>
             )}
           </div>
@@ -154,24 +144,11 @@ export const UpdateNotification: React.FC = () => {
             </div>
           )}
 
-          {status === 'available' && (
-            <button
-              onClick={handleDownload}
-              className="flex items-center gap-1.5 rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-indigo-500 transition-colors cursor-pointer"
-            >
-              <Download className="h-3.5 w-3.5" />
-              <span>İndir</span>
-            </button>
-          )}
-
           {status === 'downloaded' && (
-            <button
-              onClick={handleInstall}
-              className="flex items-center gap-1.5 rounded-md bg-emerald-500 px-3.5 py-1.5 text-xs font-bold text-slate-950 shadow-md shadow-emerald-500/20 hover:bg-emerald-400 transition-all cursor-pointer animate-pulse"
-            >
-              <RefreshCw className="h-3.5 w-3.5" />
-              <span>Şimdi Yeniden Başlat</span>
-            </button>
+            <div className="flex items-center gap-2 text-xs font-medium text-emerald-400">
+              <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+              <span>Yeniden başlatılıyor...</span>
+            </div>
           )}
 
           <button
