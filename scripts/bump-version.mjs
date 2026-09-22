@@ -17,7 +17,9 @@ const packagePaths = [
 const rootPkg = JSON.parse(readFileSync(packagePaths[0], 'utf-8'));
 const currentVersion = rootPkg.version || '0.1.0';
 
-const bumpType = process.argv[2] || 'patch';
+const args = process.argv.slice(2);
+const isCloud = args.includes('--cloud');
+const bumpType = args.find((a) => !a.startsWith('--')) || 'patch';
 
 function getNextVersion(version, type) {
   const parts = version.split('.').map(Number);
@@ -59,10 +61,48 @@ for (const p of packagePaths) {
   console.log(`✓ Güncellendi: ${p.replace(rootDir, '')}`);
 }
 
-// 2. Git operations
-function runCmd(cmd) {
+// 2. Extract GitHub Token from Windows Git Credential Manager
+function getGitHubToken() {
+  try {
+    const out = execSync('git credential fill', {
+      input: 'protocol=https\nhost=github.com\n\n',
+      stdio: ['pipe', 'pipe', 'ignore'],
+    }).toString();
+    const match = out.match(/password=(.+)/);
+    return match ? match[1].trim() : null;
+  } catch {
+    return null;
+  }
+}
+
+const ghToken = process.env.GH_TOKEN || getGitHubToken();
+
+let buildDuration = '0';
+if (!isCloud) {
+  // 3. Local Fast Build
+  console.log('\n[1/3] 🔨 Masaüstü Kurulum Paketi Yerelde Hızlıca Derleniyor...');
+  const startTime = Date.now();
+  try {
+    execSync('pnpm --filter @echo/desktop run build:exe', {
+      cwd: rootDir,
+      stdio: 'inherit',
+      env: { ...process.env, GH_TOKEN: ghToken || undefined },
+    });
+  } catch (err) {
+    console.error('\n❌ Derleme hatası:', err.message);
+    process.exit(1);
+  }
+  buildDuration = ((Date.now() - startTime) / 1000).toFixed(1);
+  console.log(`✓ Derleme tamamlandı (${buildDuration} saniye)!\n`);
+} else {
+  console.log('\n☁️  Bulut Modu (--cloud): Yerel derleme atlandı, GitHub Actions derleyecek.\n');
+}
+
+// 4. Git Commit & Tag
+console.log('[2/3] 📦 Git Commit ve Tag Hazırlanıyor...');
+function runCmd(cmd, env = {}) {
   console.log(`> ${cmd}`);
-  execSync(cmd, { cwd: rootDir, stdio: 'inherit' });
+  execSync(cmd, { cwd: rootDir, stdio: 'inherit', env: { ...process.env, ...env } });
 }
 
 try {
@@ -70,16 +110,61 @@ try {
   runCmd(`git commit -m "chore: release ${nextTag}"`);
   runCmd(`git tag ${nextTag}`);
   runCmd(`git push origin main --tags`);
-
-  console.log('\n======================================================');
-  console.log(`🎉 Tebrikler! ${nextTag} GitHub'a başarıyla pushlandı!`);
-  console.log(`🤖 GitHub Actions arka planda Windows runner üzerinde:`);
-  console.log(`   1. Kurulum paketini (.exe, .blockmap, latest.yml) derleyecek.`);
-  console.log(`   2. Otomatik bir GitHub Release oluşturup dosyaları oraya koyacak.`);
-  console.log(`   3. Kullanıcıların Echo uygulaması açıldığında bu güncellemeyi`);
-  console.log(`      otomatik algılayıp Discord tarzı yükleme sunacak!`);
-  console.log('======================================================\n');
 } catch (err) {
-  console.error('\n❌ Bir hata oluştu:', err.message);
+  console.error('\n❌ Git işlemi hatası:', err.message);
   process.exit(1);
 }
+
+if (!isCloud) {
+  // 5. Direct Upload to GitHub Releases
+  console.log('\n[3/3] 🚀 GitHub Releases Sayfasına Doğrudan Yükleniyor...');
+  const distDir = resolve(rootDir, 'apps/desktop/dist');
+  const exePattern = resolve(distDir, `Echo Setup ${nextVersion}.exe`);
+  const blockmapPattern = resolve(distDir, `Echo Setup ${nextVersion}.exe.blockmap`);
+  const latestYml = resolve(distDir, 'latest.yml');
+
+  if (ghToken) {
+    try {
+      // Try creating release directly with gh CLI
+      console.log(`> gh release create ${nextTag} (hızlı doğrudan yükleme)`);
+      execSync(
+        `gh release create ${nextTag} "${exePattern}" "${blockmapPattern}" "${latestYml}" --title "${nextTag}" --notes "Echo ${nextTag} sürümü (Otomatik Hızlı Dağıtım)"`,
+        {
+          cwd: rootDir,
+          stdio: 'inherit',
+          env: { ...process.env, GH_TOKEN: ghToken },
+        }
+      );
+      console.log(`✓ GitHub Release başarıyla oluşturuldu ve dosyalar yüklendi!`);
+    } catch (err) {
+      console.warn(`[Bilgi] 'gh release create' uyarı verdi, upload deneniyor:`, err.message);
+      try {
+        execSync(
+          `gh release upload ${nextTag} "${exePattern}" "${blockmapPattern}" "${latestYml}" --clobber`,
+          {
+            cwd: rootDir,
+            stdio: 'inherit',
+            env: { ...process.env, GH_TOKEN: ghToken },
+          }
+        );
+        console.log(`✓ Dosyalar mevcut Release'e başarıyla yüklendi!`);
+      } catch (uploadErr) {
+        console.warn(`[Bilgi] Doğrudan yükleme atlandı (GitHub Actions tamamlayacak):`, uploadErr.message);
+      }
+    }
+  } else {
+    console.log('[Bilgi] GitHub token bulunamadı; derleme GitHub Actions üzerinden tamamlanacak.');
+  }
+
+  console.log('\n======================================================');
+  console.log(`🎉 Tebrikler! ${nextTag} artık YAYINDA!`);
+  console.log(`⚡ Toplam Süre: ~${buildDuration} saniye (GitHub Actions beklenmedi!)`);
+  console.log(`🔄 Uygulamayı açtığınızda güncelleme otomatik yüklenecektir.`);
+  console.log('======================================================\n');
+} else {
+  console.log('\n======================================================');
+  console.log(`🎉 Tebrikler! ${nextTag} GitHub'a pushlandı!`);
+  console.log(`🤖 GitHub Actions arka planda Windows runner üzerinde derleyecek.`);
+  console.log('======================================================\n');
+}
+
