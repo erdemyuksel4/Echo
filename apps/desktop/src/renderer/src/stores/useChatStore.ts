@@ -26,6 +26,13 @@ const loadInitialActiveGroupId = (): string | null => {
   return null;
 };
 
+interface GroupSnapshotCache {
+  group: GroupMeta;
+  channels: Channel[];
+  members: GroupMember[];
+  inviteCode?: string;
+}
+
 interface ChatState {
   groups: GroupItem[];
   activeGroupId: string | null;
@@ -33,6 +40,7 @@ interface ChatState {
   channels: Channel[];
   activeChannelId: string | null;
   members: GroupMember[];
+  groupSnapshots: Record<string, GroupSnapshotCache>;
   messages: Record<string, Message[]>; // channelId -> Message[]
   typingUsers: Record<string, string[]>; // channelId -> array of displayNames
   connectionStatus: 'disconnected' | 'connecting' | 'connected';
@@ -82,6 +90,7 @@ export const useChatStore = create<ChatState>((set) => ({
   channels: [],
   activeChannelId: null,
   members: [],
+  groupSnapshots: {},
   messages: {},
   typingUsers: {},
   connectionStatus: 'disconnected',
@@ -122,7 +131,51 @@ export const useChatStore = create<ChatState>((set) => ({
     } catch (e) {
       void e;
     }
-    set({ activeGroupId });
+
+    set((state) => {
+      if (!activeGroupId) {
+        return {
+          activeGroupId: null,
+          activeGroupMeta: null,
+          activeChannelId: null,
+          channels: [],
+          members: [],
+          defaultInviteCode: null,
+        };
+      }
+
+      const cached = state.groupSnapshots[activeGroupId];
+      if (cached) {
+        const currentValid = cached.channels.some((c) => c.id === state.activeChannelId);
+        const firstText = cached.channels.find((c) => c.type === 'text');
+        const activeChannelId = currentValid ? state.activeChannelId : (firstText?.id ?? null);
+
+        return {
+          activeGroupId,
+          activeGroupMeta: cached.group,
+          channels: cached.channels,
+          members: cached.members,
+          activeChannelId,
+          defaultInviteCode: cached.inviteCode ?? state.defaultInviteCode,
+        };
+      }
+
+      const group = state.groups.find((g) => g.id === activeGroupId);
+      return {
+        activeGroupId,
+        activeGroupMeta: group
+          ? {
+              id: group.id,
+              name: group.name,
+              ownerId: group.ownerId ?? '',
+              createdAt: Date.now(),
+            }
+          : null,
+        channels: [],
+        members: [],
+        activeChannelId: null,
+      };
+    });
   },
 
   setSnapshot: (activeGroupMeta, channels, members, inviteCode) => {
@@ -147,12 +200,32 @@ export const useChatStore = create<ChatState>((set) => ({
         void e;
       }
 
+      const updatedSnapshots = {
+        ...state.groupSnapshots,
+        [activeGroupMeta.id]: {
+          group: activeGroupMeta,
+          channels,
+          members,
+          inviteCode,
+        },
+      };
+
+      // Only update active channel/meta/members if this group is STILL the active group!
+      const isActive = state.activeGroupId === activeGroupMeta.id;
+      if (!isActive) {
+        return {
+          groups: updatedGroups,
+          groupSnapshots: updatedSnapshots,
+        };
+      }
+
       // Pick first text channel if none active or current is invalid
       const currentValid = channels.some((c) => c.id === state.activeChannelId);
       const firstText = channels.find((c) => c.type === 'text');
       const activeChannelId = currentValid ? state.activeChannelId : (firstText?.id ?? null);
       return {
         groups: updatedGroups,
+        groupSnapshots: updatedSnapshots,
         activeGroupMeta,
         channels,
         members,

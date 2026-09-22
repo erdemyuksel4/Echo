@@ -31,6 +31,7 @@ import { SERVER_HTTP_URL } from '../config';
 export const ChannelList: React.FC = () => {
   const { identity } = useAuthStore();
   const {
+    activeGroupId,
     activeGroupMeta,
     channels,
     activeChannelId,
@@ -60,7 +61,7 @@ export const ChannelList: React.FC = () => {
   const { threads, activePeer, setActivePeer } = useDmStore();
   const { activeShares, watchStream } = useScreenShareStore();
 
-  if (!activeGroupMeta) {
+  if (!activeGroupId) {
     return (
       <div className="flex h-full w-60 flex-col bg-slate-900 border-r border-slate-800/60 select-none">
         {/* DM Header */}
@@ -71,7 +72,10 @@ export const ChannelList: React.FC = () => {
         {/* DM Navigation Items */}
         <div className="flex-1 overflow-y-auto px-2 py-3 space-y-1">
           <button
-            onClick={() => setActivePeer(null)}
+            onClick={() => {
+              useChatStore.getState().setActiveGroup(null);
+              setActivePeer(null);
+            }}
             className={`w-full rounded-lg px-3 py-2 text-xs font-medium flex items-center gap-2.5 transition text-left ${
               !activePeer
                 ? 'bg-indigo-600/20 text-indigo-300 font-semibold'
@@ -99,13 +103,14 @@ export const ChannelList: React.FC = () => {
                   return (
                     <button
                       key={thread.peerId}
-                      onClick={() =>
+                      onClick={() => {
+                        useChatStore.getState().setActiveGroup(null);
                         setActivePeer({
                           peerId: thread.peerId,
                           peerName: thread.peerName,
                           peerColor: thread.peerColor,
-                        })
-                      }
+                        });
+                      }}
                       className={`group flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-left transition ${
                         isActive
                           ? 'bg-slate-800 text-white font-medium'
@@ -247,6 +252,22 @@ export const ChannelList: React.FC = () => {
 
   const textChannels = channels.filter((c) => c.type === 'text');
   const voiceChannels = channels.filter((c) => c.type === 'voice');
+
+  if (!activeGroupMeta) {
+    return (
+      <div className="flex h-full w-60 flex-col bg-slate-900 border-r border-slate-800/60 select-none">
+        <div className="flex h-14 items-center border-b border-slate-800/80 px-4 shadow-sm animate-pulse">
+          <div className="h-4 w-28 bg-slate-800 rounded" />
+        </div>
+        <div className="flex-1 p-3 space-y-2">
+          <div className="h-3 w-16 bg-slate-800/60 rounded" />
+          <div className="h-6 w-full bg-slate-800/40 rounded" />
+          <div className="h-6 w-full bg-slate-800/40 rounded" />
+        </div>
+        <VoicePanel />
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-full w-60 flex-col bg-slate-900 border-r border-slate-800/60 select-none">

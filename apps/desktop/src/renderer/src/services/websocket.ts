@@ -46,6 +46,10 @@ class EchoWebSocketService {
       if (existing.ws.readyState === WebSocket.OPEN) {
         if (existing.isAuthenticated) {
           useChatStore.getState().setConnectionStatus('connected');
+          const currentChanId = useChatStore.getState().activeChannelId;
+          if (currentChanId) {
+            this.fetchHistory(currentChanId);
+          }
         } else {
           useChatStore.getState().setConnectionStatus('connecting');
         }
@@ -192,17 +196,17 @@ class EchoWebSocketService {
       }
 
       case WsServerEvents.SNAPSHOT: {
-        if (isActive) {
-          const snapshot = envelope.d as GroupSnapshot;
-          chatStore.setSnapshot(
-            snapshot.group,
-            snapshot.channels,
-            snapshot.members,
-            snapshot.inviteCode,
-          );
+        const snapshot = envelope.d as GroupSnapshot;
+        chatStore.setSnapshot(
+          snapshot.group,
+          snapshot.channels,
+          snapshot.members,
+          snapshot.inviteCode,
+        );
 
+        if (isActive) {
           // Fetch history for first active channel
-          const activeChanId = chatStore.activeChannelId;
+          const activeChanId = useChatStore.getState().activeChannelId;
           if (activeChanId) {
             this.fetchHistory(activeChanId);
           }

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Plus, MessageSquare, Trash2 } from 'lucide-react';
 import { useChatStore } from '../stores/useChatStore';
 import { useAuthStore } from '../stores/useAuthStore';
+import { useDmStore } from '../stores/useDmStore';
 import { wsService } from '../services/websocket';
 import { DeleteGroupModal } from './DeleteGroupModal';
 
@@ -31,6 +32,7 @@ export const Sidebar: React.FC<Props> = ({ onOpenCreateModal }) => {
   }, []);
 
   const handleSelectGroup = (groupId: string) => {
+    useDmStore.getState().setActivePeer(null);
     setActiveGroup(groupId);
     wsService.connect(groupId);
   };
@@ -40,9 +42,8 @@ export const Sidebar: React.FC<Props> = ({ onOpenCreateModal }) => {
       {/* Home / Echo Icon */}
       <button
         onClick={() => {
+          useDmStore.getState().setActivePeer(null);
           setActiveGroup(null);
-          useChatStore.getState().setActiveChannel(null);
-          useChatStore.setState({ activeGroupMeta: null });
           wsService.disconnect();
         }}
         className={`group relative flex h-12 w-12 items-center justify-center rounded-3xl transition-all duration-200 hover:rounded-2xl ${

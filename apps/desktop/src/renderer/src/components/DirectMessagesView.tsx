@@ -73,13 +73,14 @@ export const DirectMessagesView: React.FC = () => {
                 {threads.slice(0, 5).map((t) => (
                   <button
                     key={t.peerId}
-                    onClick={() =>
+                    onClick={() => {
+                      useChatStore.getState().setActiveGroup(null);
                       setActivePeer({
                         peerId: t.peerId,
                         peerName: t.peerName,
                         peerColor: t.peerColor,
-                      })
-                    }
+                      });
+                    }}
                     className="w-full flex items-center justify-between rounded-lg p-2 hover:bg-slate-800/60 transition text-left"
                   >
                     <div className="flex items-center gap-2.5">

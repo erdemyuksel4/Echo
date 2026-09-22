@@ -346,3 +346,21 @@ Bu dosya her faz ve görev sonunda güncellenir.
   - `apps/server/src/durable/GroupDO.ts`: Durable Object uyanıkken gelen ham `'ping'` paketlerinin `JSON.parse` hatasına düşmesi engellendi ve anında `'pong'` ile yanıtlandı.
   - `apps/desktop/src/renderer/src/services/websocket.ts` & `dmWebsocket.ts`: Ping periyodu 30 saniyeden **15 saniyeye** düşürüldü; Cloudflare edge proxy'lerinin 30-45s rölanti (idle) süresi dolmadan canlılık paketlerinin sürekli gitmesi garantiye alındı.
 
+## DM ve Kanallar Arası Geçiş Senkronizasyonu (Orta Alan Takılma Düzeltmesi)
+
+- [x] **Store ve Snapshot Önbellek Senkronizasyonu (`useChatStore.ts`):**
+  - `groupSnapshots` önbelleği getirilerek her grubun meta, kanal ve üye listesi saklandı. Grup değiştirildiğinde önbellekteki kanallar ve ilk metin kanalı anında yüklenir.
+  - `setActiveGroup(null)` çağrıldığında kanallar ve üyeler temizlenerek DM görünümüyle çakışma yaşanması önlendi.
+  - `setSnapshot` fonksiyonuna yalnızca aktif gruba ait snapshot'ların aktif görünümü değiştirmesi kuralı getirildi; arka plandaki gruplardan gelen snapshot'ların aktif görünümü bozması engellendi.
+- [x] **Sol Panel & Orta Alan Navigasyon Uyumu (`ChannelList.tsx` & `App.tsx`):**
+  - `ChannelList.tsx`'in `!activeGroupMeta` yerine `!activeGroupId` ile DM listesini render etmesi sağlandı; `activeGroupId` ile `App.tsx`'in render koşulu tam senkron hale getirildi.
+  - `ChannelList` DM ekranında bir DM sohbetine tıklandığında veya "Ana Sayfa & Arkadaşlar"a basıldığında `activeGroupId`'nin sıfırlanması (`setActiveGroup(null)`) sağlandı.
+  - Eğer grup seçilmiş ancak henüz snapshot yükleniyorsa DM listesi yerine yükleme iskeleti gösterilmesi sağlandı.
+- [x] **Sohbet Alanı Geçmiş & Aktif Kanal Senkronizasyonu (`ChatArea.tsx` & `websocket.ts`):**
+  - `ChatArea.tsx` içine `activeChannelId` veya bağlantı durumu değiştiğinde otomatik olarak `wsService.fetchHistory(activeChannelId)` çağrısı yapan `useEffect` eklendi.
+  - Hazırda açık ve doğrulanmış olan bir WebSocket'e sahip gruba geçiş yapıldığında `connect` metodunun anında aktif kanal geçmişini çekmesi sağlandı.
+- [x] **Sidebar & Modal Geçiş Temizliği (`Sidebar.tsx`, `CreateOrJoinModal.tsx`, `MemberList.tsx`):**
+  - Bir grup seçildiğinde, yeni grup kurulduğunda veya gruba katılınıldığında `activePeer(null)` yapılarak önceki DM seçimi temizlendi.
+  - Gruptan bir üyeye "Mesaj Gönder" denildiğinde veya sol menüden DM seçildiğinde aktif grup sıfırlanarak DM sohbet alanı derhal ekrana getirildi.
+
+

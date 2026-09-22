@@ -43,6 +43,13 @@ export const ChatArea: React.FC = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [currentMessages]);
 
+  // Fetch channel history on channel change or connection
+  useEffect(() => {
+    if (activeChannelId && connectionStatus === 'connected') {
+      wsService.fetchHistory(activeChannelId);
+    }
+  }, [activeChannelId, connectionStatus]);
+
   const handleUploadImage = useCallback(
     async (file: File) => {
       if (!activeGroupId) return;

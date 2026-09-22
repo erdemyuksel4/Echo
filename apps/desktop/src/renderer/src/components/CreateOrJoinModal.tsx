@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { SERVER_HTTP_URL } from '../config';
 import { useAuthStore } from '../stores/useAuthStore';
 import { useChatStore } from '../stores/useChatStore';
+import { useDmStore } from '../stores/useDmStore';
 import { wsService } from '../services/websocket';
 
 interface Props {
@@ -38,8 +39,8 @@ export const CreateOrJoinModal: React.FC<Props> = ({ isOpen, onClose }) => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: groupName.trim(),
-          displayName: identity.displayName,
-          pubkey: identity.publicKeyHex,
+          ownerDisplayName: identity.displayName,
+          ownerPubkey: identity.publicKeyHex,
           ts,
           sig: signed.sig,
         }),
@@ -50,6 +51,7 @@ export const CreateOrJoinModal: React.FC<Props> = ({ isOpen, onClose }) => {
         throw new Error(data.error ?? 'Grup oluşturulamadı');
       }
 
+      useDmStore.getState().setActivePeer(null);
       addGroup({ id: data.groupId, name: data.name });
       setActiveGroup(data.groupId);
       setDefaultInviteCode(data.inviteCode);
@@ -103,7 +105,9 @@ export const CreateOrJoinModal: React.FC<Props> = ({ isOpen, onClose }) => {
       }
 
       const grp = data.snapshot.group;
+      useDmStore.getState().setActivePeer(null);
       addGroup({ id: grp.id, name: grp.name });
+      useChatStore.getState().setSnapshot(grp, data.snapshot.channels, data.snapshot.members, data.snapshot.inviteCode ?? code);
       setActiveGroup(grp.id);
       setDefaultInviteCode(data.snapshot.inviteCode ?? code);
       wsService.connect(grp.id);
