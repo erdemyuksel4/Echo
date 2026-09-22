@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, copyFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execSync } from 'node:child_process';
@@ -119,28 +119,46 @@ if (!isCloud) {
   // 5. Direct Upload to GitHub Releases
   console.log('\n[3/3] 🚀 GitHub Releases Sayfasına Doğrudan Yükleniyor...');
   const distDir = resolve(rootDir, 'apps/desktop/dist');
-  const exePattern = resolve(distDir, `Echo Setup ${nextVersion}.exe`);
-  const blockmapPattern = resolve(distDir, `Echo Setup ${nextVersion}.exe.blockmap`);
+  const exeSpaced = resolve(distDir, `Echo Setup ${nextVersion}.exe`);
+  const blockmapSpaced = resolve(distDir, `Echo Setup ${nextVersion}.exe.blockmap`);
+  const exeHyphen = resolve(distDir, `Echo-Setup-${nextVersion}.exe`);
+  const blockmapHyphen = resolve(distDir, `Echo-Setup-${nextVersion}.exe.blockmap`);
   const latestYml = resolve(distDir, 'latest.yml');
 
+  // Ensure hyphenated copies exist for electron-updater latest.yml compatibility
+  try {
+    if (existsSync(exeSpaced) && !existsSync(exeHyphen)) {
+      copyFileSync(exeSpaced, exeHyphen);
+    }
+    if (existsSync(blockmapSpaced) && !existsSync(blockmapHyphen)) {
+      copyFileSync(blockmapSpaced, blockmapHyphen);
+    }
+  } catch (copyErr) {
+    console.warn('[Uyarı] Dosya kopyalama uyarısı:', copyErr.message);
+  }
+
   if (ghToken) {
+    const filesToUpload = [exeSpaced, exeHyphen, blockmapSpaced, blockmapHyphen, latestYml]
+      .filter((f) => existsSync(f))
+      .map((f) => `"${f}"`)
+      .join(' ');
+
     try {
-      // Try creating release directly with gh CLI
       console.log(`> gh release create ${nextTag} (hızlı doğrudan yükleme)`);
       execSync(
-        `gh release create ${nextTag} "${exePattern}" "${blockmapPattern}" "${latestYml}" --title "${nextTag}" --notes "Echo ${nextTag} sürümü (Otomatik Hızlı Dağıtım)"`,
+        `gh release create ${nextTag} ${filesToUpload} --title "${nextTag}" --notes "Echo ${nextTag} sürümü (Otomatik Hızlı Dağıtım)"`,
         {
           cwd: rootDir,
           stdio: 'inherit',
           env: { ...process.env, GH_TOKEN: ghToken },
         }
       );
-      console.log(`✓ GitHub Release başarıyla oluşturuldu ve dosyalar yüklendi!`);
+      console.log(`✓ GitHub Release başarıyla oluşturuldu ve tüm dosyalar yüklendi!`);
     } catch (err) {
-      console.warn(`[Bilgi] 'gh release create' uyarı verdi, upload deneniyor:`, err.message);
+      console.warn(`[Bilgi] 'gh release create' mevcut veya uyarı verdi, upload deneniyor:`, err.message);
       try {
         execSync(
-          `gh release upload ${nextTag} "${exePattern}" "${blockmapPattern}" "${latestYml}" --clobber`,
+          `gh release upload ${nextTag} ${filesToUpload} --clobber`,
           {
             cwd: rootDir,
             stdio: 'inherit',
@@ -149,7 +167,7 @@ if (!isCloud) {
         );
         console.log(`✓ Dosyalar mevcut Release'e başarıyla yüklendi!`);
       } catch (uploadErr) {
-        console.warn(`[Bilgi] Doğrudan yükleme atlandı (GitHub Actions tamamlayacak):`, uploadErr.message);
+        console.warn(`[Bilgi] Doğrudan yükleme atlandı:`, uploadErr.message);
       }
     }
   } else {

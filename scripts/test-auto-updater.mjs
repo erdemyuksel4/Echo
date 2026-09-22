@@ -138,34 +138,31 @@ async function runTests() {
   // 3. latest.yml Dosyası Doğrulama
   console.log('\n[3/5] GitHub latest.yml Dağıtım Dosyası Kontrolü...');
   let remoteVersion = null;
+  const currentTag = latestRelease?.tag_name || 'v0.1.3';
   try {
     const ymlContent = await fetchText(
-      'https://github.com/erdemyuksel4/Echo/releases/download/v0.1.1/latest.yml'
+      `https://github.com/erdemyuksel4/Echo/releases/download/${currentTag}/latest.yml`
     );
     const parsedYml = parseLatestYml(ymlContent);
     remoteVersion = parsedYml.version;
     assert(Boolean(remoteVersion), `latest.yml başarıyla okundu, remote version: v${remoteVersion}`);
     assert(parsedYml.path?.endsWith('.exe'), `latest.yml hedef yürütülebilir dosya: ${parsedYml.path}`);
     assert(Boolean(parsedYml.sha512), `latest.yml SHA512 doğrulaması mevcut: ${parsedYml.sha512.substring(0, 20)}...`);
-  } catch (err) {
-    assert(false, `latest.yml indirilemedi veya doğrulanamadı: ${err.message}`);
-  }
 
-  // 4. İndirilebilir Asset (Setup.exe) Doğrulama
-  console.log('\n[4/5] GitHub Kurulum Paketi (Setup.exe) Erişilebilirliği...');
-  try {
-    const assetUrl = 'https://github.com/erdemyuksel4/Echo/releases/download/v0.1.1/Echo.Setup.0.1.1.exe';
+    // 4. İndirilebilir Asset (Setup.exe) Doğrulama
+    console.log('\n[4/5] GitHub Kurulum Paketi (Setup.exe) Erişilebilirliği...');
+    const assetUrl = `https://github.com/erdemyuksel4/Echo/releases/download/${currentTag}/${encodeURIComponent(parsedYml.path)}`;
     const res = await checkUrlStatus(assetUrl);
     assert(
       res.statusCode === 200,
-      `Echo.Setup.0.1.1.exe doğrudan indirilebilir durumda (HTTP ${res.statusCode})`
+      `${parsedYml.path} doğrudan indirilebilir durumda (HTTP ${res.statusCode})`
     );
     if (res.headers['content-length']) {
       const mb = (Number(res.headers['content-length']) / (1024 * 1024)).toFixed(1);
       console.log(`        Dosya boyutu: ${mb} MB`);
     }
   } catch (err) {
-    assert(false, `Setup exe erişilemedi: ${err.message}`);
+    assert(false, `latest.yml veya exe doğrulanamadı: ${err.message}`);
   }
 
   // 5. Semver Karşılaştırma & Senaryo Testi (autoUpdater davranış simülasyonu)
@@ -185,11 +182,12 @@ async function runTests() {
       `Senaryo B: Kullanıcıda v${localVersion} kuruluysa -> GitHub (v${remoteVersion}) ile aynı olduğu için 'update-not-available' tetiklenir ve uygulama sessizce açılır.`
     );
 
-    // Senaryo C: Yerel v0.1.2 (daha yeni yerel sürüm) iken GitHub v0.1.1
-    const cmpNewer = semverCompare(remoteVersion, '0.1.2');
+    // Senaryo C: Yerel sürüm GitHub'dan daha yeniyse (örn: geliştirici modu / test)
+    const futureVer = '9.9.9';
+    const cmpNewer = semverCompare(remoteVersion, futureVer);
     assert(
       cmpNewer < 0,
-      `Senaryo C: Kullanıcıda v0.1.2 varsa -> GitHub (v${remoteVersion}) daha eski olduğu için güncelleme tetiklenmez.`
+      `Senaryo C: Kullanıcıda v${futureVer} varsa -> GitHub (v${remoteVersion}) daha eski olduğu için güncelleme tetiklenmez.`
     );
   }
 
