@@ -45,7 +45,7 @@ Aşağıdakilerden biri olursa işi durdur, durumu kısaca anlat, önerini ver, 
 - Native modül (C++ derleme gerektiren paket) ekleme
 - `ARCHITECTURE.md`'deki bir kararı değiştirme ihtiyacı
 - Güvenlik ile kolaylık arasında bir tercih
-- `wrangler deploy` (canlıya alma), sürüm yayınlama, `git push`
+- `wrangler deploy` (canlıya alma; sürüm yayınlama ve git push ise Bölüm 8 Kural 6 uyarınca onaylıdır)
 - Aynı sorunu 2 denemede çözememe
 - Gereksinimin birden fazla anlama gelmesi
 
@@ -101,6 +101,7 @@ Bir görev ancak şunlar tamamsa bitmiştir:
 3. Uygulama gerçekten çalıştırılıp elle denendi ve **nasıl denendiği** rapora yazıldı.
 4. Kabul kriterleri (`ARCHITECTURE.md`, ilgili faz) tek tek işaretlendi.
 5. Açık kalan iş `docs/PROGRESS.md`'ye yazıldı; koda gizli `TODO` bırakılmadı.
+6. **Otomatik Sürüm Yayınlama (Patron Talimatı):** Her yeni özellik veya düzeltme tamamlanıp testlerden başarıyla geçtiğinde, otomatik olarak `pnpm release` çalıştırılır ve yeni sürüm GitHub'a pushlanır. Böylece kullanıcı uygulamayı açtığında otomatik güncelleme anında devreye girer.
 
 Kendi yazdığın kodu bitirdiğinde bir de "bunu kötü niyetli bir kullanıcı nasıl bozar?" sorusuyla gözden geçir.
 
