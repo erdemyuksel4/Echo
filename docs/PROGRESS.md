@@ -336,3 +336,13 @@ Bu dosya her faz ve görev sonunda güncellenir.
   - Cihaz listeleme efektinin bağımlılıkları `[isOpen]` olarak izole edildi ve iç fonksiyonel state güncelleyicileriyle sonsuz tetiklenme/yeniden çizim döngüsü giderildi.
 - [x] **Protokol & Şema Birim Testleri (`packages/shared/src/__tests__/protocol.test.ts`):**
   - `AuthPayload` ve `ClientHistoryFetchPayload` şemalarını doğrulayan birim testleri eklendi. Toplam 67 birim testinin tamamı başarıyla geçti.
+
+## Auto-Updater Yeniden Başlatma & WebSocket Bağlantı Kopması Düzeltmeleri
+
+- [x] **Auto-Updater Yeniden Başlatma Kilitlenmesi Giderildi (`apps/desktop/src/main/updater.ts`):**
+  - `mainWindow.on('close')` içindeki `event.preventDefault()` (tepsiye küçültme) dinleyicisi `quitAndInstall` çağrılmadan önce temizlendi. Böylece güncelleme indiğinde pencerenin ve uygulamanın kapanması engellenmez; `autoUpdater.quitAndInstall(true, true)` ile NSIS arka planda sessizce kurulumu yapar ve uygulamayı anında yeniden başlatır.
+- [x] **WebSocket Periyodik Kopma (Idle Timeout) Sorunu Giderildi:**
+  - `apps/server/src/durable/UserDO.ts`: Eksik olan `setWebSocketAutoResponse('ping', 'pong')` eklendi ve `webSocketMessage` içinde ham `'ping'` mesajları doğrudan yakalanarak `'pong'` yanıtı verildi.
+  - `apps/server/src/durable/GroupDO.ts`: Durable Object uyanıkken gelen ham `'ping'` paketlerinin `JSON.parse` hatasına düşmesi engellendi ve anında `'pong'` ile yanıtlandı.
+  - `apps/desktop/src/renderer/src/services/websocket.ts` & `dmWebsocket.ts`: Ping periyodu 30 saniyeden **15 saniyeye** düşürüldü; Cloudflare edge proxy'lerinin 30-45s rölanti (idle) süresi dolmadan canlılık paketlerinin sürekli gitmesi garantiye alındı.
+

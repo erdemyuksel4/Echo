@@ -83,7 +83,10 @@ export function initAutoUpdater(window: BrowserWindow): void {
     setTimeout(() => {
       console.log('[Echo Updater] Auto-installing update and restarting...');
       try {
-        autoUpdater.quitAndInstall(false, true);
+        if (targetWindow && !targetWindow.isDestroyed()) {
+          targetWindow.removeAllListeners('close');
+        }
+        autoUpdater.quitAndInstall(true, true);
       } catch (err) {
         console.error('[Echo Updater] quitAndInstall failed:', err);
       }
@@ -132,7 +135,10 @@ export function initAutoUpdater(window: BrowserWindow): void {
       console.log('[Echo Updater] Skipped quitAndInstall in development mode.');
       return;
     }
-    autoUpdater.quitAndInstall();
+    if (targetWindow && !targetWindow.isDestroyed()) {
+      targetWindow.removeAllListeners('close');
+    }
+    autoUpdater.quitAndInstall(true, true);
   });
 
   // Trigger initial check in production shortly after window loads

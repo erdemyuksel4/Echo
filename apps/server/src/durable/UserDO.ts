@@ -38,6 +38,9 @@ export class UserDO extends DurableObject<Env> {
     super(ctx, env);
     this.sql = this.ctx.storage.sql;
     this.initDatabase();
+
+    // Auto respond to 'ping' with 'pong' for hibernation
+    this.ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('ping', 'pong'));
   }
 
   private initDatabase(): void {
@@ -263,6 +266,14 @@ export class UserDO extends DurableObject<Env> {
 
   webSocketMessage(ws: WebSocket, message: string | ArrayBuffer): void {
     if (typeof message !== 'string') return;
+    if (message === 'ping') {
+      try {
+        ws.send('pong');
+      } catch {
+        // ignore
+      }
+      return;
+    }
 
     let envelope: WsEnvelope;
     try {

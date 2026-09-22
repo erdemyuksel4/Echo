@@ -58,12 +58,12 @@ class DmWebSocketService {
         // Fetch initial thread list via HTTP
         void this.refreshThreads();
 
-        // 30s ping for hibernation
+        // 15s ping for hibernation
         this.pingInterval = setInterval(() => {
           if (this.ws?.readyState === WebSocket.OPEN) {
             this.ws.send('ping');
           }
-        }, 30_000);
+        }, 15_000);
       };
 
       socket.onmessage = (event) => {

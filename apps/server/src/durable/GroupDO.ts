@@ -693,6 +693,14 @@ export class GroupDO extends DurableObject<Env> {
 
   async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer): Promise<void> {
     if (typeof message !== 'string') return;
+    if (message === 'ping') {
+      try {
+        ws.send('pong');
+      } catch {
+        // ignore
+      }
+      return;
+    }
 
     let envelope: WsEnvelope;
     try {

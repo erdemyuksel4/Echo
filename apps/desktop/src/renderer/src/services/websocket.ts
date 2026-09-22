@@ -117,12 +117,12 @@ class EchoWebSocketService {
         };
         socket.send(JSON.stringify(authPayload));
 
-        // Setup 30s ping
+        // Setup 15s ping for aggressive keepalive against edge proxy drops
         managed.pingInterval = setInterval(() => {
           if (managed.ws?.readyState === WebSocket.OPEN) {
             managed.ws.send('ping');
           }
-        }, 30_000);
+        }, 15_000);
       } catch (err) {
         console.error(`Failed to sign auth for WebSocket (${groupId}):`, err);
         socket.close(4001, 'Auth sign failed');
