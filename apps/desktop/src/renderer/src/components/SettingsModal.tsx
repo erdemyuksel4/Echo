@@ -13,17 +13,36 @@ import {
   Sliders,
   Laptop,
   Video,
+  Info,
+  CheckCircle2,
+  RefreshCw,
+  ExternalLink,
+  Cpu,
+  Layers,
+  Sparkles,
+  ShieldCheck,
+  Radio,
 } from 'lucide-react';
 import { soundService } from '../services/sound';
 import { webrtcService } from '../services/webrtc';
 import { useVoiceStore } from '../stores/useVoiceStore';
 
+type AppInfo = Awaited<ReturnType<NonNullable<typeof window.echoApi>['getAppInfo']>>;
+
+type SettingsTab = 'voice' | 'notifications' | 'about';
+
 interface Props {
   isOpen: boolean;
   onClose: () => void;
+  initialTab?: SettingsTab;
 }
 
-export const SettingsModal: React.FC<Props> = ({ isOpen, onClose }) => {
+export const SettingsModal: React.FC<Props> = ({ isOpen, onClose, initialTab = 'voice' }) => {
+  const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab);
+  const [appInfo, setAppInfo] = useState<AppInfo | null>(null);
+  const [updateStatus, setUpdateStatus] = useState<string | null>(null);
+  const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
+
   const [soundEnabled, setSoundEnabled] = useState(soundService.isEnabled());
   const [notifEnabled, setNotifEnabled] = useState(() => {
     try {
@@ -65,11 +84,40 @@ export const SettingsModal: React.FC<Props> = ({ isOpen, onClose }) => {
   const [autoStartEnabled, setAutoStartEnabled] = useState(false);
 
   useEffect(() => {
-    if (isOpen && window.echoApi?.getLoginItemSettings) {
-      void window.echoApi.getLoginItemSettings().then((settings) => {
-        setAutoStartEnabled(Boolean(settings?.openAtLogin));
-      });
+    if (isOpen) {
+      if (initialTab) {
+        setActiveTab(initialTab);
+      }
+      if (window.echoApi?.getAppInfo) {
+        void window.echoApi.getAppInfo().then((info) => {
+          setAppInfo(info);
+        });
+      }
+      if (window.echoApi?.getLoginItemSettings) {
+        void window.echoApi.getLoginItemSettings().then((settings) => {
+          setAutoStartEnabled(Boolean(settings?.openAtLogin));
+        });
+      }
     }
+  }, [isOpen, initialTab]);
+
+  useEffect(() => {
+    if (!isOpen || !window.echoApi?.onUpdateStatus) return;
+    const cleanup = window.echoApi.onUpdateStatus((data) => {
+      setIsCheckingUpdate(false);
+      if (data.status === 'checking') {
+        setUpdateStatus('Güncellemeler denetleniyor...');
+      } else if (data.status === 'not-available') {
+        setUpdateStatus('En güncel sürümü kullanıyorsunuz.');
+      } else if (data.status === 'available') {
+        setUpdateStatus(`Yeni sürüm bulundu (v${data.version || ''}), otomatik indiriliyor...`);
+      } else if (data.status === 'downloaded') {
+        setUpdateStatus(`Güncelleme indirildi (v${data.version || ''}), yeniden başlatılıyor...`);
+      } else if (data.status === 'error') {
+        setUpdateStatus(`Güncelleme kontrolü: ${data.error || 'Bağlantı hatası'}`);
+      }
+    });
+    return cleanup;
   }, [isOpen]);
 
   useEffect(() => {
@@ -207,30 +255,105 @@ export const SettingsModal: React.FC<Props> = ({ isOpen, onClose }) => {
     soundService.playNotification();
   };
 
+  const handleCheckUpdates = async () => {
+    setIsCheckingUpdate(true);
+    setUpdateStatus('Güncellemeler denetleniyor...');
+    try {
+      if (window.echoApi?.checkForUpdates) {
+        await window.echoApi.checkForUpdates();
+        setTimeout(() => {
+          setIsCheckingUpdate(false);
+          setUpdateStatus((prev) =>
+            prev === 'Güncellemeler denetleniyor...'
+              ? 'Echo güncel. En son sürümü kullanıyorsunuz.'
+              : prev,
+          );
+        }, 2500);
+      } else {
+        setIsCheckingUpdate(false);
+        setUpdateStatus('Geliştirici modunda güncelleme denetlenemez.');
+      }
+    } catch {
+      setIsCheckingUpdate(false);
+      setUpdateStatus('Güncelleme denetlenirken bir hata oluştu.');
+    }
+  };
+
+  const handleOpenGithub = () => {
+    if (window.echoApi?.openExternal) {
+      void window.echoApi.openExternal('https://github.com/erdemyuksel4/Echo');
+    } else {
+      window.open('https://github.com/erdemyuksel4/Echo', '_blank');
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm select-none animate-in fade-in duration-150">
       <div className="w-full max-w-lg max-h-[90vh] flex flex-col rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl overflow-hidden">
-        {/* Header */}
-        <div className="flex items-center justify-between border-b border-slate-800 px-6 py-4 bg-slate-950/60">
-          <div className="flex items-center gap-2.5 text-white">
-            <Settings className="h-5 w-5 text-indigo-400" />
-            <h2 className="text-base font-bold">Ayarlar &amp; Ses Yapılandırması</h2>
+        {/* Header with Navigation Tabs */}
+        <div className="border-b border-slate-800 bg-slate-950/80 px-6 pt-4 pb-0">
+          <div className="flex items-center justify-between pb-3">
+            <div className="flex items-center gap-2.5 text-white">
+              <Settings className="h-5 w-5 text-indigo-400" />
+              <h2 className="text-base font-bold">Ayarlar &amp; Yapılandırma</h2>
+            </div>
+            <button
+              onClick={onClose}
+              className="rounded-lg p-1 text-slate-400 hover:bg-slate-800 hover:text-white transition"
+            >
+              <X className="h-5 w-5" />
+            </button>
           </div>
-          <button
-            onClick={onClose}
-            className="rounded-lg p-1 text-slate-400 hover:bg-slate-800 hover:text-white transition"
-          >
-            <X className="h-5 w-5" />
-          </button>
+
+          {/* Navigation Tabs */}
+          <div className="flex items-center gap-2 -mb-px">
+            <button
+              type="button"
+              onClick={() => setActiveTab('voice')}
+              className={`flex items-center gap-1.5 px-3 py-2.5 text-xs font-semibold border-b-2 transition ${
+                activeTab === 'voice'
+                  ? 'border-indigo-500 text-indigo-400'
+                  : 'border-transparent text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <Mic className="h-3.5 w-3.5" />
+              <span>Ses &amp; Görüntü</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('notifications')}
+              className={`flex items-center gap-1.5 px-3 py-2.5 text-xs font-semibold border-b-2 transition ${
+                activeTab === 'notifications'
+                  ? 'border-indigo-500 text-indigo-400'
+                  : 'border-transparent text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <Bell className="h-3.5 w-3.5" />
+              <span>Bildirim &amp; Tercihler</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('about')}
+              className={`flex items-center gap-1.5 px-3 py-2.5 text-xs font-semibold border-b-2 transition ${
+                activeTab === 'about'
+                  ? 'border-indigo-500 text-indigo-400'
+                  : 'border-transparent text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <Info className="h-3.5 w-3.5" />
+              <span>Hakkında</span>
+            </button>
+          </div>
         </div>
 
         {/* Scrollable Content */}
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
-          {/* Section: Voice & Audio Settings */}
-          <div>
-            <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-3">
-              Ses &amp; Donanım Ayarları
-            </div>
+          {/* Tab 1: Voice & Audio Settings */}
+          {activeTab === 'voice' && (
+            <div>
+              <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-3">
+                Ses &amp; Donanım Ayarları
+              </div>
 
             <div className="space-y-4">
               {/* Microphone Selection & Test */}
@@ -535,98 +658,256 @@ export const SettingsModal: React.FC<Props> = ({ isOpen, onClose }) => {
               </div>
             </div>
           </div>
+        )}
 
-          {/* Section: Notification & Preferences */}
-          <div>
-            <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-3">
-              Bildirim &amp; Tercihler
+        {/* Tab 2: Notification & Preferences */}
+          {activeTab === 'notifications' && (
+            <div>
+              <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-3">
+                Bildirim &amp; Tercihler
+              </div>
+
+              <div className="space-y-3">
+                {/* Windows Auto-Start Toggle */}
+                <div className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-sky-600/20 text-sky-400">
+                      <Laptop className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-semibold text-white">Windows ile Birlikte Başlat</h3>
+                      <p className="text-xs text-slate-400">Bilgisayar açıldığında Echo otomatik başlasın</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={handleToggleAutoStart}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                      autoStartEnabled ? 'bg-indigo-600' : 'bg-slate-700'
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                        autoStartEnabled ? 'translate-x-6' : 'translate-x-1'
+                      }`}
+                    />
+                  </button>
+                </div>
+
+                {/* Sound Toggle */}
+                <div className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-indigo-600/20 text-indigo-400">
+                      <Volume2 className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-semibold text-white">Bildirim Sesleri</h3>
+                      <p className="text-xs text-slate-400">Gelen mesajlar için sesli uyarı çal</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={handleToggleSound}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                      soundEnabled ? 'bg-indigo-600' : 'bg-slate-700'
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                        soundEnabled ? 'translate-x-6' : 'translate-x-1'
+                      }`}
+                    />
+                  </button>
+                </div>
+
+                {/* Desktop Notification Toggle */}
+                <div className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-600/20 text-emerald-400">
+                      <Bell className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-semibold text-white">Masaüstü Bildirimleri</h3>
+                      <p className="text-xs text-slate-400">Windows sistem bildirimleri gönder</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={handleToggleNotif}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                      notifEnabled ? 'bg-indigo-600' : 'bg-slate-700'
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                        notifEnabled ? 'translate-x-6' : 'translate-x-1'
+                      }`}
+                    />
+                  </button>
+                </div>
+
+                {/* Privacy Note */}
+                <div className="flex items-start gap-3 rounded-xl border border-slate-800 bg-slate-950/30 p-4 text-xs text-slate-400">
+                  <Shield className="h-5 w-5 text-indigo-400 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-semibold text-slate-300">Gizlilik &amp; Sistem Tepsisi: </span>
+                    Pencereyi kapattığınızda Echo arka planda sistem tepsisinde çalışmaya devam eder ve sesli bağlantınızı koparmadan arka planda tutar.
+                  </div>
+                </div>
+              </div>
             </div>
+          )}
 
-            <div className="space-y-3">
-              {/* Windows Auto-Start Toggle */}
-              <div className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-950/60 p-4">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-sky-600/20 text-sky-400">
-                    <Laptop className="h-5 w-5" />
+          {/* Tab 3: About Echo */}
+          {activeTab === 'about' && (
+            <div className="space-y-5 animate-in fade-in duration-150">
+              {/* Hero Banner */}
+              <div className="relative overflow-hidden rounded-2xl border border-indigo-500/25 bg-gradient-to-br from-indigo-950/50 via-slate-900 to-slate-950 p-5 shadow-lg">
+                <div className="relative z-10 flex items-center gap-4">
+                  <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-tr from-indigo-600 to-violet-500 text-white shadow-xl shadow-indigo-600/30 ring-2 ring-indigo-400/20">
+                    <Sparkles className="h-7 w-7" />
                   </div>
-                  <div>
-                    <h3 className="text-sm font-semibold text-white">Windows ile Birlikte Başlat</h3>
-                    <p className="text-xs text-slate-400">Bilgisayar açıldığında Echo otomatik başlasın</p>
-                  </div>
-                </div>
-                <button
-                  onClick={handleToggleAutoStart}
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                    autoStartEnabled ? 'bg-indigo-600' : 'bg-slate-700'
-                  }`}
-                >
-                  <span
-                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                      autoStartEnabled ? 'translate-x-6' : 'translate-x-1'
-                    }`}
-                  />
-                </button>
-              </div>
-              {/* Sound Toggle */}
-              <div className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-950/60 p-4">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-indigo-600/20 text-indigo-400">
-                    <Volume2 className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-semibold text-white">Bildirim Sesleri</h3>
-                    <p className="text-xs text-slate-400">Gelen mesajlar için sesli uyarı çal</p>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-lg font-black tracking-tight text-white">Echo</h3>
+                      <span className="rounded-full bg-indigo-500/20 px-2 py-0.5 text-xs font-mono font-bold text-indigo-300 border border-indigo-500/30">
+                        v{appInfo?.appVersion || '0.1.0'}
+                      </span>
+                      <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-400 border border-emerald-500/20 flex items-center gap-1">
+                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                        Canlı
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-400 mt-1 line-clamp-2">
+                      Güvenli, hafif, modern ve P2P mesh mimarili yeni nesil sesli/yazılı iletişim platformu.
+                    </p>
                   </div>
                 </div>
-                <button
-                  onClick={handleToggleSound}
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                    soundEnabled ? 'bg-indigo-600' : 'bg-slate-700'
-                  }`}
-                >
-                  <span
-                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                      soundEnabled ? 'translate-x-6' : 'translate-x-1'
-                    }`}
-                  />
-                </button>
               </div>
 
-              {/* Desktop Notification Toggle */}
-              <div className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-950/60 p-4">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-600/20 text-emerald-400">
-                    <Bell className="h-5 w-5" />
+              {/* Version & Environment Details */}
+              <div>
+                <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-2.5">
+                  Sürüm &amp; Çalışma Ortamı
+                </div>
+
+                <div className="grid grid-cols-2 gap-2.5">
+                  <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-3 space-y-1">
+                    <div className="text-[10px] font-medium text-slate-400 flex items-center gap-1.5">
+                      <Layers className="h-3 w-3 text-indigo-400" />
+                      <span>Protokol Sürümü</span>
+                    </div>
+                    <div className="font-mono text-xs font-bold text-white">
+                      Echo Protocol v{appInfo?.protocolVersion || 1}
+                    </div>
                   </div>
-                  <div>
-                    <h3 className="text-sm font-semibold text-white">Masaüstü Bildirimleri</h3>
-                    <p className="text-xs text-slate-400">Windows sistem bildirimleri gönder</p>
+
+                  <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-3 space-y-1">
+                    <div className="text-[10px] font-medium text-slate-400 flex items-center gap-1.5">
+                      <Cpu className="h-3 w-3 text-emerald-400" />
+                      <span>İşletim Sistemi &amp; Mimari</span>
+                    </div>
+                    <div className="font-mono text-xs font-bold text-white capitalize">
+                      {appInfo?.platform || 'Windows'} ({appInfo?.arch || 'x64'})
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-3 space-y-1">
+                    <div className="text-[10px] font-medium text-slate-400">Electron Çekirdeği</div>
+                    <div className="font-mono text-xs font-bold text-slate-200">
+                      v{appInfo?.electronVersion || '34.x'}
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-3 space-y-1">
+                    <div className="text-[10px] font-medium text-slate-400">Chromium &amp; Node.js</div>
+                    <div className="font-mono text-xs font-bold text-slate-200 truncate">
+                      Chrome {appInfo?.chromeVersion?.split('.')[0] || '132'} / Node {appInfo?.nodeVersion || '20.x'}
+                    </div>
                   </div>
                 </div>
-                <button
-                  onClick={handleToggleNotif}
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                    notifEnabled ? 'bg-indigo-600' : 'bg-slate-700'
-                  }`}
-                >
-                  <span
-                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                      notifEnabled ? 'translate-x-6' : 'translate-x-1'
-                    }`}
-                  />
-                </button>
               </div>
 
-              {/* Privacy Note */}
-              <div className="flex items-start gap-3 rounded-xl border border-slate-800 bg-slate-950/30 p-4 text-xs text-slate-400">
-                <Shield className="h-5 w-5 text-indigo-400 flex-shrink-0 mt-0.5" />
-                <div>
-                  <span className="font-semibold text-slate-300">Gizlilik &amp; Sistem Tepsisi: </span>
-                  Pencereyi kapattığınızda Echo arka planda sistem tepsisinde çalışmaya devam eder ve sesli bağlantınızı koparmadan arka planda tutar.
+              {/* Architectural Principles */}
+              <div>
+                <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-2.5">
+                  Mimari &amp; Güvenlik
                 </div>
+
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="flex items-start gap-2.5 rounded-xl border border-slate-800 bg-slate-950/40 p-3">
+                    <ShieldCheck className="h-4 w-4 text-emerald-400 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <div className="font-semibold text-slate-200">Ed25519 Kimlik</div>
+                      <div className="text-[11px] text-slate-400 mt-0.5">Şifre yok, cihazda şifrelenen özel anahtar.</div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-2.5 rounded-xl border border-slate-800 bg-slate-950/40 p-3">
+                    <Radio className="h-4 w-4 text-indigo-400 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <div className="font-semibold text-slate-200">P2P WebRTC Mesh</div>
+                      <div className="text-[11px] text-slate-400 mt-0.5">Eşler arası doğrudan şifreli ses &amp; görüntü.</div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-2.5 rounded-xl border border-slate-800 bg-slate-950/40 p-3">
+                    <CheckCircle2 className="h-4 w-4 text-sky-400 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <div className="font-semibold text-slate-200">Sıfır Telemetri</div>
+                      <div className="text-[11px] text-slate-400 mt-0.5">Hiçbir kullanıcı takibi ve reklam içermez.</div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-2.5 rounded-xl border border-slate-800 bg-slate-950/40 p-3">
+                    <Layers className="h-4 w-4 text-purple-400 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <div className="font-semibold text-slate-200">Cloudflare DO</div>
+                      <div className="text-[11px] text-slate-400 mt-0.5">Sunucusuz SQLite &amp; WebSocket Hibernation.</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Updates Section */}
+              <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4 space-y-3">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <h4 className="text-sm font-semibold text-white">Yazılım Güncellemeleri</h4>
+                    <p className="text-xs text-slate-400">Otomatik arka plan güncellemeleri</p>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={isCheckingUpdate}
+                    onClick={handleCheckUpdates}
+                    className="flex items-center gap-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 px-3 py-1.5 text-xs font-semibold text-white transition"
+                  >
+                    <RefreshCw className={`h-3.5 w-3.5 ${isCheckingUpdate ? 'animate-spin' : ''}`} />
+                    <span>{isCheckingUpdate ? 'Denetleniyor...' : 'Güncellemeleri Denetle'}</span>
+                  </button>
+                </div>
+
+                {updateStatus && (
+                  <div className="rounded-lg bg-slate-900 border border-slate-800 p-2.5 text-xs text-slate-300 flex items-center gap-2">
+                    <Info className="h-4 w-4 text-indigo-400 flex-shrink-0" />
+                    <span>{updateStatus}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Open Source & Links Footer */}
+              <div className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-950/40 px-4 py-3 text-xs">
+                <div className="text-slate-400">
+                  Echo açık kaynaklı bir yazılımdır (MIT Lisansı).
+                </div>
+                <button
+                  type="button"
+                  onClick={handleOpenGithub}
+                  className="flex items-center gap-1 text-indigo-400 hover:text-indigo-300 transition font-medium"
+                >
+                  <span>GitHub</span>
+                  <ExternalLink className="h-3 w-3" />
+                </button>
               </div>
             </div>
-          </div>
+          )}
         </div>
 
         {/* Footer */}

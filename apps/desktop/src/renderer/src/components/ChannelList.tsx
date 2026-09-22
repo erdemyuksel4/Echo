@@ -14,6 +14,7 @@ import {
   MessageSquare,
   Radio,
   Video,
+  Info,
 } from 'lucide-react';
 import { useChatStore } from '../stores/useChatStore';
 import { useAuthStore } from '../stores/useAuthStore';
@@ -51,6 +52,12 @@ export const ChannelList: React.FC = () => {
   const [newChannelName, setNewChannelName] = useState('');
   const [newChannelType, setNewChannelType] = useState<'text' | 'voice'>('text');
   const [showSettings, setShowSettings] = useState(false);
+  const [settingsTab, setSettingsTab] = useState<'voice' | 'notifications' | 'about'>('voice');
+
+  const openSettings = (tab: 'voice' | 'notifications' | 'about' = 'voice') => {
+    setSettingsTab(tab);
+    setShowSettings(true);
+  };
   const [showGroupMenu, setShowGroupMenu] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
 
@@ -150,16 +157,29 @@ export const ChannelList: React.FC = () => {
             </div>
             <div className="text-[10px] text-emerald-400">Çevrimiçi</div>
           </div>
-          <button
-            onClick={() => setShowSettings(true)}
-            className="rounded p-1.5 text-slate-400 hover:bg-slate-800 hover:text-white transition"
-            title="Ayarlar"
-          >
-            <Settings className="h-4 w-4" />
-          </button>
+          <div className="flex items-center gap-0.5">
+            <button
+              onClick={() => openSettings('about')}
+              className="rounded p-1.5 text-slate-400 hover:bg-slate-800 hover:text-white transition"
+              title="Echo Hakkında & Sürüm Bilgileri"
+            >
+              <Info className="h-4 w-4" />
+            </button>
+            <button
+              onClick={() => openSettings('voice')}
+              className="rounded p-1.5 text-slate-400 hover:bg-slate-800 hover:text-white transition"
+              title="Ayarlar"
+            >
+              <Settings className="h-4 w-4" />
+            </button>
+          </div>
         </div>
 
-        <SettingsModal isOpen={showSettings} onClose={() => setShowSettings(false)} />
+        <SettingsModal
+          isOpen={showSettings}
+          onClose={() => setShowSettings(false)}
+          initialTab={settingsTab}
+        />
       </div>
     );
   }
@@ -613,16 +633,29 @@ export const ChannelList: React.FC = () => {
           <div className="truncate text-xs font-semibold text-white">{identity?.displayName}</div>
           <div className="text-[10px] text-emerald-400">Çevrimiçi</div>
         </div>
-        <button
-          onClick={() => setShowSettings(true)}
-          className="rounded p-1.5 text-slate-400 hover:bg-slate-800 hover:text-white transition"
-          title="Ayarlar"
-        >
-          <Settings className="h-4 w-4" />
-        </button>
+        <div className="flex items-center gap-0.5">
+          <button
+            onClick={() => openSettings('about')}
+            className="rounded p-1.5 text-slate-400 hover:bg-slate-800 hover:text-white transition"
+            title="Echo Hakkında & Sürüm Bilgileri"
+          >
+            <Info className="h-4 w-4" />
+          </button>
+          <button
+            onClick={() => openSettings('voice')}
+            className="rounded p-1.5 text-slate-400 hover:bg-slate-800 hover:text-white transition"
+            title="Ayarlar"
+          >
+            <Settings className="h-4 w-4" />
+          </button>
+        </div>
       </div>
 
-      <SettingsModal isOpen={showSettings} onClose={() => setShowSettings(false)} />
+      <SettingsModal
+        isOpen={showSettings}
+        onClose={() => setShowSettings(false)}
+        initialTab={settingsTab}
+      />
 
       {activeGroupMeta && (
         <DeleteGroupModal

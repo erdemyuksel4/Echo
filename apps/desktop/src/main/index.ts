@@ -189,7 +189,25 @@ if (!gotTheLock) {
         protocolVersion: PROTOCOL_VERSION,
         appVersion: app.getVersion(),
         platform: process.platform,
+        electronVersion: process.versions.electron,
+        chromeVersion: process.versions.chrome,
+        nodeVersion: process.versions.node,
+        arch: process.arch,
       };
+    });
+
+    // Handle Safe External Link Opening
+    ipcMain.handle('desktop:openExternal', async (_, { url }: { url: string }) => {
+      try {
+        const parsed = new URL(url);
+        if (parsed.protocol === 'https:') {
+          await shell.openExternal(url);
+          return true;
+        }
+      } catch {
+        // Invalid URL
+      }
+      return false;
     });
 
     // Handle Identity IPC

@@ -299,3 +299,25 @@ Bu dosya her faz ve görev sonunda güncellenir.
   - `UpdateNotification.tsx`: Kullanıcıya sürecin durumunu (İndiriliyor %X -> Güncellendi, yeniden başlatılıyor...) şık ve bilgilendirici olarak gösterir.
 - [x] **Otomatik Sürüm Yayınlama Aracı:**
   - `scripts/bump-version.mjs` ve `pnpm release` komutu ile tek komutta tüm `package.json` sürümleri güncellenir, git commit ve tag oluşturulur ve GitHub'a pushlanır.
+
+## Uygulama Hakkında & Sürüm Bilgileri Paneli (About Echo)
+
+- [x] **Ana Süreç & Preload Entegrasyonu (`apps/desktop`):**
+  - `apps/desktop/src/main/index.ts`: `app:get-info` IPC işleyicisine Electron (`process.versions.electron`), Chromium (`process.versions.chrome`), Node.js (`process.versions.node`) ve işlemci mimarisi (`process.arch`) eklendi.
+  - Güvenli `desktop:openExternal` IPC işleyicisi ile harici bağlantıların (`https:`) sistem varsayılan tarayıcısında açılması sağlandı.
+  - `apps/desktop/src/preload/index.ts`: `AppInfo` tipi genişletildi, `openExternal` ve `onUpdateStatus` metotları tipli olarak UI'a sunuldu.
+- [x] **Modern Sekmeli Ayarlar & Zengin "Hakkında" Görünümü (`SettingsModal.tsx`):**
+  - Üst gezinme çubuğu (Tabs): 🎙️ **Ses & Görüntü**, 🔔 **Bildirim & Tercihler**, ℹ️ **Hakkında**.
+  - **Echo Başlığı & Canlı Rozet:** İstemci sürümü (`v0.1.0`), Echo simgesi, canlı durum animasyonu.
+  - **Sürüm & Çalışma Ortamı Kartları:** Protokol sürümü (`Echo Protocol v1`), İşletim sistemi & mimari (`Windows x64`), Electron, Chromium ve Node.js sürümleri.
+  - **Mimari & Güvenlik Prensipleri:** Ed25519 Kriptografik kimlik, P2P WebRTC mesh, Sıfır telemetri ve Cloudflare DO altyapısı özetleri.
+  - **Yazılım Güncellemeleri Denetleyicisi:** "Güncellemeleri Denetle" butonu, denetleme animasyonu ve anlık durum geri bildirimi (`onUpdateStatus`).
+  - **Açık Kaynak & Lisans:** GitHub repository bağlantısı (`openExternal`) ve MIT lisans bilgisi.
+- [x] **Kullanıcı Durum Barından Hızlı Erişim (`ChannelList.tsx`):**
+  - Sol alttaki kullanıcı profil çubuğuna doğrudan "Hakkında" sekmesini açan bilgi butonu (`Info`) eklendi.
+- [x] **Test ve Doğrulamalar:**
+  - `pnpm typecheck`: Monorepo genelinde sıfır hata ile geçti.
+  - `pnpm lint`: Monorepo genelinde sıfır hata ile geçti.
+  - `pnpm test`: 14 test dosyası, 65 testin tamamı (%100) başarıyla geçti.
+  - `pnpm --filter @echo/desktop build`: Electron derlemesi başarıyla tamamlandı.
+

@@ -6,6 +6,10 @@ export interface AppInfo {
   protocolVersion: number;
   appVersion: string;
   platform: string;
+  electronVersion?: string;
+  chromeVersion?: string;
+  nodeVersion?: string;
+  arch?: string;
 }
 
 export interface StoredIdentityProfile extends UserProfile {
@@ -27,12 +31,14 @@ export interface EchoApi {
   showNotification: (options: { title: string; body: string; silent?: boolean }) => Promise<boolean>;
   setBadgeCount: (count: number) => Promise<boolean>;
   copyToClipboard: (text: string) => Promise<boolean>;
+  openExternal: (url: string) => Promise<boolean>;
   getDesktopSources: () => Promise<ScreenShareSource[]>;
   getLoginItemSettings: () => Promise<{ openAtLogin: boolean }>;
   setLoginItemSettings: (openAtLogin: boolean) => Promise<boolean>;
   checkForUpdates: () => Promise<void>;
   downloadUpdate: () => Promise<void>;
   quitAndInstall: () => void;
+  onUpdateStatus: (cb: (data: { status: string; version?: string; error?: string }) => void) => () => void;
   onUpdateAvailable: (cb: (info: { version: string; releaseNotes?: string }) => void) => () => void;
   onUpdateProgress: (cb: (progress: { percent: number; bytesPerSecond: number }) => void) => () => void;
   onUpdateDownloaded: (cb: (info: { version: string }) => void) => () => void;
@@ -63,6 +69,9 @@ const echoApi: EchoApi = {
   copyToClipboard: (text: string): Promise<boolean> => {
     return ipcRenderer.invoke('desktop:copyToClipboard', { text });
   },
+  openExternal: (url: string): Promise<boolean> => {
+    return ipcRenderer.invoke('desktop:openExternal', { url });
+  },
   getDesktopSources: (): Promise<ScreenShareSource[]> => {
     return ipcRenderer.invoke('desktop:getSources');
   },
@@ -80,6 +89,20 @@ const echoApi: EchoApi = {
   },
   quitAndInstall: (): void => {
     void ipcRenderer.invoke('updater:install');
+  },
+  onUpdateStatus: (
+    cb: (data: { status: string; version?: string; error?: string }) => void,
+  ): (() => void) => {
+    const handler = (
+      _event: Electron.IpcRendererEvent,
+      data: { status: string; version?: string; error?: string },
+    ): void => {
+      cb(data);
+    };
+    ipcRenderer.on('updater:status', handler);
+    return () => {
+      ipcRenderer.removeListener('updater:status', handler);
+    };
   },
   onUpdateAvailable: (cb: (info: { version: string; releaseNotes?: string }) => void): (() => void) => {
     const handler = (
