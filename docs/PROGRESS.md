@@ -389,6 +389,20 @@ Bu dosya her faz ve görev sonunda güncellenir.
   - `apps/desktop/src/main/updater.ts` ve `apps/updater/MainWindow.xaml.cs` içine doğrudan ve sıfır kota kısıtlamalı `https://github.com/erdemyuksel4/Echo/releases/latest/download/latest.yml` indirme ve ayrıştırma stratejisi eklendi.
   - `latest.yml` doğrudan GitHub CDN üzerinden çekildiği için API kotasına takılmaz ve 403 hatası vermez.
 
+## WebRTC TURN Röle & NAT/Firewall Geçişi (Simetrik NAT Desteği)
 
-
-
+- [x] **Şema ve Yedekli Mimari (`packages/shared`):**
+  - WebRTC için tip güvenli `IceServerSchema` ve `TurnResponseSchema` tanımlandı.
+  - Doğrulanmış `DEFAULT_FALLBACK_ICE_SERVERS` tanımlandı (Cloudflare STUN, Google STUN, OpenRelay Metered TURN — UDP/TCP/TLS 80 & 443 portları).
+  - 5 yeni birim testi (`packages/shared/src/__tests__/voice.test.ts`) eklendi ve tüm testler geçti.
+- [x] **Sunucu Uç Noktası (`apps/server/src/index.ts`):**
+  - `/api/turn` uç noktası dinamik hale getirildi:
+    - Cloudflare Calls TURN secret'ları (`CLOUDFLARE_TURN_KEY_ID`, `CLOUDFLARE_TURN_API_TOKEN`) tanımlıysa Cloudflare API'sine bağlanıp geçici TURN kimlik bilgisi üretiyor.
+    - Secret'lar henüz eklenmemişse otomatik olarak OpenRelay Metered TURN yedek sunucularını sunuyor.
+  - Birim testleri (`apps/server/test/turn.spec.ts`) yazıldı ve tüm sunucu testleri başarıyla geçti.
+- [x] **Masaüstü İstemcisi (`apps/desktop`):**
+  - Merkezi `iceServersService` oluşturuldu.
+  - Ses (`webrtc.ts`), ekran paylaşımı (`transport.ts`) ve P2P dosya transferi (`p2pFileTransfer.ts`) servislerinin tamamı doğrudan STUN + TURN yedekleriyle başlatılacak ve sunucudan dinamik güncellenecek şekilde bağlandı.
+- [x] **Otomatik Dağıtım (v0.1.10):**
+  - Tüm test ve kontroller (typecheck, lint, test) hatasız tamamlandı.
+  - `pnpm release` ile `v0.1.10` sürümü GitHub Releases üzerinde tek tıkla kurulum ve güncelleme için yayınlandı.
