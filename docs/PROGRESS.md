@@ -406,3 +406,20 @@ Bu dosya her faz ve görev sonunda güncellenir.
 - [x] **Otomatik Dağıtım (v0.1.10):**
   - Tüm test ve kontroller (typecheck, lint, test) hatasız tamamlandı.
   - `pnpm release` ile `v0.1.10` sürümü GitHub Releases üzerinde tek tıkla kurulum ve güncelleme için yayınlandı.
+
+## Ses Aygıtı Yönetimi, Çıkış Yönlendirme & Kanaldan Ayrılma Sızıntısı Çözümü (v0.1.11)
+
+- [x] **Kanaldan Ayrılınca Sesin Devam Etmesi (Audio Leak) Giderildi:**
+  - `leave()` metodunda tüm `RTCPeerConnection` bağlantı dinleyicileri sıfırlandı (`ontrack = null`, `onicecandidate = null`, `onconnectionstatechange = null`) ve bağlantılar kapatıldı.
+  - Tüm `peerAudioElements` elemanları durduruldu (`pause()`), bağlı olan `MediaStreamTrack`'lerin tümü kapatıldı (`track.stop()`), `srcObject = null` yapıldı ve DOM'dan kaldırıldı.
+  - DOM üzerinde `audio[data-echo-peer]` seçicisiyle genel süpürme (sweep) yapılarak hiçbir yetim (orphan) ses çalma nesnesi kalmaması sağlandı.
+  - `getOrCreatePeerConnection` ve `ontrack` içine `currentChannelId` kontrolü konuldu; kanalda olunmadığı anda ses çalınması ve yeni bağlantı kurulması engellendi.
+  - `websocket.ts` içinde `VOICE_SIGNAL` olayına kanal kontrolü (`channelId === currentChannelId`) eklendi; eski kanaldan gelen gecikmeli WebRTC sinyallerinin yeni bağlantı açması önlendi.
+- [x] **Aygıt Değişimi & Ses Gönderiminin Durması (Confused State) Giderildi:**
+  - `setupVAD`: Aygıt değiştiğinde veya yeni akış geldiğinde önceki VAD interval'ı, konuşma zamanlayıcısı ve AudioContext kapatılarak birden fazla analizörün birbiriyle çakışması ve sesin gidip gelmesi engellendi.
+  - `setInputDevice`: `exact` kısıtlaması güvenli hale getirildi, `getUserMedia` hatasında otomatik olarak varsayılan mikrofona geçiş desteği eklendi. Yeni akışın `updateAudioTrackState()` çağrısıyla PTT/Mute durumunu doğru koruması sağlandı.
+  - `reacquireLocalAudio`: Mikrofon akışı Windows seviyesinde koptuğunda (`track.onended`) veya aygıt takılıp çıkarıldığında (`devicechange`) otomatik olarak mikrofonu yeniden edinme mantığı eklendi.
+  - `setOutputDevice`: `setSinkId` desteği eklenerek hoparlör/kulaklık seçimi aktifleştirildi. Ayarlar modalındaki pasif açılır liste gerçek aygıt seçimine bağlandı.
+- [x] **Otomatik Dağıtım (v0.1.11):**
+  - Typecheck, ESLint ve tüm testler (74/74) başarıyla geçti.
+  - `pnpm release` ile `v0.1.11` GitHub Releases üzerinde otomatik olarak yayınlandı.
