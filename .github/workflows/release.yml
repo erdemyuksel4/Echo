@@ -12,6 +12,7 @@ jobs:
   release:
     name: Build & Release Windows Setup
     runs-on: windows-latest
+    if: contains(github.event.head_commit.message, '[cloud-build]')
 
     steps:
       - name: Checkout repository
