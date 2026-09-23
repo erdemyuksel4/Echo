@@ -56,24 +56,63 @@ export async function checkForUpdateAndLaunchUpdater(options?: {
   }
 
   try {
-    const res = await fetch(`https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases/latest`, {
-      headers: {
-        'User-Agent': `Echo-App/${currentVersion}`,
-        Accept: 'application/vnd.github.v3+json',
-      },
-    });
+    let remoteVersion = '';
+    let assetUrl: string | undefined;
 
-    if (!res.ok) {
-      throw new Error(`GitHub API returned HTTP ${res.status}`);
+    // Strategy 1: Fetch latest.yml directly from GitHub Release Assets (Zero rate limits, 100% public!)
+    try {
+      const ymlRes = await fetch(
+        `https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/latest/download/latest.yml`,
+        {
+          headers: { 'User-Agent': `Echo-App/${currentVersion}` },
+        }
+      );
+      if (ymlRes.ok) {
+        const ymlText = await ymlRes.text();
+        const vMatch = ymlText.match(/version:\s*([0-9.]+)/i);
+        const pMatch = ymlText.match(/(?:path|url):\s*([^\r\n]+\.exe)/i);
+        if (vMatch && vMatch[1]) {
+          remoteVersion = vMatch[1].trim();
+          const fileName = pMatch && pMatch[1] ? pMatch[1].trim() : `Echo-Setup-${remoteVersion}.exe`;
+          assetUrl = `https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/download/v${remoteVersion}/${fileName}`;
+          console.log(`[Echo Main] Resolved update from latest.yml: v${remoteVersion} -> ${assetUrl}`);
+        }
+      }
+    } catch (ymlErr) {
+      console.warn('[Echo Main] Direct latest.yml check failed, trying API fallback:', ymlErr);
     }
 
-    const release = (await res.json()) as {
-      tag_name?: string;
-      assets?: { name: string; browser_download_url: string }[];
-    };
+    // Strategy 2: Fallback to GitHub REST API if Strategy 1 did not resolve
+    if (!remoteVersion) {
+      const res = await fetch(`https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases/latest`, {
+        headers: {
+          'User-Agent': `Echo-App/${currentVersion}`,
+          Accept: 'application/vnd.github.v3+json',
+        },
+      });
 
-    const rawTag = release.tag_name || '';
-    const remoteVersion = rawTag.replace(/^v/i, '');
+      if (!res.ok) {
+        throw new Error(`GitHub API returned HTTP ${res.status}`);
+      }
+
+      const release = (await res.json()) as {
+        tag_name?: string;
+        assets?: { name: string; browser_download_url: string }[];
+      };
+
+      const rawTag = release.tag_name || '';
+      remoteVersion = rawTag.replace(/^v/i, '');
+
+      if (release.assets && Array.isArray(release.assets)) {
+        const match =
+          release.assets.find(
+            (a) => a.name.endsWith('.exe') && a.name.toLowerCase().includes('setup')
+          ) || release.assets.find((a) => a.name.endsWith('.exe'));
+        if (match) {
+          assetUrl = match.browser_download_url;
+        }
+      }
+    }
 
     if (!remoteVersion) {
       console.log('[Echo Main] Could not determine remote version from release.');
@@ -95,18 +134,6 @@ export async function checkForUpdateAndLaunchUpdater(options?: {
 
       const updaterPath = getUpdaterPath();
       if (updaterPath) {
-        // Find asset download url if present
-        let assetUrl: string | undefined;
-        if (release.assets && Array.isArray(release.assets)) {
-          const match =
-            release.assets.find(
-              (a) => a.name.endsWith('.exe') && a.name.toLowerCase().includes('setup')
-            ) || release.assets.find((a) => a.name.endsWith('.exe'));
-          if (match) {
-            assetUrl = match.browser_download_url;
-          }
-        }
-
         const args = [
           `--target-version=${remoteVersion}`,
           `--app-path=${process.execPath}`,

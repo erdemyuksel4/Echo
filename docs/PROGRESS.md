@@ -382,5 +382,13 @@ Bu dosya her faz ve görev sonunda güncellenir.
   - `dotnet publish`: `EchoUpdater.exe` başarıyla derlendi.
   - `pnpm --filter @echo/desktop run build:exe`: Hem `Echo.exe` hem `EchoUpdater.exe` başarıyla imzalandı ve NSIS kurulum paketi üretildi.
 
+## GitHub API 403 Rate Limit Çözümü & Sıfır Limit Doğrudan İndirme
+
+- [x] **GitHub API 403 (Rate Limit Exceeded) Giderildi:**
+  - GitHub REST API (`api.github.com/repos/...`) unauthenticated isteklerde saatte 60 istek sınırı koyduğu için 403 Forbidden hatası veriyordu.
+  - `apps/desktop/src/main/updater.ts` ve `apps/updater/MainWindow.xaml.cs` içine doğrudan ve sıfır kota kısıtlamalı `https://github.com/erdemyuksel4/Echo/releases/latest/download/latest.yml` indirme ve ayrıştırma stratejisi eklendi.
+  - `latest.yml` doğrudan GitHub CDN üzerinden çekildiği için API kotasına takılmaz ve 403 hatası vermez.
+
+
 
 

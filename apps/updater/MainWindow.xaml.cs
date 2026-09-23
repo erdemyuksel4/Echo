@@ -145,6 +145,33 @@ public partial class MainWindow : Window
 
     private async Task<string> ResolveDownloadUrlFromGitHubAsync(HttpClient httpClient, string? targetVersion, CancellationToken cancellationToken)
     {
+        // Strategy 1: Direct latest.yml download from GitHub Releases (Zero rate limits, no 403!)
+        try
+        {
+            string ymlUrl = $"https://github.com/{RepoOwner}/{RepoName}/releases/latest/download/latest.yml";
+            var ymlResponse = await httpClient.GetAsync(ymlUrl, cancellationToken);
+            if (ymlResponse.IsSuccessStatusCode)
+            {
+                string ymlContent = await ymlResponse.Content.ReadAsStringAsync(cancellationToken);
+                var match = System.Text.RegularExpressions.Regex.Match(ymlContent, @"(?:path|url):\s*([^\r\n]+\.exe)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                if (match.Success)
+                {
+                    string fileName = match.Groups[1].Value.Trim();
+                    if (!string.IsNullOrWhiteSpace(targetVersion))
+                    {
+                        string tag = targetVersion.StartsWith('v') ? targetVersion : $"v{targetVersion}";
+                        return $"https://github.com/{RepoOwner}/{RepoName}/releases/download/{tag}/{fileName}";
+                    }
+                    return $"https://github.com/{RepoOwner}/{RepoName}/releases/latest/download/{fileName}";
+                }
+            }
+        }
+        catch
+        {
+            // Fallback to API if direct latest.yml fails
+        }
+
+        // Strategy 2: GitHub REST API
         string apiUrl;
         if (!string.IsNullOrWhiteSpace(targetVersion))
         {
