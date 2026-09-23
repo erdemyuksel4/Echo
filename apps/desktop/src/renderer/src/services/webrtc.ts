@@ -38,6 +38,18 @@ class WebRTCVoiceService {
   async init(): Promise<void> {
     await iceServersService.fetchIceServers();
     this.iceServers = iceServersService.getIceServers();
+
+    if (typeof navigator !== 'undefined' && navigator.mediaDevices) {
+      navigator.mediaDevices.ondevicechange = () => {
+        console.log('[Echo WebRTC] Audio/Video device change detected.');
+        if (this.currentChannelId) {
+          const liveMicTracks = this.localStream?.getAudioTracks().filter((t) => t.readyState === 'live');
+          if (!liveMicTracks || liveMicTracks.length === 0) {
+            void this.reacquireLocalAudio();
+          }
+        }
+      };
+    }
   }
 
   async join(
@@ -65,14 +77,38 @@ class WebRTCVoiceService {
         autoGainControl: true,
         channelCount: 1, // Opus mono
       };
-      if (this.selectedInputDeviceId) {
+      if (this.selectedInputDeviceId && this.selectedInputDeviceId !== 'default') {
         audioConstraints.deviceId = { exact: this.selectedInputDeviceId };
       }
 
-      this.localStream = await navigator.mediaDevices.getUserMedia({
-        audio: audioConstraints,
-        video: false,
-      });
+      try {
+        this.localStream = await navigator.mediaDevices.getUserMedia({
+          audio: audioConstraints,
+          video: false,
+        });
+      } catch (deviceErr) {
+        console.warn('[Echo WebRTC] Selected input device failed, falling back to default:', deviceErr);
+        this.selectedInputDeviceId = null;
+        this.localStream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+            channelCount: 1,
+          },
+          video: false,
+        });
+      }
+
+      const micTrack = this.localStream.getAudioTracks()[0];
+      if (micTrack) {
+        micTrack.onended = () => {
+          console.warn('[Echo WebRTC] Local microphone track ended, attempting re-acquire...');
+          if (this.currentChannelId) {
+            void this.reacquireLocalAudio();
+          }
+        };
+      }
 
       // Apply current mute / PTT state
       this.updateAudioTrackState();
@@ -97,15 +133,19 @@ class WebRTCVoiceService {
     const voiceStore = useVoiceStore.getState();
     const myUserId = useAuthStore.getState().identity?.userId;
 
-    if (this.currentChannelId) {
-      if (myUserId) {
-        voiceStore.removeChannelParticipant(this.currentChannelId, myUserId);
-      }
-      wsService.leaveVoice(this.currentChannelId, this.currentGroupId ?? undefined);
-    }
+    const exitingChannelId = this.currentChannelId;
+    const exitingGroupId = this.currentGroupId;
 
+    // Immediately null out channel ID so no incoming tracks/signals can be processed or played
     this.currentChannelId = null;
     this.currentGroupId = null;
+
+    if (exitingChannelId) {
+      if (myUserId) {
+        voiceStore.removeChannelParticipant(exitingChannelId, myUserId);
+      }
+      wsService.leaveVoice(exitingChannelId, exitingGroupId ?? undefined);
+    }
 
     // Stop VAD
     if (this.vadInterval) {
@@ -117,7 +157,11 @@ class WebRTCVoiceService {
       this.speakingSilenceTimer = null;
     }
     if (this.audioContext) {
-      void this.audioContext.close();
+      try {
+        void this.audioContext.close();
+      } catch {
+        // Ignore
+      }
       this.audioContext = null;
       this.analyser = null;
     }
@@ -130,29 +174,84 @@ class WebRTCVoiceService {
 
     // Stop local stream tracks
     if (this.localStream) {
-      this.localStream.getTracks().forEach((t) => t.stop());
+      this.localStream.getTracks().forEach((t) => {
+        try {
+          t.stop();
+        } catch {
+          // Ignore
+        }
+      });
       this.localStream = null;
     }
 
     // Stop local camera stream tracks
     if (this.localCameraStream) {
-      this.localCameraStream.getTracks().forEach((t) => t.stop());
+      this.localCameraStream.getTracks().forEach((t) => {
+        try {
+          t.stop();
+        } catch {
+          // Ignore
+        }
+      });
       this.localCameraStream = null;
     }
 
-    // Close all peer connections
+    // Close all peer connections and detach handlers
     for (const [peerId, pc] of this.peers.entries()) {
-      pc.close();
-      const audio = this.peerAudioElements.get(peerId);
-      if (audio) {
-        audio.pause();
-        audio.srcObject = null;
-        audio.remove();
+      try {
+        pc.ontrack = null;
+        pc.onicecandidate = null;
+        pc.onconnectionstatechange = null;
+        pc.close();
+      } catch (err) {
+        console.warn(`Error closing peer ${peerId}:`, err);
       }
     }
-
     this.peers.clear();
+
+    // Pause, stop all tracks, and remove all peer audio elements
+    for (const audio of this.peerAudioElements.values()) {
+      try {
+        audio.pause();
+        if (audio.srcObject instanceof MediaStream) {
+          audio.srcObject.getTracks().forEach((track) => {
+            try {
+              track.stop();
+            } catch {
+              // Ignore
+            }
+          });
+        }
+        audio.srcObject = null;
+        audio.remove();
+      } catch (err) {
+        console.warn('Error cleaning up audio element:', err);
+      }
+    }
     this.peerAudioElements.clear();
+
+    // DOM Sweep: Clean up ANY orphaned audio elements in DOM
+    if (typeof document !== 'undefined') {
+      document.querySelectorAll<HTMLAudioElement>('audio[data-echo-peer]').forEach((el) => {
+        try {
+          el.pause();
+          if (el.srcObject instanceof MediaStream) {
+            el.srcObject.getTracks().forEach((track) => {
+              try {
+                track.stop();
+              } catch {
+                // Ignore
+              }
+            });
+          }
+          el.srcObject = null;
+          el.remove();
+        } catch {
+          // Ignore
+        }
+      });
+    }
+
     this.peerDisplayNames.clear();
     this.pendingCandidates.clear();
     this.prevStats.clear();
@@ -190,15 +289,35 @@ class WebRTCVoiceService {
 
     const pc = this.peers.get(leftUserId);
     if (pc) {
-      pc.close();
+      try {
+        pc.ontrack = null;
+        pc.onicecandidate = null;
+        pc.onconnectionstatechange = null;
+        pc.close();
+      } catch {
+        // Ignore
+      }
       this.peers.delete(leftUserId);
     }
 
     const audio = this.peerAudioElements.get(leftUserId);
     if (audio) {
-      audio.pause();
-      audio.srcObject = null;
-      audio.remove();
+      try {
+        audio.pause();
+        if (audio.srcObject instanceof MediaStream) {
+          audio.srcObject.getTracks().forEach((track) => {
+            try {
+              track.stop();
+            } catch {
+              // Ignore
+            }
+          });
+        }
+        audio.srcObject = null;
+        audio.remove();
+      } catch {
+        // Ignore
+      }
       this.peerAudioElements.delete(leftUserId);
     }
 
@@ -213,8 +332,9 @@ class WebRTCVoiceService {
     useVoiceStore.getState().setDiagnostics(currentDiag);
   }
 
-  async handleSignal(fromUserId: string, signal: VoiceSignalData): Promise<void> {
+  async handleSignal(fromUserId: string, signal: VoiceSignalData, channelId?: string): Promise<void> {
     if (!this.currentChannelId) return;
+    if (channelId && channelId !== this.currentChannelId) return;
 
     if (signal.type === 'offer') {
       await this.handleOffer(fromUserId, signal.sdp);
@@ -226,8 +346,15 @@ class WebRTCVoiceService {
   }
 
   private async initiateOffer(peerId: string, displayName: string): Promise<void> {
+    if (!this.currentChannelId) return;
     this.peerDisplayNames.set(peerId, displayName);
-    const pc = this.getOrCreatePeerConnection(peerId, displayName);
+
+    let pc: RTCPeerConnection;
+    try {
+      pc = this.getOrCreatePeerConnection(peerId, displayName);
+    } catch {
+      return;
+    }
 
     try {
       const offer = await pc.createOffer({
@@ -235,7 +362,25 @@ class WebRTCVoiceService {
         offerToReceiveVideo: true,
       });
 
+      if (!this.currentChannelId) {
+        try {
+          pc.close();
+        } catch {
+          // Ignore
+        }
+        return;
+      }
+
       await pc.setLocalDescription(offer);
+
+      if (!this.currentChannelId) {
+        try {
+          pc.close();
+        } catch {
+          // Ignore
+        }
+        return;
+      }
 
       if (this.currentChannelId && pc.localDescription) {
         wsService.sendVoiceSignal(this.currentChannelId, peerId, {
@@ -249,11 +394,26 @@ class WebRTCVoiceService {
   }
 
   private async handleOffer(peerId: string, sdp: string): Promise<void> {
+    if (!this.currentChannelId) return;
     const displayName = this.peerDisplayNames.get(peerId) || 'Kullanıcı';
-    const pc = this.getOrCreatePeerConnection(peerId, displayName);
+
+    let pc: RTCPeerConnection;
+    try {
+      pc = this.getOrCreatePeerConnection(peerId, displayName);
+    } catch {
+      return;
+    }
 
     try {
       await pc.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp }));
+      if (!this.currentChannelId) {
+        try {
+          pc.close();
+        } catch {
+          // Ignore
+        }
+        return;
+      }
 
       // Drain queued ICE candidates
       const pending = this.pendingCandidates.get(peerId) ?? [];
@@ -263,6 +423,15 @@ class WebRTCVoiceService {
       this.pendingCandidates.delete(peerId);
 
       const answer = await pc.createAnswer();
+      if (!this.currentChannelId) {
+        try {
+          pc.close();
+        } catch {
+          // Ignore
+        }
+        return;
+      }
+
       await pc.setLocalDescription(answer);
 
       if (this.currentChannelId && pc.localDescription) {
@@ -323,6 +492,10 @@ class WebRTCVoiceService {
   }
 
   private getOrCreatePeerConnection(peerId: string, displayName: string): RTCPeerConnection {
+    if (!this.currentChannelId) {
+      throw new Error('[Echo WebRTC] Cannot create peer connection when not in a voice channel');
+    }
+
     let pc = this.peers.get(peerId);
     if (pc) return pc;
 
@@ -370,6 +543,18 @@ class WebRTCVoiceService {
 
     // Remote track reception (audio or video)
     pc.ontrack = (event) => {
+      // If we already left the channel, STOP track immediately and NEVER play audio!
+      if (!this.currentChannelId) {
+        if (event.track) {
+          try {
+            event.track.stop();
+          } catch {
+            // Ignore
+          }
+        }
+        return;
+      }
+
       if (event.track.kind === 'video') {
         const stream = event.streams[0] ?? new MediaStream([event.track]);
         useVoiceStore.getState().setPeerCameraStream(peerId, stream);
@@ -382,6 +567,7 @@ class WebRTCVoiceService {
       let audio = this.peerAudioElements.get(peerId);
       if (!audio) {
         audio = new Audio();
+        audio.setAttribute('data-echo-peer', peerId);
         audio.autoplay = true;
         audio.style.display = 'none';
         document.body.appendChild(audio);
@@ -389,6 +575,17 @@ class WebRTCVoiceService {
       }
       audio.srcObject = event.streams[0] ?? new MediaStream([event.track]);
       audio.volume = this.outputVolume;
+
+      // Apply output device if set
+      if (
+        this.selectedOutputDeviceId &&
+        typeof (audio as unknown as { setSinkId?: (id: string) => Promise<void> }).setSinkId === 'function'
+      ) {
+        const sinkId = this.selectedOutputDeviceId === 'default' ? '' : this.selectedOutputDeviceId;
+        (audio as unknown as { setSinkId: (id: string) => Promise<void> })
+          .setSinkId(sinkId)
+          .catch((err: unknown) => console.warn('setSinkId error:', err));
+      }
 
       // Apply deafen state
       const isDeafened = useVoiceStore.getState().isDeafened;
@@ -479,11 +676,35 @@ class WebRTCVoiceService {
   }
 
   private setupVAD(stream: MediaStream): void {
+    // 1. Clean up any existing VAD interval, silence timer, and audioContext
+    if (this.vadInterval) {
+      clearInterval(this.vadInterval);
+      this.vadInterval = null;
+    }
+    if (this.speakingSilenceTimer) {
+      clearTimeout(this.speakingSilenceTimer);
+      this.speakingSilenceTimer = null;
+    }
+    if (this.audioContext) {
+      try {
+        void this.audioContext.close();
+      } catch {
+        // Ignore
+      }
+      this.audioContext = null;
+      this.analyser = null;
+    }
+
+    if (!this.currentChannelId) return;
+
     try {
       const AudioCtx =
         window.AudioContext ||
         (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
       this.audioContext = new AudioCtx();
+      if (this.audioContext.state === 'suspended') {
+        void this.audioContext.resume();
+      }
       const source = this.audioContext.createMediaStreamSource(stream);
       this.analyser = this.audioContext.createAnalyser();
       this.analyser.fftSize = 512;
@@ -673,18 +894,89 @@ class WebRTCVoiceService {
     }
   }
 
-  async setInputDevice(deviceId: string): Promise<void> {
-    this.selectedInputDeviceId = deviceId;
-    if (this.localStream && this.currentChannelId) {
+  private async reacquireLocalAudio(): Promise<void> {
+    if (!this.currentChannelId) return;
+    try {
+      const audioConstraints: MediaTrackConstraints = {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+        channelCount: 1,
+      };
+      if (this.selectedInputDeviceId && this.selectedInputDeviceId !== 'default') {
+        audioConstraints.deviceId = { exact: this.selectedInputDeviceId };
+      }
+
+      let newStream: MediaStream;
       try {
-        const newStream = await navigator.mediaDevices.getUserMedia({
+        newStream = await navigator.mediaDevices.getUserMedia({
+          audio: audioConstraints,
+          video: false,
+        });
+      } catch {
+        this.selectedInputDeviceId = null;
+        newStream = await navigator.mediaDevices.getUserMedia({
           audio: {
-            deviceId: { exact: deviceId },
             echoCancellation: true,
             noiseSuppression: true,
             autoGainControl: true,
             channelCount: 1,
           },
+          video: false,
+        });
+      }
+
+      const newTrack = newStream.getAudioTracks()[0];
+      if (!newTrack) return;
+
+      // Replace audio track across all active peer connections
+      for (const pc of this.peers.values()) {
+        const sender = pc.getSenders().find((s) => s.track?.kind === 'audio');
+        if (sender) {
+          await sender.replaceTrack(newTrack);
+        }
+      }
+
+      if (this.localStream) {
+        this.localStream.getAudioTracks().forEach((t) => {
+          try {
+            t.stop();
+          } catch {
+            // Ignore
+          }
+        });
+      }
+      this.localStream = newStream;
+      this.updateAudioTrackState();
+      this.setupVAD(newStream);
+
+      newTrack.onended = () => {
+        if (this.currentChannelId) {
+          void this.reacquireLocalAudio();
+        }
+      };
+      console.log('[Echo WebRTC] Successfully re-acquired local audio stream.');
+    } catch (err) {
+      console.error('[Echo WebRTC] Failed to re-acquire local audio:', err);
+    }
+  }
+
+  async setInputDevice(deviceId: string): Promise<void> {
+    this.selectedInputDeviceId = deviceId;
+    if (this.localStream && this.currentChannelId) {
+      try {
+        const audioConstraints: MediaTrackConstraints = {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+          channelCount: 1,
+        };
+        if (deviceId && deviceId !== 'default') {
+          audioConstraints.deviceId = { exact: deviceId };
+        }
+
+        const newStream = await navigator.mediaDevices.getUserMedia({
+          audio: audioConstraints,
           video: false,
         });
 
@@ -696,12 +988,42 @@ class WebRTCVoiceService {
               await sender.replaceTrack(newTrack);
             }
           }
-          this.localStream.getAudioTracks().forEach((t) => t.stop());
+          this.localStream.getAudioTracks().forEach((t) => {
+            try {
+              t.stop();
+            } catch {
+              // Ignore
+            }
+          });
           this.localStream = newStream;
+          this.updateAudioTrackState();
           this.setupVAD(newStream);
+
+          newTrack.onended = () => {
+            if (this.currentChannelId) {
+              void this.reacquireLocalAudio();
+            }
+          };
         }
       } catch (err) {
         console.warn('Failed to switch input device:', err);
+      }
+    }
+  }
+
+  async setOutputDevice(deviceId: string): Promise<void> {
+    this.selectedOutputDeviceId = deviceId;
+    const sinkId = !deviceId || deviceId === 'default' ? '' : deviceId;
+
+    for (const audio of this.peerAudioElements.values()) {
+      if (
+        typeof (audio as unknown as { setSinkId?: (id: string) => Promise<void> }).setSinkId === 'function'
+      ) {
+        try {
+          await (audio as unknown as { setSinkId: (id: string) => Promise<void> }).setSinkId(sinkId);
+        } catch (err) {
+          console.warn('Failed to setSinkId on audio element:', err);
+        }
       }
     }
   }

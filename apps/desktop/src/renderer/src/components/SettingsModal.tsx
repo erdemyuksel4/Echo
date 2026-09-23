@@ -58,6 +58,9 @@ export const SettingsModal: React.FC<Props> = ({ isOpen, onClose, initialTab = '
   const [selectedInputId, setSelectedInputId] = useState<string>(
     webrtcService.getInputDeviceId() || '',
   );
+  const [selectedOutputId, setSelectedOutputId] = useState<string>(
+    webrtcService.getOutputDeviceId() || '',
+  );
   const [outputVolume, setOutputVolume] = useState<number>(
     Math.round(webrtcService.getOutputVolume() * 100),
   );
@@ -158,7 +161,8 @@ export const SettingsModal: React.FC<Props> = ({ isOpen, onClose, initialTab = '
       void webrtcService.getAudioDevices().then(({ inputs, outputs }) => {
         setInputDevices(inputs);
         setOutputDevices(outputs);
-        setSelectedInputId((prev) => prev || (inputs.length > 0 ? inputs[0]!.deviceId : ''));
+        setSelectedInputId((prev) => prev || webrtcService.getInputDeviceId() || (inputs.length > 0 ? inputs[0]!.deviceId : ''));
+        setSelectedOutputId((prev) => prev || webrtcService.getOutputDeviceId() || (outputs.length > 0 ? outputs[0]!.deviceId : ''));
       });
       void webrtcService.getVideoDevices().then((videos) => {
         setVideoDevices(videos);
@@ -235,6 +239,11 @@ export const SettingsModal: React.FC<Props> = ({ isOpen, onClose, initialTab = '
   const handleInputChange = (deviceId: string) => {
     setSelectedInputId(deviceId);
     void webrtcService.setInputDevice(deviceId);
+  };
+
+  const handleOutputChange = (deviceId: string) => {
+    setSelectedOutputId(deviceId);
+    void webrtcService.setOutputDevice(deviceId);
   };
 
   const handleVolumeChange = (volPercent: number) => {
@@ -448,18 +457,21 @@ export const SettingsModal: React.FC<Props> = ({ isOpen, onClose, initialTab = '
                     </button>
                   </div>
 
-                  {outputDevices.length > 0 && (
-                    <select
-                      className="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-xs text-slate-200 focus:border-indigo-500 focus:outline-none"
-                      disabled
-                    >
-                      {outputDevices.map((dev, idx) => (
+                  <select
+                    value={selectedOutputId}
+                    onChange={(e) => handleOutputChange(e.target.value)}
+                    className="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-xs text-slate-200 focus:border-indigo-500 focus:outline-none"
+                  >
+                    {outputDevices.length === 0 ? (
+                      <option value="">Varsayılan Sistem Hoparlörü</option>
+                    ) : (
+                      outputDevices.map((dev, idx) => (
                         <option key={dev.deviceId || idx} value={dev.deviceId}>
                           {dev.label || `Hoparlör ${idx + 1}`}
                         </option>
-                      ))}
-                    </select>
-                  )}
+                      ))
+                    )}
+                  </select>
 
                   {/* Volume Slider */}
                   <div className="space-y-1 pt-1">

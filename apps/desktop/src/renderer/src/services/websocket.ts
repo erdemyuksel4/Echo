@@ -421,7 +421,10 @@ class EchoWebSocketService {
           fromUserId: string;
           signal: VoiceSignalData;
         };
-        void webrtcService.handleSignal(data.fromUserId, data.signal);
+        const currentChannelId = useVoiceStore.getState().currentChannelId;
+        if (currentChannelId && data.channelId === currentChannelId) {
+          void webrtcService.handleSignal(data.fromUserId, data.signal, data.channelId);
+        }
         break;
       }
 
