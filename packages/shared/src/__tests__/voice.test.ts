@@ -10,6 +10,9 @@ import {
   ServerVoiceStatePayloadSchema,
   ServerVoiceParticipantsPayloadSchema,
   VoiceParticipantSchema,
+  IceServerSchema,
+  TurnResponseSchema,
+  DEFAULT_FALLBACK_ICE_SERVERS,
   WsEnvelopeSchema,
   WsClientEvents,
   WsServerEvents,
@@ -257,5 +260,77 @@ describe('Voice Schemas & Protocol', () => {
     };
     const parsed = WsEnvelopeSchema.safeParse(envelope);
     expect(parsed.success).toBe(true);
+  });
+
+  describe('ICE & TURN Server Configuration', () => {
+    it('should validate STUN server schema', () => {
+      const stun = { urls: 'stun:stun.cloudflare.com:3478' };
+      const parsed = IceServerSchema.safeParse(stun);
+      expect(parsed.success).toBe(true);
+    });
+
+    it('should validate TURN server schema with credentials', () => {
+      const turn = {
+        urls: [
+          'turn:openrelay.metered.ca:80',
+          'turn:openrelay.metered.ca:443',
+        ],
+        username: 'openrelayproject',
+        credential: 'openrelayproject',
+      };
+      const parsed = IceServerSchema.safeParse(turn);
+      expect(parsed.success).toBe(true);
+      if (parsed.success) {
+        expect(parsed.data.username).toBe('openrelayproject');
+      }
+    });
+
+    it('should validate TurnResponseSchema with iceServers array', () => {
+      const response = {
+        iceServers: [
+          { urls: 'stun:stun.cloudflare.com:3478' },
+          {
+            urls: ['turn:openrelay.metered.ca:80'],
+            username: 'user1',
+            credential: 'cred1',
+          },
+        ],
+      };
+      const parsed = TurnResponseSchema.safeParse(response);
+      expect(parsed.success).toBe(true);
+      if (parsed.success) {
+        expect(parsed.data.iceServers.length).toBe(2);
+      }
+    });
+
+    it('should transform single iceServers object to array in TurnResponseSchema', () => {
+      const response = {
+        iceServers: {
+          urls: ['turn:turn.cloudflare.com:3478'],
+          username: 'cf-user',
+          credential: 'cf-pass',
+        },
+      };
+      const parsed = TurnResponseSchema.safeParse(response);
+      expect(parsed.success).toBe(true);
+      if (parsed.success) {
+        expect(Array.isArray(parsed.data.iceServers)).toBe(true);
+        expect(parsed.data.iceServers[0]?.username).toBe('cf-user');
+      }
+    });
+
+    it('should verify DEFAULT_FALLBACK_ICE_SERVERS contains both STUN and TURN relay', () => {
+      expect(DEFAULT_FALLBACK_ICE_SERVERS.length).toBeGreaterThanOrEqual(2);
+      const hasStun = DEFAULT_FALLBACK_ICE_SERVERS.some((s) => {
+        const urls = Array.isArray(s.urls) ? s.urls : [s.urls];
+        return urls.some((u) => u.startsWith('stun:'));
+      });
+      const hasTurn = DEFAULT_FALLBACK_ICE_SERVERS.some((s) => {
+        const urls = Array.isArray(s.urls) ? s.urls : [s.urls];
+        return urls.some((u) => u.startsWith('turn:') || u.startsWith('turns:'));
+      });
+      expect(hasStun).toBe(true);
+      expect(hasTurn).toBe(true);
+    });
   });
 });

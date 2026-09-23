@@ -12,6 +12,8 @@ import {
   AttachmentUploadRequestSchema,
   deriveUserId,
   verifySignature,
+  DEFAULT_FALLBACK_ICE_SERVERS,
+  TurnResponseSchema,
   type HealthResponse,
 } from '@echo/shared';
 import { GroupDO } from './durable/GroupDO';
@@ -23,6 +25,8 @@ export interface Env {
   ENVIRONMENT?: string;
   ALLOWED_CREATOR_IDS?: string;
   GIPHY_API_KEY?: string;
+  CLOUDFLARE_TURN_KEY_ID?: string;
+  CLOUDFLARE_TURN_API_TOKEN?: string;
   GROUP_DO: DurableObjectNamespace<GroupDO>;
   USER_DO: DurableObjectNamespace<UserDO>;
 }
@@ -63,13 +67,43 @@ app.get('/', (c) => {
   `);
 });
 
-// Health Check
-app.get('/api/turn', (c) => {
+// WebRTC ICE / TURN configuration
+app.get('/api/turn', async (c) => {
+  const turnKeyId = c.env?.CLOUDFLARE_TURN_KEY_ID;
+  const turnApiToken = c.env?.CLOUDFLARE_TURN_API_TOKEN;
+
+  // 1. If Cloudflare Calls TURN credentials are set in secrets, generate ephemeral credentials
+  if (turnKeyId && turnApiToken) {
+    try {
+      const cfRes = await fetch(
+        `https://rtc.live.cloudflare.com/v1/turn/keys/${turnKeyId}/credentials/generate-ice-servers`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${turnApiToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ ttl: 86400 }),
+        },
+      );
+
+      if (cfRes.ok) {
+        const raw = await cfRes.json();
+        const parsed = TurnResponseSchema.safeParse(raw);
+        if (parsed.success && parsed.data.iceServers.length > 0) {
+          return c.json(parsed.data);
+        }
+      } else {
+        console.error('Cloudflare Calls TURN credentials generation error:', cfRes.status, await cfRes.text());
+      }
+    } catch (err) {
+      console.error('Error fetching Cloudflare Calls TURN credentials:', err);
+    }
+  }
+
+  // 2. High-reliability fallback: Cloudflare STUN, Google STUN, OpenRelay Metered TURN
   return c.json({
-    iceServers: [
-      { urls: 'stun:stun.cloudflare.com:3478' },
-      { urls: 'stun:stun.l.google.com:19302' },
-    ],
+    iceServers: DEFAULT_FALLBACK_ICE_SERVERS,
   });
 });
 

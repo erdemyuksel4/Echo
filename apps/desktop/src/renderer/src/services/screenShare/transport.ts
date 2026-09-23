@@ -1,5 +1,6 @@
 import { SCREEN_QUALITY_PRESETS, type ScreenQualityPreset } from '@echo/shared';
 import { wsService } from '../websocket';
+import { iceServersService } from '../iceServers';
 
 export interface ScreenShareTransport {
   startSharing(stream: MediaStream, channelId: string, quality: ScreenQualityPreset): Promise<void>;
@@ -30,10 +31,9 @@ export class MeshScreenShareTransport implements ScreenShareTransport {
   private remoteStreams: Map<string, MediaStream> = new Map();
   private streamResolvers: Map<string, (stream: MediaStream) => void> = new Map();
 
-  private iceServers: RTCIceServer[] = [
-    { urls: 'stun:stun.cloudflare.com:3478' },
-    { urls: 'stun:stun.l.google.com:19302' },
-  ];
+  private get iceServers(): RTCIceServer[] {
+    return iceServersService.getIceServers();
+  }
 
   async startSharing(
     stream: MediaStream,

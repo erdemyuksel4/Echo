@@ -2,7 +2,7 @@ import type { VoiceSignalData, PeerDiagnosticsStats, VoiceParticipant } from '@e
 import { useVoiceStore } from '../stores/useVoiceStore';
 import { useAuthStore } from '../stores/useAuthStore';
 import { wsService } from './websocket';
-import { SERVER_HTTP_URL } from '../config';
+import { iceServersService } from './iceServers';
 
 interface PreviousPeerStats {
   bytesReceived: number;
@@ -22,10 +22,7 @@ class WebRTCVoiceService {
   private pendingCandidates: Map<string, RTCIceCandidateInit[]> = new Map();
   private prevStats: Map<string, PreviousPeerStats> = new Map();
 
-  private iceServers: RTCIceServer[] = [
-    { urls: 'stun:stun.cloudflare.com:3478' },
-    { urls: 'stun:stun.l.google.com:19302' },
-  ];
+  private iceServers: RTCIceServer[] = iceServersService.getIceServers();
 
   private currentGroupId: string | null = null;
   private currentChannelId: string | null = null;
@@ -39,17 +36,8 @@ class WebRTCVoiceService {
   private outputVolume = 1.0;
 
   async init(): Promise<void> {
-    try {
-      const res = await fetch(`${SERVER_HTTP_URL}/api/turn`);
-      if (res.ok) {
-        const data = (await res.json()) as { iceServers?: RTCIceServer[] };
-        if (data.iceServers && data.iceServers.length > 0) {
-          this.iceServers = data.iceServers;
-        }
-      }
-    } catch {
-      // Fallback STUN is already set
-    }
+    await iceServersService.fetchIceServers();
+    this.iceServers = iceServersService.getIceServers();
   }
 
   async join(
@@ -337,6 +325,15 @@ class WebRTCVoiceService {
   private getOrCreatePeerConnection(peerId: string, displayName: string): RTCPeerConnection {
     let pc = this.peers.get(peerId);
     if (pc) return pc;
+
+    this.iceServers = iceServersService.getIceServers();
+    const hasTurn = this.iceServers.some((s) => {
+      const urls = Array.isArray(s.urls) ? s.urls : [s.urls];
+      return urls.some((u) => u.startsWith('turn:') || u.startsWith('turns:'));
+    });
+    console.log(`[Echo WebRTC] [CONNECTING] Peer: ${peerId} (${displayName})`);
+    console.log(`[Echo WebRTC] [CONNECTING] iceServers:`, JSON.stringify(this.iceServers, null, 2));
+    console.log(`[Echo WebRTC] [CONNECTING] TURN configured: ${hasTurn ? 'YES (Relay candidate available)' : 'NO - ONLY STUN! (Will fail on symmetric NAT / firewalls)'}`);
 
     pc = new RTCPeerConnection({
       iceServers: this.iceServers,

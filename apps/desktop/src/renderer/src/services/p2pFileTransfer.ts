@@ -1,5 +1,6 @@
 import type { Attachment } from '@echo/shared';
 import { echoWebSocketService } from './websocket';
+import { iceServersService } from './iceServers';
 
 const CHUNK_SIZE = 16384; // 16KB WebRTC DataChannel chunk
 const MAX_BUFFERED_AMOUNT = 1024 * 1024; // 1MB backpressure threshold
@@ -80,10 +81,7 @@ class P2PFileTransferService {
     });
 
     const pc = new RTCPeerConnection({
-      iceServers: [
-        { urls: 'stun:stun.cloudflare.com:3478' },
-        { urls: 'stun:stun.l.google.com:19302' },
-      ],
+      iceServers: iceServersService.getIceServers(),
     });
 
     this.activePeerConnections.set(offerId, pc);
@@ -200,10 +198,7 @@ class P2PFileTransferService {
       }
 
       const pc = new RTCPeerConnection({
-        iceServers: [
-          { urls: 'stun:stun.cloudflare.com:3478' },
-          { urls: 'stun:stun.l.google.com:19302' },
-        ],
+        iceServers: iceServersService.getIceServers(),
       });
       this.activePeerConnections.set(signal.offerId, pc);
 

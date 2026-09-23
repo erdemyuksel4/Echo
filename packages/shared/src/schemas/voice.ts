@@ -115,3 +115,41 @@ export interface PeerDiagnosticsStats {
   bitrateKbps: number;
   audioLevel: number;
 }
+
+// WebRTC ICE / TURN Configuration Schemas
+export const IceServerSchema = z.object({
+  urls: z.union([z.string(), z.array(z.string())]),
+  username: z.string().optional(),
+  credential: z.string().optional(),
+});
+
+export type IceServerConfig = z.infer<typeof IceServerSchema>;
+
+export const TurnResponseSchema = z.object({
+  iceServers: z.union([
+    z.array(IceServerSchema),
+    IceServerSchema.transform((single) => [single]),
+  ]),
+});
+
+export type TurnResponse = z.infer<typeof TurnResponseSchema>;
+
+// Verified high-reliability fallback ICE servers (Cloudflare STUN, Google STUN, OpenRelay Metered TURN)
+export const DEFAULT_FALLBACK_ICE_SERVERS: IceServerConfig[] = [
+  {
+    urls: [
+      'stun:stun.cloudflare.com:3478',
+      'stun:stun.l.google.com:19302',
+    ],
+  },
+  {
+    urls: [
+      'turn:openrelay.metered.ca:80',
+      'turn:openrelay.metered.ca:443',
+      'turn:openrelay.metered.ca:443?transport=tcp',
+      'turns:openrelay.metered.ca:443?transport=tcp',
+    ],
+    username: 'openrelayproject',
+    credential: 'openrelayproject',
+  },
+];
