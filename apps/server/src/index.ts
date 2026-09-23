@@ -101,7 +101,7 @@ app.get('/api/turn', async (c) => {
     }
   }
 
-  // 2. High-reliability fallback: Cloudflare STUN, Google STUN, OpenRelay Metered TURN
+  // 2. High-reliability fallback: Cloudflare STUN & Google STUN
   return c.json({
     iceServers: DEFAULT_FALLBACK_ICE_SERVERS,
   });

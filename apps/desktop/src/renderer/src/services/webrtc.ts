@@ -75,7 +75,6 @@ class WebRTCVoiceService {
         echoCancellation: true,
         noiseSuppression: true,
         autoGainControl: true,
-        channelCount: 1, // Opus mono
       };
       if (this.selectedInputDeviceId && this.selectedInputDeviceId !== 'default') {
         audioConstraints.deviceId = { exact: this.selectedInputDeviceId };
@@ -94,7 +93,6 @@ class WebRTCVoiceService {
             echoCancellation: true,
             noiseSuppression: true,
             autoGainControl: true,
-            channelCount: 1,
           },
           video: false,
         });
@@ -356,6 +354,19 @@ class WebRTCVoiceService {
       return;
     }
 
+    // Ensure local audio track is attached to PC before offer is generated
+    if (this.localStream) {
+      const audioTrack = this.localStream.getAudioTracks()[0];
+      if (audioTrack) {
+        const sender = pc.getSenders().find((s) => s.track?.kind === 'audio');
+        if (!sender) {
+          pc.addTrack(audioTrack, this.localStream);
+        } else if (sender.track !== audioTrack) {
+          void sender.replaceTrack(audioTrack);
+        }
+      }
+    }
+
     try {
       const offer = await pc.createOffer({
         offerToReceiveAudio: true,
@@ -404,6 +415,19 @@ class WebRTCVoiceService {
       return;
     }
 
+    // Ensure local audio track is attached to PC before answer is generated
+    if (this.localStream) {
+      const audioTrack = this.localStream.getAudioTracks()[0];
+      if (audioTrack) {
+        const sender = pc.getSenders().find((s) => s.track?.kind === 'audio');
+        if (!sender) {
+          pc.addTrack(audioTrack, this.localStream);
+        } else if (sender.track !== audioTrack) {
+          void sender.replaceTrack(audioTrack);
+        }
+      }
+    }
+
     try {
       await pc.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp }));
       if (!this.currentChannelId) {
@@ -415,10 +439,14 @@ class WebRTCVoiceService {
         return;
       }
 
-      // Drain queued ICE candidates
+      // Drain queued ICE candidates safely
       const pending = this.pendingCandidates.get(peerId) ?? [];
       for (const cand of pending) {
-        await pc.addIceCandidate(new RTCIceCandidate(cand));
+        try {
+          await pc.addIceCandidate(new RTCIceCandidate(cand));
+        } catch (candErr) {
+          console.warn(`[Echo WebRTC] Failed to add queued ICE candidate for ${peerId}:`, candErr);
+        }
       }
       this.pendingCandidates.delete(peerId);
 
@@ -452,10 +480,14 @@ class WebRTCVoiceService {
     try {
       await pc.setRemoteDescription(new RTCSessionDescription({ type: 'answer', sdp }));
 
-      // Drain queued ICE candidates
+      // Drain queued ICE candidates safely
       const pending = this.pendingCandidates.get(peerId) ?? [];
       for (const cand of pending) {
-        await pc.addIceCandidate(new RTCIceCandidate(cand));
+        try {
+          await pc.addIceCandidate(new RTCIceCandidate(cand));
+        } catch (candErr) {
+          console.warn(`[Echo WebRTC] Failed to add queued ICE candidate for ${peerId}:`, candErr);
+        }
       }
       this.pendingCandidates.delete(peerId);
     } catch (err) {
@@ -518,8 +550,11 @@ class WebRTCVoiceService {
     // Add local audio track
     if (this.localStream) {
       this.localStream.getAudioTracks().forEach((track) => {
+        console.log(`[Echo WebRTC] Attaching local audio track (${track.id}) to peer ${peerId}. Enabled: ${track.enabled}, readyState: ${track.readyState}`);
         pc!.addTrack(track, this.localStream!);
       });
+    } else {
+      console.warn(`[Echo WebRTC] localStream is not ready when creating PC for peer ${peerId}`);
     }
 
     // Add local camera video track
@@ -543,6 +578,7 @@ class WebRTCVoiceService {
 
     // Remote track reception (audio or video)
     pc.ontrack = (event) => {
+      console.log(`[Echo WebRTC] Received remote track (${event.track.kind}) from peer: ${peerId}, id: ${event.track.id}, enabled: ${event.track.enabled}`);
       // If we already left the channel, STOP track immediately and NEVER play audio!
       if (!this.currentChannelId) {
         if (event.track) {
@@ -573,7 +609,8 @@ class WebRTCVoiceService {
         document.body.appendChild(audio);
         this.peerAudioElements.set(peerId, audio);
       }
-      audio.srcObject = event.streams[0] ?? new MediaStream([event.track]);
+      const remoteStream = event.streams[0] ?? new MediaStream([event.track]);
+      audio.srcObject = remoteStream;
       audio.volume = this.outputVolume;
 
       // Apply output device if set
@@ -591,12 +628,30 @@ class WebRTCVoiceService {
       const isDeafened = useVoiceStore.getState().isDeafened;
       audio.muted = isDeafened;
 
-      void audio.play().catch((e) => console.warn('Audio play prevented:', e));
+      void audio.play().catch((e) => console.warn('[Echo WebRTC] Audio play prevented:', e));
     };
 
     pc.onconnectionstatechange = () => {
-      if (pc?.connectionState === 'failed' || pc?.connectionState === 'closed') {
-        this.handleUserLeft(this.currentChannelId || '', peerId);
+      console.log(`[Echo WebRTC] Peer ${peerId} connectionState:`, pc?.connectionState);
+      if (pc?.connectionState === 'failed') {
+        console.warn(`[Echo WebRTC] Peer ${peerId} connection failed, attempting ICE restart...`);
+        try {
+          pc.restartIce();
+        } catch (e) {
+          console.warn(`[Echo WebRTC] restartIce failed for ${peerId}:`, e);
+        }
+      }
+    };
+
+    pc.oniceconnectionstatechange = () => {
+      console.log(`[Echo WebRTC] Peer ${peerId} iceConnectionState:`, pc?.iceConnectionState);
+      if (pc?.iceConnectionState === 'failed') {
+        console.warn(`[Echo WebRTC] Peer ${peerId} ICE connection failed, attempting ICE restart...`);
+        try {
+          pc.restartIce();
+        } catch (e) {
+          console.warn(`[Echo WebRTC] restartIce failed for ${peerId}:`, e);
+        }
       }
     };
 
@@ -901,7 +956,6 @@ class WebRTCVoiceService {
         echoCancellation: true,
         noiseSuppression: true,
         autoGainControl: true,
-        channelCount: 1,
       };
       if (this.selectedInputDeviceId && this.selectedInputDeviceId !== 'default') {
         audioConstraints.deviceId = { exact: this.selectedInputDeviceId };
@@ -920,7 +974,6 @@ class WebRTCVoiceService {
             echoCancellation: true,
             noiseSuppression: true,
             autoGainControl: true,
-            channelCount: 1,
           },
           video: false,
         });
@@ -969,7 +1022,6 @@ class WebRTCVoiceService {
           echoCancellation: true,
           noiseSuppression: true,
           autoGainControl: true,
-          channelCount: 1,
         };
         if (deviceId && deviceId !== 'default') {
           audioConstraints.deviceId = { exact: deviceId };

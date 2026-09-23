@@ -319,18 +319,13 @@ describe('Voice Schemas & Protocol', () => {
       }
     });
 
-    it('should verify DEFAULT_FALLBACK_ICE_SERVERS contains both STUN and TURN relay', () => {
-      expect(DEFAULT_FALLBACK_ICE_SERVERS.length).toBeGreaterThanOrEqual(2);
+    it('should verify DEFAULT_FALLBACK_ICE_SERVERS contains high-reliability STUN servers', () => {
+      expect(DEFAULT_FALLBACK_ICE_SERVERS.length).toBeGreaterThanOrEqual(1);
       const hasStun = DEFAULT_FALLBACK_ICE_SERVERS.some((s) => {
         const urls = Array.isArray(s.urls) ? s.urls : [s.urls];
         return urls.some((u) => u.startsWith('stun:'));
       });
-      const hasTurn = DEFAULT_FALLBACK_ICE_SERVERS.some((s) => {
-        const urls = Array.isArray(s.urls) ? s.urls : [s.urls];
-        return urls.some((u) => u.startsWith('turn:') || u.startsWith('turns:'));
-      });
       expect(hasStun).toBe(true);
-      expect(hasTurn).toBe(true);
     });
   });
 });

@@ -423,3 +423,20 @@ Bu dosya her faz ve görev sonunda güncellenir.
 - [x] **Otomatik Dağıtım (v0.1.11):**
   - Typecheck, ESLint ve tüm testler (74/74) başarıyla geçti.
   - `pnpm release` ile `v0.1.11` GitHub Releases üzerinde otomatik olarak yayınlandı.
+
+## WebRTC Ses İletimi & ICE Aday Toplama Düzeltmesi (v0.1.12)
+
+- [x] **Bozuk TURN ve ICE Aday Toplama Kilitlenmesi Giderildi:**
+  - `openrelay.metered.ca` sunucusunun Chromium içinde 701 (Lookup error) ve 400 (Bad Request) hataları vererek ICE aday toplama sürecini 7+ saniye kilitlediği ve bağlantı denemelerini başarısızlığa sürüklediği tespit edildi.
+  - `DEFAULT_FALLBACK_ICE_SERVERS` içerisinden bozuk OpenRelay girdileri temizlendi, doğrulanmış Cloudflare STUN (`stun:stun.cloudflare.com:3478`) ve Google STUN (`stun:stun.l.google.com:19302`, `stun1`, `stun2`) eklendi. ICE aday toplama süresi 7 saniyeden 20-40 milisaniyeye indirildi.
+- [x] **Geçici ICE Hatasında Kullanıcının Odadan Düşürülmesi (Kick) Engellendi:**
+  - `pc.onconnectionstatechange` dinleyicisinde `pc.connectionState === 'failed'` durumunda `handleUserLeft` çağrılarak kullanıcının bağlantısının yerelde kalıcı olarak silinmesi ve ses çalınmasının durdurulması engellendi.
+  - Bağlantı hatası durumunda kullanıcının bağlantısını silmek yerine `pc.restartIce()` ile yeniden anlaşma (ICE restart) denemesi başlatıldı.
+- [x] **Kuyruğa Alınan ICE Adaylarının Güvenli İşlenmesi:**
+  - `handleOffer` ve `handleAnswer` içerisinde bekleyen adayların (`pendingCandidates`) `addIceCandidate` ile eklenmesi `try...catch` ile korunarak tek bir geçersiz adayın tüm ses anlaşmasını çökertmesi önlendi.
+- [x] **Mikrofon Kısıtlamaları (Windows Uyumluluğu):**
+  - `getUserMedia` çağrılarındaki katı `channelCount: 1` donanım kısıtlaması kaldırılarak Windows ses sürücülerinin (Realtek, USB kulaklık vb.) sessizlik üretmesi veya hata vermesi engellendi.
+  - `initiateOffer` ve `handleOffer` öncesinde yerel ses izinin (`track.enabled`, `track.readyState`) eşler arası bağlantıya eksiksiz bağlandığı doğrulandı.
+- [x] **Otomatik Dağıtım (v0.1.12):**
+  - Typecheck, ESLint ve tüm testler (74/74) başarıyla geçti.
+

@@ -134,22 +134,14 @@ export const TurnResponseSchema = z.object({
 
 export type TurnResponse = z.infer<typeof TurnResponseSchema>;
 
-// Verified high-reliability fallback ICE servers (Cloudflare STUN, Google STUN, OpenRelay Metered TURN)
+// Verified high-reliability fallback ICE servers (Cloudflare STUN & Google STUN)
 export const DEFAULT_FALLBACK_ICE_SERVERS: IceServerConfig[] = [
   {
     urls: [
       'stun:stun.cloudflare.com:3478',
       'stun:stun.l.google.com:19302',
+      'stun:stun1.l.google.com:19302',
+      'stun:stun2.l.google.com:19302',
     ],
-  },
-  {
-    urls: [
-      'turn:openrelay.metered.ca:80',
-      'turn:openrelay.metered.ca:443',
-      'turn:openrelay.metered.ca:443?transport=tcp',
-      'turns:openrelay.metered.ca:443?transport=tcp',
-    ],
-    username: 'openrelayproject',
-    credential: 'openrelayproject',
   },
 ];

@@ -3,7 +3,7 @@ import { app } from '../src/index';
 import { TurnResponseSchema } from '@echo/shared';
 
 describe('Server TURN Endpoint', () => {
-  it('GET /api/turn should return 200 and fallback iceServers containing TURN relay when secrets are not set', async () => {
+  it('GET /api/turn should return 200 and fallback iceServers containing reliable STUN when secrets are not set', async () => {
     const res = await app.request('/api/turn');
     expect(res.status).toBe(200);
 
@@ -12,7 +12,7 @@ describe('Server TURN Endpoint', () => {
     expect(parsed.success).toBe(true);
 
     if (parsed.success) {
-      expect(parsed.data.iceServers.length).toBeGreaterThanOrEqual(2);
+      expect(parsed.data.iceServers.length).toBeGreaterThanOrEqual(1);
 
       // Verify STUN exists
       const hasStun = parsed.data.iceServers.some((s) => {
@@ -20,15 +20,6 @@ describe('Server TURN Endpoint', () => {
         return urls.some((u) => u.startsWith('stun:'));
       });
       expect(hasStun).toBe(true);
-
-      // Verify TURN exists with credentials
-      const turnServer = parsed.data.iceServers.find((s) => {
-        const urls = Array.isArray(s.urls) ? s.urls : [s.urls];
-        return urls.some((u) => u.startsWith('turn:') || u.startsWith('turns:'));
-      });
-      expect(turnServer).toBeDefined();
-      expect(turnServer?.username).toBe('openrelayproject');
-      expect(turnServer?.credential).toBe('openrelayproject');
     }
   });
 
