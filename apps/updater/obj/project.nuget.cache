@@ -1,0 +1,10 @@
+{
+  "version": 2,
+  "dgSpecHash": "1iEFrbA7kY0=",
+  "success": true,
+  "projectFilePath": "C:\\Users\\erdem\\Desktop\\AktifProjeler\\Echo\\apps\\updater\\EchoUpdater.csproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\erdem\\.nuget\\packages\\microsoft.net.illink.tasks\\9.0.2\\microsoft.net.illink.tasks.9.0.2.nupkg.sha512"
+  ],
+  "logs": []
+}

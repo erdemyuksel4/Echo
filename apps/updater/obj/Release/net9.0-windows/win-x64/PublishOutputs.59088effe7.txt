@@ -1,0 +1,2 @@
+C:\Users\erdem\Desktop\AktifProjeler\Echo\apps\updater\bin\Release\publish\EchoUpdater.pdb
+C:\Users\erdem\Desktop\AktifProjeler\Echo\apps\updater\bin\Release\publish\EchoUpdater.exe

@@ -1,9 +1,160 @@
-import { BrowserWindow, ipcMain } from 'electron';
-import { autoUpdater } from 'electron-updater';
+import { app, BrowserWindow, ipcMain } from 'electron';
+import { spawn } from 'child_process';
+import { existsSync } from 'fs';
+import { join, dirname } from 'path';
 import { is } from '@electron-toolkit/utils';
+
+const REPO_OWNER = 'erdemyuksel4';
+const REPO_NAME = 'Echo';
 
 let targetWindow: BrowserWindow | null = null;
 let isInitialized = false;
+
+export function getUpdaterPath(): string | null {
+  // 1. Production installed path (same directory as Echo.exe)
+  const productionPath = join(dirname(process.execPath), 'EchoUpdater.exe');
+  if (existsSync(productionPath)) return productionPath;
+
+  // 2. Extra resources / relative path
+  const resourcesPath = join(process.resourcesPath, '../EchoUpdater.exe');
+  if (existsSync(resourcesPath)) return resourcesPath;
+
+  // 3. Development publish path
+  const devPath = join(__dirname, '../../../../apps/updater/bin/Release/publish/EchoUpdater.exe');
+  if (existsSync(devPath)) return devPath;
+
+  const devNetPath = join(
+    __dirname,
+    '../../../../apps/updater/bin/Release/net9.0-windows/win-x64/EchoUpdater.exe'
+  );
+  if (existsSync(devNetPath)) return devNetPath;
+
+  return null;
+}
+
+function isNewerVersion(remote: string, current: string): boolean {
+  const rParts = remote.replace(/^v/i, '').split('.').map((p) => parseInt(p, 10) || 0);
+  const cParts = current.replace(/^v/i, '').split('.').map((p) => parseInt(p, 10) || 0);
+  for (let i = 0; i < Math.max(rParts.length, cParts.length); i++) {
+    const r = rParts[i] ?? 0;
+    const c = cParts[i] ?? 0;
+    if (r > c) return true;
+    if (r < c) return false;
+  }
+  return false;
+}
+
+export async function checkForUpdateAndLaunchUpdater(options?: {
+  manual?: boolean;
+}): Promise<{ available: boolean; version?: string }> {
+  void options;
+  const currentVersion = app.getVersion();
+  console.log(`[Echo Main] Checking for updates (current version: v${currentVersion})...`);
+
+  if (targetWindow && !targetWindow.isDestroyed()) {
+    targetWindow.webContents.send('updater:status', { status: 'checking' });
+  }
+
+  try {
+    const res = await fetch(`https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases/latest`, {
+      headers: {
+        'User-Agent': `Echo-App/${currentVersion}`,
+        Accept: 'application/vnd.github.v3+json',
+      },
+    });
+
+    if (!res.ok) {
+      throw new Error(`GitHub API returned HTTP ${res.status}`);
+    }
+
+    const release = (await res.json()) as {
+      tag_name?: string;
+      assets?: { name: string; browser_download_url: string }[];
+    };
+
+    const rawTag = release.tag_name || '';
+    const remoteVersion = rawTag.replace(/^v/i, '');
+
+    if (!remoteVersion) {
+      console.log('[Echo Main] Could not determine remote version from release.');
+      if (targetWindow && !targetWindow.isDestroyed()) {
+        targetWindow.webContents.send('updater:status', { status: 'not-available', version: currentVersion });
+      }
+      return { available: false, version: currentVersion };
+    }
+
+    const hasUpdate = isNewerVersion(remoteVersion, currentVersion);
+
+    if (hasUpdate) {
+      console.log(`[Echo Main] New update available: v${remoteVersion} (current: v${currentVersion})`);
+
+      if (targetWindow && !targetWindow.isDestroyed()) {
+        targetWindow.webContents.send('updater:status', { status: 'available', version: remoteVersion });
+        targetWindow.webContents.send('updater:available', { version: remoteVersion });
+      }
+
+      const updaterPath = getUpdaterPath();
+      if (updaterPath) {
+        // Find asset download url if present
+        let assetUrl: string | undefined;
+        if (release.assets && Array.isArray(release.assets)) {
+          const match =
+            release.assets.find(
+              (a) => a.name.endsWith('.exe') && a.name.toLowerCase().includes('setup')
+            ) || release.assets.find((a) => a.name.endsWith('.exe'));
+          if (match) {
+            assetUrl = match.browser_download_url;
+          }
+        }
+
+        const args = [
+          `--target-version=${remoteVersion}`,
+          `--app-path=${process.execPath}`,
+        ];
+        if (assetUrl) {
+          args.push(`--download-url=${assetUrl}`);
+        }
+
+        console.log(`[Echo Main] Launching EchoUpdater (${updaterPath}) with args:`, args);
+        const child = spawn(updaterPath, args, {
+          detached: true,
+          stdio: 'ignore',
+        });
+        child.unref();
+
+        // Release file locks by quitting Echo.exe immediately
+        console.log('[Echo Main] Closing Echo to allow EchoUpdater to execute without locks...');
+        if (targetWindow && !targetWindow.isDestroyed()) {
+          targetWindow.removeAllListeners('close');
+        }
+        app.quit();
+        return { available: true, version: remoteVersion };
+      } else {
+        console.warn('[Echo Main] EchoUpdater.exe not found on disk. Cannot launch separate updater.');
+        return { available: true, version: remoteVersion };
+      }
+    } else {
+      console.log(`[Echo Main] Echo is up-to-date (v${currentVersion}).`);
+      if (targetWindow && !targetWindow.isDestroyed()) {
+        targetWindow.webContents.send('updater:status', {
+          status: 'not-available',
+          version: currentVersion,
+        });
+      }
+      return { available: false, version: currentVersion };
+    }
+  } catch (err) {
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    console.warn('[Echo Main] Update check failed:', errorMsg);
+    if (targetWindow && !targetWindow.isDestroyed()) {
+      targetWindow.webContents.send('updater:status', {
+        status: 'error',
+        error: errorMsg,
+      });
+    }
+    return { available: false };
+  }
+}
 
 export function initAutoUpdater(window: BrowserWindow): void {
   targetWindow = window;
@@ -13,150 +164,35 @@ export function initAutoUpdater(window: BrowserWindow): void {
   }
   isInitialized = true;
 
-  autoUpdater.autoDownload = true;
-  autoUpdater.autoInstallOnAppQuit = true;
-
-  autoUpdater.on('checking-for-update', () => {
-    console.log('[Echo Updater] Checking for update...');
-    if (targetWindow && !targetWindow.isDestroyed()) {
-      targetWindow.webContents.send('updater:status', { status: 'checking' });
-    }
-  });
-
-  autoUpdater.on('update-available', (info) => {
-    console.log('[Echo Updater] Update available, downloading automatically:', info.version);
-    const releaseNotes =
-      typeof info.releaseNotes === 'string'
-        ? info.releaseNotes
-        : Array.isArray(info.releaseNotes)
-          ? info.releaseNotes.map((n) => (typeof n === 'string' ? n : n.note)).join('\n')
-          : undefined;
-
-    if (targetWindow && !targetWindow.isDestroyed()) {
-      targetWindow.webContents.send('updater:status', {
-        status: 'available',
-        version: info.version,
-      });
-      targetWindow.webContents.send('updater:available', {
-        version: info.version,
-        releaseNotes,
-      });
-    }
-  });
-
-  autoUpdater.on('update-not-available', (info) => {
-    console.log('[Echo Updater] Current version is up-to-date:', info.version);
-    if (targetWindow && !targetWindow.isDestroyed()) {
-      targetWindow.webContents.send('updater:status', {
-        status: 'not-available',
-        version: info.version,
-      });
-    }
-  });
-
-  autoUpdater.on('download-progress', (progressObj) => {
-    const percent = Math.round(progressObj.percent);
-    const bytesPerSecond = Math.round(progressObj.bytesPerSecond);
-    console.log(`[Echo Updater] Download progress: ${percent}% (${bytesPerSecond} B/s)`);
-
-    if (targetWindow && !targetWindow.isDestroyed()) {
-      targetWindow.webContents.send('updater:progress', {
-        percent,
-        bytesPerSecond,
-      });
-    }
-  });
-
-  autoUpdater.on('update-downloaded', (info) => {
-    console.log('[Echo Updater] Update downloaded successfully:', info.version);
-    if (targetWindow && !targetWindow.isDestroyed()) {
-      targetWindow.webContents.send('updater:status', {
-        status: 'downloaded',
-        version: info.version,
-      });
-      targetWindow.webContents.send('updater:downloaded', {
-        version: info.version,
-      });
-    }
-
-    // Seamless zero-touch auto-restart after a brief notification delay (1.5s)
-    setTimeout(() => {
-      console.log('[Echo Updater] Auto-installing update and restarting...');
-      try {
-        if (targetWindow && !targetWindow.isDestroyed()) {
-          targetWindow.removeAllListeners('close');
-        }
-        autoUpdater.quitAndInstall(true, true);
-      } catch (err) {
-        console.error('[Echo Updater] quitAndInstall failed:', err);
-      }
-    }, 1500);
-  });
-
-  autoUpdater.on('error', (err) => {
-    console.warn('[Echo Updater] Error occurred during update check:', err.message);
-    if (targetWindow && !targetWindow.isDestroyed()) {
-      targetWindow.webContents.send('updater:status', {
-        status: 'error',
-        error: err.message,
-      });
-    }
-  });
-
   // IPC Handlers
   ipcMain.handle('updater:check', async () => {
-    if (is.dev) {
-      console.log('[Echo Updater] Skipped checkForUpdates in development mode.');
-      return null;
-    }
-    try {
-      return await autoUpdater.checkForUpdates();
-    } catch (error) {
-      console.warn('[Echo Updater] checkForUpdates failed:', error);
-      return null;
-    }
+    return await checkForUpdateAndLaunchUpdater({ manual: true });
   });
 
   ipcMain.handle('updater:download', async () => {
-    if (is.dev) {
-      console.log('[Echo Updater] Skipped downloadUpdate in development mode.');
-      return null;
-    }
-    try {
-      return await autoUpdater.downloadUpdate();
-    } catch (error) {
-      console.warn('[Echo Updater] downloadUpdate failed:', error);
-      return null;
-    }
+    return null;
   });
 
   ipcMain.handle('updater:install', () => {
-    if (is.dev) {
-      console.log('[Echo Updater] Skipped quitAndInstall in development mode.');
-      return;
-    }
-    if (targetWindow && !targetWindow.isDestroyed()) {
-      targetWindow.removeAllListeners('close');
-    }
-    autoUpdater.quitAndInstall(true, true);
+    void checkForUpdateAndLaunchUpdater({ manual: true });
   });
 
-  // Trigger initial check in production shortly after window loads
-  if (!is.dev) {
+  // Background check on startup if packaged
+  if (!is.dev && app.isPackaged) {
     setTimeout(() => {
-      void autoUpdater.checkForUpdates().catch((err) => {
-        console.warn('[Echo Updater] Initial background check failed:', err);
+      void checkForUpdateAndLaunchUpdater().catch((err) => {
+        console.warn('[Echo Main] Initial update check failed:', err);
       });
     }, 1500);
 
-    // Periodic check every 10 minutes
+    // Periodic check every 15 minutes
     setInterval(
       () => {
-        void autoUpdater.checkForUpdates().catch((err) => {
-          console.warn('[Echo Updater] Periodic check failed:', err);
+        void checkForUpdateAndLaunchUpdater().catch((err) => {
+          console.warn('[Echo Main] Periodic update check failed:', err);
         });
       },
-      10 * 60 * 1000,
+      15 * 60 * 1000
     );
   }
 }

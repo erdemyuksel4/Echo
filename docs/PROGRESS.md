@@ -363,4 +363,24 @@ Bu dosya her faz ve görev sonunda güncellenir.
   - Bir grup seçildiğinde, yeni grup kurulduğunda veya gruba katılınıldığında `activePeer(null)` yapılarak önceki DM seçimi temizlendi.
   - Gruptan bir üyeye "Mesaj Gönder" denildiğinde veya sol menüden DM seçildiğinde aktif grup sıfırlanarak DM sohbet alanı derhal ekrana getirildi.
 
+## Uygulama ve Bağımsız Güncelleyici (EchoUpdater) Ayrıştırma
+
+- [x] **Agent 1: Bağımsız Güncelleyici Uygulaması (`apps/updater/`):**
+  - C# / .NET 9 WPF tabanlı, Discord/Echo karanlık temasına uygun frameless modern `EchoUpdater` geliştirildi.
+  - GitHub Releases API entegrasyonu ile en güncel sürümü tespit etme, `%TEMP%` dizinine indirme (indirme hızı, kalan süre, yüzde barı göstergesi).
+  - NSIS sessiz kurulum (`/S`) çalıştırma, kurulum bitişini bekleme ve güncellenen `Echo.exe`'yi otomatik başlatıp kendini kapatma yeteneği eklendi.
+  - Hata durumunda kullanıcıya dost arayüz ve "Yeniden Dene" / "Kapat" butonları sağlandı.
+- [x] **Agent 2: Ana Uygulama Ayrıştırması & Yönlendirme (`apps/desktop`):**
+  - `apps/desktop/src/main/updater.ts` içerisindeki ağır in-app indirme ve kapat-kur döngüsü temizlendi; dosya boyutu 764 kB'den 198 kB'ye düşürüldü.
+  - Açılışta ve manuel istekte çalışan hafif `checkForUpdateAndLaunchUpdater()` geliştirildi; yeni sürüm tespit edildiğinde `EchoUpdater.exe`'yi parametrelerle başlatıp `app.quit()` ile `Echo.exe`'yi anında kapatarak Windows dosya kilitlerini tamamen serbest bırakması sağlandı.
+  - `apps/desktop/package.json` içerisine `extraFiles` eklenerek `EchoUpdater.exe`'nin kurulum dizininde `Echo.exe`'nin yanına yerleştirilmesi sağlandı.
+  - `scripts/bump-version.mjs` sürümleme script'ine `EchoUpdater`'ı otomatik derleme adımı eklendi.
+- [x] **Agent 3: QA & Test Doğrulamaları:**
+  - `pnpm typecheck`: Monorepo genelinde 0 hata ile geçti.
+  - `pnpm lint`: ESLint 0 hata ile geçti.
+  - `pnpm test`: 67 testin tamamı (%100) başarıyla geçti.
+  - `dotnet publish`: `EchoUpdater.exe` başarıyla derlendi.
+  - `pnpm --filter @echo/desktop run build:exe`: Hem `Echo.exe` hem `EchoUpdater.exe` başarıyla imzalandı ve NSIS kurulum paketi üretildi.
+
+
 

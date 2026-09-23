@@ -79,8 +79,24 @@ const ghToken = process.env.GH_TOKEN || getGitHubToken();
 
 let buildDuration = '0';
 if (!isCloud) {
-  // 3. Local Fast Build
-  console.log('\n[1/3] 🔨 Masaüstü Kurulum Paketi Yerelde Hızlıca Derleniyor...');
+  // 3. Compile EchoUpdater
+  console.log('\n[1/4] 🔨 EchoUpdater (C# .NET) Bağımsız Güncelleyici Derleniyor...');
+  try {
+    execSync(
+      'dotnet publish apps/updater/EchoUpdater.csproj -c Release -r win-x64 --no-self-contained -o apps/updater/bin/Release/publish',
+      {
+        cwd: rootDir,
+        stdio: 'inherit',
+      }
+    );
+    console.log('✓ EchoUpdater başarıyla derlendi!\n');
+  } catch (err) {
+    console.error('\n❌ EchoUpdater derleme hatası:', err.message);
+    process.exit(1);
+  }
+
+  // 4. Local Fast Build for Echo
+  console.log('[2/4] 🔨 Masaüstü Kurulum Paketi Yerelde Hızlıca Derleniyor...');
   const startTime = Date.now();
   try {
     execSync('pnpm --filter @echo/desktop run build:exe', {
@@ -98,8 +114,8 @@ if (!isCloud) {
   console.log('\n☁️  Bulut Modu (--cloud): Yerel derleme atlandı, GitHub Actions derleyecek.\n');
 }
 
-// 4. Git Commit & Tag
-console.log('[2/3] 📦 Git Commit ve Tag Hazırlanıyor...');
+// 5. Git Commit & Tag
+console.log('[3/4] 📦 Git Commit ve Tag Hazırlanıyor...');
 function runCmd(cmd, env = {}) {
   console.log(`> ${cmd}`);
   execSync(cmd, { cwd: rootDir, stdio: 'inherit', env: { ...process.env, ...env } });
@@ -116,8 +132,8 @@ try {
 }
 
 if (!isCloud) {
-  // 5. Direct Upload to GitHub Releases
-  console.log('\n[3/3] 🚀 GitHub Releases Sayfasına Doğrudan Yükleniyor...');
+  // 6. Direct Upload to GitHub Releases
+  console.log('\n[4/4] 🚀 GitHub Releases Sayfasına Doğrudan Yükleniyor...');
   const distDir = resolve(rootDir, 'apps/desktop/dist');
   const exeSpaced = resolve(distDir, `Echo Setup ${nextVersion}.exe`);
   const blockmapSpaced = resolve(distDir, `Echo Setup ${nextVersion}.exe.blockmap`);

@@ -1,6 +1,6 @@
 {
   "name": "@echo/desktop",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "private": true,
   "main": "./out/main/index.js",
   "scripts": {
@@ -48,6 +48,12 @@
     "files": [
       "out/**/*",
       "package.json"
+    ],
+    "extraFiles": [
+      {
+        "from": "../updater/bin/Release/publish/EchoUpdater.exe",
+        "to": "EchoUpdater.exe"
+      }
     ],
     "win": {
       "target": [
