@@ -29,8 +29,20 @@ class WebRTCVoiceService {
   private lastSpeakingState = false;
   private speakingSilenceTimer: ReturnType<typeof setTimeout> | null = null;
 
-  private selectedInputDeviceId: string | null = null;
-  private selectedOutputDeviceId: string | null = null;
+  private selectedInputDeviceId: string | null = (() => {
+    try {
+      return localStorage.getItem('echo_voice_input_device') || null;
+    } catch {
+      return null;
+    }
+  })();
+  private selectedOutputDeviceId: string | null = (() => {
+    try {
+      return localStorage.getItem('echo_voice_output_device') || null;
+    } catch {
+      return null;
+    }
+  })();
   private selectedVideoDeviceId: string | null = null;
   private localCameraStream: MediaStream | null = null;
   private outputVolume = 1.0;
@@ -86,27 +98,54 @@ class WebRTCVoiceService {
           video: false,
         });
       } catch (deviceErr) {
-        console.warn('[Echo WebRTC] Selected input device failed, falling back to default:', deviceErr);
+        console.warn('[Echo WebRTC] Selected input device failed, falling back:', deviceErr);
         this.selectedInputDeviceId = null;
-        this.localStream = await navigator.mediaDevices.getUserMedia({
-          audio: {
-            echoCancellation: true,
-            noiseSuppression: true,
-            autoGainControl: true,
-          },
-          video: false,
-        });
+        try {
+          this.localStream = await navigator.mediaDevices.getUserMedia({
+            audio: {
+              echoCancellation: true,
+              noiseSuppression: true,
+              autoGainControl: true,
+            },
+            video: false,
+          });
+        } catch {
+          console.warn('[Echo WebRTC] Fallback with constraints failed, requesting raw audio: true');
+          this.localStream = await navigator.mediaDevices.getUserMedia({
+            audio: true,
+            video: false,
+          });
+        }
       }
 
       const micTrack = this.localStream.getAudioTracks()[0];
-      if (micTrack) {
-        micTrack.onended = () => {
-          console.warn('[Echo WebRTC] Local microphone track ended, attempting re-acquire...');
-          if (this.currentChannelId) {
-            void this.reacquireLocalAudio();
-          }
-        };
+      if (!micTrack) {
+        throw new Error('Mikrofon ses izi (audio track) bulunamadı');
       }
+
+      // Check if muted by hardware switch or OS
+      if (micTrack.muted) {
+        console.warn('[Echo WebRTC] Local microphone track is muted by hardware or OS!');
+        voiceStore.setIsMicUnavailable(true);
+      } else {
+        voiceStore.setIsMicUnavailable(false);
+      }
+
+      micTrack.onmute = () => {
+        console.warn('[Echo WebRTC] Local microphone track muted by hardware or OS!');
+        useVoiceStore.getState().setIsMicUnavailable(true);
+      };
+      micTrack.onunmute = () => {
+        console.log('[Echo WebRTC] Local microphone track unmuted.');
+        useVoiceStore.getState().setIsMicUnavailable(false);
+      };
+
+      micTrack.onended = () => {
+        console.warn('[Echo WebRTC] Local microphone track ended, attempting re-acquire...');
+        if (this.currentChannelId) {
+          void this.reacquireLocalAudio();
+        }
+      };
 
       // Apply current mute / PTT state
       this.updateAudioTrackState();
@@ -120,7 +159,8 @@ class WebRTCVoiceService {
       // 4. Start diagnostics polling
       this.startDiagnostics();
 
-      voiceStore.setConnected(channelId);
+      // Connection safety gate: only mark connected if alone or once peer connection is up
+      this.updateConnectionStatusGate();
     } catch (err) {
       console.error('Failed to get user media or join voice channel:', err);
       this.leave();
@@ -280,6 +320,7 @@ class WebRTCVoiceService {
       // Someone else joined: Register their display name and wait for their offer
       this.peerDisplayNames.set(joinedUserId, joinedDisplayName);
     }
+    this.updateConnectionStatusGate();
   }
 
   handleUserLeft(channelId: string, leftUserId: string): void {
@@ -328,6 +369,8 @@ class WebRTCVoiceService {
     const currentDiag = { ...useVoiceStore.getState().diagnostics };
     delete currentDiag[leftUserId];
     useVoiceStore.getState().setDiagnostics(currentDiag);
+
+    this.updateConnectionStatusGate();
   }
 
   async handleSignal(fromUserId: string, signal: VoiceSignalData, channelId?: string): Promise<void> {
@@ -633,6 +676,7 @@ class WebRTCVoiceService {
 
     pc.onconnectionstatechange = () => {
       console.log(`[Echo WebRTC] Peer ${peerId} connectionState:`, pc?.connectionState);
+      this.updateConnectionStatusGate();
       if (pc?.connectionState === 'failed') {
         console.warn(`[Echo WebRTC] Peer ${peerId} connection failed, attempting ICE restart...`);
         try {
@@ -645,6 +689,7 @@ class WebRTCVoiceService {
 
     pc.oniceconnectionstatechange = () => {
       console.log(`[Echo WebRTC] Peer ${peerId} iceConnectionState:`, pc?.iceConnectionState);
+      this.updateConnectionStatusGate();
       if (pc?.iceConnectionState === 'failed') {
         console.warn(`[Echo WebRTC] Peer ${peerId} ICE connection failed, attempting ICE restart...`);
         try {
@@ -656,6 +701,47 @@ class WebRTCVoiceService {
     };
 
     return pc;
+  }
+
+  updateConnectionStatusGate(): void {
+    if (!this.currentChannelId) return;
+    const voiceStore = useVoiceStore.getState();
+    const participants = voiceStore.channelParticipants[this.currentChannelId] || [];
+    const myUserId = useAuthStore.getState().identity?.userId;
+    const otherParticipants = participants.filter((p) => p.userId !== myUserId);
+
+    // If nobody else is in the room, we are safely connected once local mic stream is active
+    if (otherParticipants.length === 0) {
+      if (voiceStore.connectionStatus !== 'connected' && this.localStream) {
+        voiceStore.setConnected(this.currentChannelId);
+      }
+      return;
+    }
+
+    // If other participants exist, check if at least one peer connection has successfully connected
+    const anyConnected = Array.from(this.peers.values()).some(
+      (pc) =>
+        pc.connectionState === 'connected' ||
+        pc.iceConnectionState === 'connected' ||
+        pc.iceConnectionState === 'completed',
+    );
+
+    if (anyConnected) {
+      if (voiceStore.connectionStatus !== 'connected') {
+        console.log('[Echo WebRTC] WebRTC peer connection established! Voice connected.');
+        voiceStore.setConnected(this.currentChannelId);
+      }
+    } else {
+      // Still waiting for WebRTC ICE negotiation with peers
+      if (voiceStore.connectionStatus === 'connected') {
+        voiceStore.setConnecting(
+          this.currentGroupId || '',
+          voiceStore.currentGroupName || '',
+          this.currentChannelId,
+          voiceStore.currentChannelName || '',
+        );
+      }
+    }
   }
 
   updateAudioTrackState(): void {
@@ -774,6 +860,19 @@ class WebRTCVoiceService {
         const store = useVoiceStore.getState();
         const canTransmit =
           !store.isMuted && !store.isDeafened && (store.inputMode === 'vad' || store.isPttActive);
+
+        this.analyser.getFloatTimeDomainData(buffer);
+
+        // Calculate Root Mean Square (RMS)
+        let sum = 0;
+        for (let i = 0; i < buffer.length; i++) {
+          sum += buffer[i]! * buffer[i]!;
+        }
+        const rms = Math.sqrt(sum / buffer.length);
+
+        // Always update live microphone audio level for the UI meter
+        store.setLocalAudioLevel(canTransmit ? Math.min(1, rms * 12) : 0);
+
         if (!canTransmit) {
           if (this.lastSpeakingState) {
             this.setLocalSpeaking(false);
@@ -789,15 +888,7 @@ class WebRTCVoiceService {
           return;
         }
 
-        this.analyser.getFloatTimeDomainData(buffer);
-
-        // Calculate Root Mean Square (RMS)
-        let sum = 0;
-        for (let i = 0; i < buffer.length; i++) {
-          sum += buffer[i]! * buffer[i]!;
-        }
-        const rms = Math.sqrt(sum / buffer.length);
-        const threshold = 0.02; // Voice detection threshold
+        const threshold = 0.008; // High-sensitivity detection for normal and quiet microphones
 
         if (rms > threshold) {
           if (this.speakingSilenceTimer) {
@@ -816,7 +907,7 @@ class WebRTCVoiceService {
             }, 350);
           }
         }
-      }, 100);
+      }, 60);
     } catch (err) {
       console.warn('VAD setup failed:', err);
     }
@@ -1016,6 +1107,16 @@ class WebRTCVoiceService {
 
   async setInputDevice(deviceId: string): Promise<void> {
     this.selectedInputDeviceId = deviceId;
+    try {
+      if (deviceId) {
+        localStorage.setItem('echo_voice_input_device', deviceId);
+      } else {
+        localStorage.removeItem('echo_voice_input_device');
+      }
+    } catch {
+      // Ignore
+    }
+
     if (this.localStream && this.currentChannelId) {
       try {
         const audioConstraints: MediaTrackConstraints = {
@@ -1065,6 +1166,16 @@ class WebRTCVoiceService {
 
   async setOutputDevice(deviceId: string): Promise<void> {
     this.selectedOutputDeviceId = deviceId;
+    try {
+      if (deviceId) {
+        localStorage.setItem('echo_voice_output_device', deviceId);
+      } else {
+        localStorage.removeItem('echo_voice_output_device');
+      }
+    } catch {
+      // Ignore
+    }
+
     const sinkId = !deviceId || deviceId === 'default' ? '' : deviceId;
 
     for (const audio of this.peerAudioElements.values()) {

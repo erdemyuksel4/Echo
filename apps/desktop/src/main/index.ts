@@ -176,9 +176,14 @@ if (!gotTheLock) {
   void app.whenReady().then(() => {
     electronApp.setAppUserModelId('com.echo.app');
 
-    // Grant media (microphone) permission for WebRTC voice chat
+    // Grant media (microphone, camera, audio/video) permission for WebRTC voice chat
     session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback) => {
-      if (permission === 'media') {
+      if (
+        permission === 'media' ||
+        permission === 'mediaKeySystem' ||
+        permission === 'display-capture' ||
+        permission === 'notifications'
+      ) {
         callback(true);
         return;
       }
@@ -186,7 +191,11 @@ if (!gotTheLock) {
     });
 
     session.defaultSession.setPermissionCheckHandler((_webContents, permission) => {
-      return permission === 'media';
+      return (
+        permission === 'media' ||
+        permission === 'mediaKeySystem' ||
+        permission === 'notifications'
+      );
     });
 
     app.on('browser-window-created', (_, window) => {

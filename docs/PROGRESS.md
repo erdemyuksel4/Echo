@@ -439,4 +439,22 @@ Bu dosya her faz ve görev sonunda güncellenir.
   - `initiateOffer` ve `handleOffer` öncesinde yerel ses izinin (`track.enabled`, `track.readyState`) eşler arası bağlantıya eksiksiz bağlandığı doğrulandı.
 - [x] **Otomatik Dağıtım (v0.1.12):**
   - Typecheck, ESLint ve tüm testler (74/74) başarıyla geçti.
+  - `pnpm release` ile `v0.1.12` GitHub Releases üzerinde otomatik olarak yayınlandı.
+
+## Ses Bağlantı Kapısı & Mikrofon Güvenliği (v0.1.13)
+
+- [x] **Ses Tam Bağlanmadan Konuşmaya Girilmeyi Engelleyen Bağlantı Kapısı (Connection Gate):**
+  - Kullanıcı ses kanalına katıldığında `voiceStore.setConnected` çağrısının anında erkenden yeşil "Ses Bağlandı" yapması engellendi.
+  - Eğer kanalda başka katılımcılar varsa durum `RTC Bağlanıyor...` (kehribar/amber rengi ve nabız animasyonu) olarak kaldı; ancak WebRTC eşler arası bağlantı kurulup DTLS/ICE handshake (`connected`) tamamlandığında durum yeşil `Ses Bağlandı` durumuna geçirildi.
+- [x] **Canlı Mikrofon Aktivite Göstergesi (Visual Mic Level):**
+  - `VoicePanel` içerisine mikrofonun fiziksel olarak ses alıp almadığını anlık gösteren canlı ses çubuğu (mic meter) eklendi. Kullanıcı konuştuğunda çubuğun hareket etmesiyle mikrofonunun çalıştığı anında görselleşti.
+- [x] **Mikrofon Donanım/Sistem Sessizlik Kontrolü:**
+  - `micTrack.muted`, `onmute` ve `onunmute` olayları dinlenerek mikrofon donanım anahtarından veya Windows gizlilik ayarlarından kısıtlandığında kullanıcıya anında "Sessiz / Mikrofon sessizde" uyarısı verilmesi sağlandı.
+- [x] **VAD Hassasiyeti Arttırıldı (0.008 RMS):**
+  - Konuşma tespit eşiği `0.02`'den `0.008`'e düşürülerek düşük ses seviyelerinde ve kısık sesli mikrofonlarda konuşmanın kesilmeden algılanması sağlandı.
+- [x] **Giriş ve Çıkış Aygıtı Kalıcılığı (localStorage):**
+  - Seçilen mikrofon ve hoparlör aygıtları `localStorage` üzerinde saklanıp uygulama yeniden başlatıldığında otomatik olarak geri yüklendi.
+- [x] **Otomatik Dağıtım (v0.1.13):**
+  - Typecheck, ESLint ve tüm testler (74/74) başarıyla geçti.
+
 

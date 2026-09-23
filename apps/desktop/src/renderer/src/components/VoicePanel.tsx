@@ -29,6 +29,8 @@ export const VoicePanel: React.FC = () => {
     isSpeaking,
     isCameraActive,
     pingMs,
+    localAudioLevel,
+    isMicUnavailable,
     setDiagnosticsOpen,
   } = useVoiceStore();
 
@@ -91,8 +93,12 @@ export const VoicePanel: React.FC = () => {
               title="Ses Sahnesini Görüntüle"
             >
               <div className="flex items-center gap-1.5">
-                <span className="text-xs font-semibold text-emerald-400 truncate">
-                  {isConnected ? 'Ses Bağlandı' : 'Bağlanıyor...'}
+                <span
+                  className={`text-xs font-semibold truncate flex items-center gap-1.5 ${
+                    isConnected ? 'text-emerald-400' : 'text-amber-400'
+                  }`}
+                >
+                  {isConnected ? 'Ses Bağlandı' : 'RTC Bağlanıyor...'}
                 </span>
                 {isConnected && pingMs > 0 && (
                   <span className={`text-[10px] font-mono font-medium ${getRttBadgeColor(pingMs)}`}>
@@ -105,6 +111,23 @@ export const VoicePanel: React.FC = () => {
                 title={`${currentChannelName ?? ''} / ${currentGroupName ?? 'Ses'}`}
               >
                 {currentChannelName} {currentGroupName ? `/ ${currentGroupName}` : '/ RTC Mesh'}
+              </div>
+              {/* Live Mic Activity Bar */}
+              <div
+                className="mt-1 flex items-center gap-1.5 w-32"
+                title={`Mikrofon Sinyali: %${Math.round(localAudioLevel * 100)}`}
+              >
+                <div className="flex-1 h-1 bg-slate-800 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full transition-all duration-75 rounded-full ${
+                      isSpeaking ? 'bg-emerald-400' : localAudioLevel > 0.05 ? 'bg-indigo-400' : 'bg-transparent'
+                    }`}
+                    style={{ width: `${Math.min(100, Math.round(localAudioLevel * 100))}%` }}
+                  />
+                </div>
+                {isMicUnavailable && (
+                  <span className="text-[10px] text-amber-400 font-medium truncate">Sessiz</span>
+                )}
               </div>
             </div>
           </div>

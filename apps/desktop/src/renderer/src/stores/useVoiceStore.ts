@@ -30,6 +30,9 @@ export interface VoiceState {
   diagnostics: Record<string, PeerDiagnosticsStats>;
   isDiagnosticsOpen: boolean;
 
+  localAudioLevel: number;
+  isMicUnavailable: boolean;
+
   // Actions
   setConnecting: (
     groupId: string,
@@ -46,6 +49,8 @@ export interface VoiceState {
   setPeerCameraStream: (peerId: string, stream: MediaStream) => void;
   removePeerCameraStream: (peerId: string) => void;
   setPingMs: (ping: number) => void;
+  setLocalAudioLevel: (level: number) => void;
+  setIsMicUnavailable: (unavailable: boolean) => void;
 
   setInputMode: (mode: VoiceInputMode) => void;
   setPttKey: (key: string, display: string) => void;
@@ -122,6 +127,9 @@ export const useVoiceStore = create<VoiceState>((set) => ({
   diagnostics: {},
   isDiagnosticsOpen: false,
 
+  localAudioLevel: 0,
+  isMicUnavailable: false,
+
   setConnecting: (groupId, groupName, channelId, channelName) =>
     set({
       currentGroupId: groupId,
@@ -129,6 +137,7 @@ export const useVoiceStore = create<VoiceState>((set) => ({
       currentChannelId: channelId,
       currentChannelName: channelName,
       connectionStatus: 'connecting',
+      localAudioLevel: 0,
     }),
 
   setConnected: (channelId) =>
@@ -150,6 +159,8 @@ export const useVoiceStore = create<VoiceState>((set) => ({
       cameraStreams: {},
       pingMs: 0,
       diagnostics: {},
+      localAudioLevel: 0,
+      isMicUnavailable: false,
     }),
 
   setMuted: (isMuted) => set({ isMuted }),
@@ -170,6 +181,8 @@ export const useVoiceStore = create<VoiceState>((set) => ({
       return { cameraStreams: next };
     }),
   setPingMs: (pingMs) => set({ pingMs }),
+  setLocalAudioLevel: (localAudioLevel) => set({ localAudioLevel }),
+  setIsMicUnavailable: (isMicUnavailable) => set({ isMicUnavailable }),
 
   setInputMode: (inputMode) => {
     try {
