@@ -457,4 +457,17 @@ Bu dosya her faz ve görev sonunda güncellenir.
 - [x] **Otomatik Dağıtım (v0.1.13):**
   - Typecheck, ESLint ve tüm testler (74/74) başarıyla geçti.
 
+## Cloudflare Calls TURN Relay & CGNAT Ağ Geçidi Desteği (v0.1.14)
+
+- [x] **Cloudflare Calls TURN Kimlik Doğrulaması Canlıya Alındı:**
+  - Cloudflare Calls TURN Key ID (`CLOUDFLARE_TURN_KEY_ID`) ve API Token (`CLOUDFLARE_TURN_API_TOKEN`) Cloudflare Workers secrets olarak canlı sunucuya eklendi.
+  - Canlı `/api/turn` uç noktası test edildi; `stun.cloudflare.com` ile birlikte UDP/TCP port 3478, 80, 443 ve TLS 5349 üzerinden geçici (ephemeral) TURN erişim kimlik bilgileri başarıyla üretildi.
+- [x] **Chromium ICE Aday Toplama Doğrulandı (Relay Candidates):**
+  - Electron çalışma ortamında WebRTC ICE aday toplama testi çalıştırıldı; Cloudflare TURN sunucularından doğrudan `relay udp 104.30.150.124` adaylarının üretildiği teyit edildi.
+  - Simetrik NAT (Symmetric NAT) ve CGNAT (operatör düzeyinde NAT) arkasında bulunan kullanıcıların P2P bağlantısının kilitlenmesi sorunu kökten çözüldü.
+- [x] **Kanal Katılımında Dinamik TURN Yenileme:**
+  - `apps/desktop/src/renderer/src/services/webrtc.ts` içinde ses kanalına katılırken (`join`) ve eş bağlantısı kurulurken (`getOrCreatePeerConnection`) `iceServersService.fetchIceServers()` tetiklenerek her oturumda en güncel Cloudflare TURN relay kimlik bilgilerinin kullanılması sağlandı.
+- [x] **Otomatik Dağıtım (v0.1.14):**
+  - Typecheck, ESLint ve tüm testler (74/74) başarıyla geçti.
+
 

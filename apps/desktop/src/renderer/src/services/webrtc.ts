@@ -81,6 +81,14 @@ class WebRTCVoiceService {
     this.currentChannelId = channelId;
     voiceStore.setConnecting(groupId, groupName, channelId, channelName);
 
+    // Refresh ICE / TURN relay credentials
+    try {
+      await iceServersService.fetchIceServers();
+      this.iceServers = iceServersService.getIceServers();
+    } catch (e) {
+      console.warn('[Echo WebRTC] Failed to refresh ICE servers on join:', e);
+    }
+
     try {
       // 1. Get microphone stream with Echo cancellation & Noise suppression
       const audioConstraints: MediaTrackConstraints = {
