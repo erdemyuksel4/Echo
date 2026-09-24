@@ -14,12 +14,18 @@ import {
   Radio,
   Activity,
 } from 'lucide-react';
-import type { Channel, VoiceParticipant } from '@echo/shared';
+import {
+  type Channel,
+  type VoiceParticipant,
+  UserAudioState,
+  computeAudioState,
+} from '@echo/shared';
 import { useVoiceStore } from '../stores/useVoiceStore';
 import { useAuthStore } from '../stores/useAuthStore';
 import { useChatStore } from '../stores/useChatStore';
 import { useScreenShareStore } from '../stores/useScreenShareStore';
 import { webrtcService } from '../services/webrtc';
+import { VoiceDiagnosticsModal } from './VoiceDiagnosticsModal';
 
 interface Props {
   channel: Channel;
@@ -147,9 +153,7 @@ export const VoiceStageView: React.FC<Props> = ({ channel }) => {
   const {
     currentChannelId,
     channelParticipants,
-    isMuted,
-    isDeafened,
-    isSpeaking,
+    audioState,
     isCameraActive,
     cameraStreams,
     pingMs,
@@ -299,9 +303,12 @@ export const VoiceStageView: React.FC<Props> = ({ channel }) => {
               const stream = isLocal
                 ? cameraStreams['local'] || cameraStreams[p.userId]
                 : cameraStreams[p.userId];
-              const speaking = isLocal ? isSpeaking : p.speaking;
-              const muted = isLocal ? isMuted : p.muted;
-              const deafened = isLocal ? isDeafened : p.deafened;
+              const pAudioState = isLocal
+                ? audioState
+                : computeAudioState({ muted: p.muted, deafened: p.deafened, speaking: p.speaking });
+              const speaking = pAudioState === UserAudioState.SPEAKING;
+              const muted = pAudioState === UserAudioState.MUTED;
+              const deafened = pAudioState === UserAudioState.DEAFENED;
 
               return (
                 <ParticipantTile
@@ -320,86 +327,92 @@ export const VoiceStageView: React.FC<Props> = ({ channel }) => {
       </div>
 
       {/* Bottom Floating Controls Toolbar */}
-      {isCurrentChannel && (
-        <div className="p-3 flex justify-center z-10">
-          <div className="flex items-center gap-2 rounded-2xl bg-slate-950/90 backdrop-blur-md px-4 py-2 border border-slate-800 shadow-2xl">
-            {/* Camera Toggle Button */}
-            <button
-              type="button"
-              onClick={handleToggleCamera}
-              disabled={isTogglingCamera}
-              className={`flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs font-semibold transition border ${
-                isCameraActive
-                  ? 'bg-emerald-600 text-white border-emerald-500 hover:bg-emerald-500 shadow-sm shadow-emerald-500/20'
-                  : 'bg-slate-900 text-slate-300 border-slate-800 hover:bg-slate-800 hover:text-white'
-              }`}
-              title={isCameraActive ? 'Kamerayı Kapat' : 'Kamerayı Aç'}
-            >
-              {isCameraActive ? (
-                <Video className="h-4 w-4" />
-              ) : (
-                <VideoOff className="h-4 w-4 text-slate-400" />
-              )}
-              <span className="hidden sm:inline">
-                {isCameraActive ? 'Kamera Açık' : 'Kamera Aç'}
-              </span>
-            </button>
+      {isCurrentChannel && (() => {
+        const isMuted = audioState === UserAudioState.MUTED || audioState === UserAudioState.DEAFENED;
+        const isDeafened = audioState === UserAudioState.DEAFENED;
 
-            {/* Microphone Mute Button */}
-            <button
-              type="button"
-              onClick={() => webrtcService.toggleMute()}
-              className={`flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs font-semibold transition border ${
-                isMuted || isDeafened
-                  ? 'bg-rose-500/20 text-rose-300 border-rose-500/40 hover:bg-rose-500/30'
-                  : 'bg-slate-900 text-slate-300 border-slate-800 hover:bg-slate-800 hover:text-white'
-              }`}
-              title={isMuted ? 'Mikrofonu Aç' : 'Mikrofonu Sustur'}
-            >
-              {isMuted || isDeafened ? (
-                <MicOff className="h-4 w-4 text-rose-400" />
-              ) : (
-                <Mic className="h-4 w-4 text-emerald-400" />
-              )}
-              <span className="hidden sm:inline">
-                {isMuted || isDeafened ? 'Susturuldu' : 'Sustur'}
-              </span>
-            </button>
+        return (
+          <div className="p-3 flex justify-center z-10">
+            <div className="flex items-center gap-2 rounded-2xl bg-slate-950/90 backdrop-blur-md px-4 py-2 border border-slate-800 shadow-2xl">
+              {/* Camera Toggle Button */}
+              <button
+                type="button"
+                onClick={handleToggleCamera}
+                disabled={isTogglingCamera}
+                className={`flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs font-semibold transition border ${
+                  isCameraActive
+                    ? 'bg-emerald-600 text-white border-emerald-500 hover:bg-emerald-500 shadow-sm shadow-emerald-500/20'
+                    : 'bg-slate-900 text-slate-300 border-slate-800 hover:bg-slate-800 hover:text-white'
+                }`}
+                title={isCameraActive ? 'Kamerayı Kapat' : 'Kamerayı Aç'}
+              >
+                {isCameraActive ? (
+                  <Video className="h-4 w-4" />
+                ) : (
+                  <VideoOff className="h-4 w-4 text-slate-400" />
+                )}
+                <span className="hidden sm:inline">
+                  {isCameraActive ? 'Kamera Açık' : 'Kamera Aç'}
+                </span>
+              </button>
 
-            {/* Deafen Button */}
-            <button
-              type="button"
-              onClick={() => webrtcService.toggleDeafen()}
-              className={`flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs font-semibold transition border ${
-                isDeafened
-                  ? 'bg-rose-500/20 text-rose-300 border-rose-500/40 hover:bg-rose-500/30'
-                  : 'bg-slate-900 text-slate-300 border-slate-800 hover:bg-slate-800 hover:text-white'
-              }`}
-              title={isDeafened ? 'Sağırlaştırmayı Kaldır' : 'Sağırlaştır'}
-            >
-              {isDeafened ? (
-                <VolumeX className="h-4 w-4 text-rose-400" />
-              ) : (
-                <Headphones className="h-4 w-4 text-indigo-400" />
-              )}
-              <span className="hidden sm:inline">{isDeafened ? 'Sağır' : 'Kulaklık'}</span>
-            </button>
+              {/* Microphone Mute Button */}
+              <button
+                type="button"
+                onClick={() => webrtcService.toggleMute()}
+                className={`flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs font-semibold transition border ${
+                  isMuted
+                    ? 'bg-rose-500/20 text-rose-300 border-rose-500/40 hover:bg-rose-500/30'
+                    : 'bg-slate-900 text-slate-300 border-slate-800 hover:bg-slate-800 hover:text-white'
+                }`}
+                title={isMuted ? 'Mikrofonu Aç' : 'Mikrofonu Sustur'}
+              >
+                {isMuted ? (
+                  <MicOff className="h-4 w-4 text-rose-400" />
+                ) : (
+                  <Mic className="h-4 w-4 text-emerald-400" />
+                )}
+                <span className="hidden sm:inline">
+                  {isMuted ? 'Susturuldu' : 'Sustur'}
+                </span>
+              </button>
 
-            <div className="h-6 w-px bg-slate-800 mx-1" />
+              {/* Deafen Button */}
+              <button
+                type="button"
+                onClick={() => webrtcService.toggleDeafen()}
+                className={`flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs font-semibold transition border ${
+                  isDeafened
+                    ? 'bg-rose-500/20 text-rose-300 border-rose-500/40 hover:bg-rose-500/30'
+                    : 'bg-slate-900 text-slate-300 border-slate-800 hover:bg-slate-800 hover:text-white'
+                }`}
+                title={isDeafened ? 'Sağırlaştırmayı Kaldır' : 'Sağırlaştır'}
+              >
+                {isDeafened ? (
+                  <VolumeX className="h-4 w-4 text-rose-400" />
+                ) : (
+                  <Headphones className="h-4 w-4 text-indigo-400" />
+                )}
+                <span className="hidden sm:inline">{isDeafened ? 'Sağır' : 'Kulaklık'}</span>
+              </button>
 
-            {/* Disconnect Button */}
-            <button
-              type="button"
-              onClick={handleJoinOrLeave}
-              className="flex items-center gap-2 rounded-xl bg-rose-600 px-4 py-2 text-xs font-bold text-white hover:bg-rose-500 transition shadow-lg shadow-rose-600/20"
-              title="Ses Kanalından Ayrıl"
-            >
-              <PhoneOff className="h-4 w-4" />
-              <span>Ayrıl</span>
-            </button>
+              <div className="h-6 w-px bg-slate-800 mx-1" />
+
+              {/* Disconnect Button */}
+              <button
+                type="button"
+                onClick={handleJoinOrLeave}
+                className="flex items-center gap-2 rounded-xl bg-rose-600 px-4 py-2 text-xs font-bold text-white hover:bg-rose-500 transition shadow-lg shadow-rose-600/20"
+                title="Ses Kanalından Ayrıl"
+              >
+                <PhoneOff className="h-4 w-4" />
+                <span className="hidden sm:inline">Ayrıl</span>
+              </button>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
+      <VoiceDiagnosticsModal />
     </div>
   );
 };

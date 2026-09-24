@@ -46,6 +46,30 @@ export const ClientVoiceStatePayloadSchema = z.object({
 
 export type ClientVoiceStatePayload = z.infer<typeof ClientVoiceStatePayloadSchema>;
 
+export enum UserAudioState {
+  IDLE = 'idle',
+  SPEAKING = 'speaking',
+  MUTED = 'muted',
+  DEAFENED = 'deafened',
+}
+
+export enum VoiceConnectionState {
+  DISCONNECTED = 'disconnected',
+  CONNECTING = 'connecting',
+  CONNECTED = 'connected',
+}
+
+export function computeAudioState(state: {
+  muted?: boolean;
+  deafened?: boolean;
+  speaking?: boolean;
+}): UserAudioState {
+  if (state.deafened) return UserAudioState.DEAFENED;
+  if (state.muted) return UserAudioState.MUTED;
+  if (state.speaking) return UserAudioState.SPEAKING;
+  return UserAudioState.IDLE;
+}
+
 // Server -> Client Payloads
 export const VoiceParticipantSchema = z.object({
   userId: z.string(),

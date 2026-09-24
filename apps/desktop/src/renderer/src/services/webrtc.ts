@@ -1,4 +1,9 @@
-import type { VoiceSignalData, PeerDiagnosticsStats, VoiceParticipant } from '@echo/shared';
+import {
+  type VoiceSignalData,
+  type PeerDiagnosticsStats,
+  type VoiceParticipant,
+  UserAudioState,
+} from '@echo/shared';
 import { useVoiceStore } from '../stores/useVoiceStore';
 import { useAuthStore } from '../stores/useAuthStore';
 import { wsService } from './websocket';
@@ -754,7 +759,11 @@ class WebRTCVoiceService {
 
   updateAudioTrackState(): void {
     const store = useVoiceStore.getState();
-    const isMuted = store.isMuted || store.isDeafened;
+    const isMuted =
+      store.audioState === UserAudioState.MUTED ||
+      store.audioState === UserAudioState.DEAFENED ||
+      store.isMuted ||
+      store.isDeafened;
     const canTransmit = !isMuted && (store.inputMode === 'vad' || store.isPttActive);
 
     if (this.localStream) {
@@ -763,7 +772,7 @@ class WebRTCVoiceService {
       });
     }
 
-    if (!canTransmit && this.lastSpeakingState) {
+    if (!canTransmit && (this.lastSpeakingState || store.isSpeaking)) {
       if (this.speakingSilenceTimer) {
         clearTimeout(this.speakingSilenceTimer);
         this.speakingSilenceTimer = null;
@@ -791,14 +800,24 @@ class WebRTCVoiceService {
 
   toggleMute(): void {
     const store = useVoiceStore.getState();
-    const newMuted = !store.isMuted;
-    store.setMuted(newMuted);
+    const myUserId = useAuthStore.getState().identity?.userId;
+    const isCurrentlyMutedOrDeafened =
+      store.audioState === UserAudioState.MUTED ||
+      store.audioState === UserAudioState.DEAFENED ||
+      store.isMuted ||
+      store.isDeafened;
+
+    const nextAudioState = isCurrentlyMutedOrDeafened
+      ? UserAudioState.IDLE
+      : UserAudioState.MUTED;
+
+    store.setAudioState(nextAudioState, myUserId);
     this.updateAudioTrackState();
 
     if (this.currentChannelId) {
       wsService.sendVoiceState(this.currentChannelId, {
-        muted: newMuted,
-        deafened: store.isDeafened,
+        muted: nextAudioState === UserAudioState.MUTED,
+        deafened: false,
         speaking: false,
       });
     }
@@ -806,19 +825,27 @@ class WebRTCVoiceService {
 
   toggleDeafen(): void {
     const store = useVoiceStore.getState();
-    const newDeafened = !store.isDeafened;
-    store.setDeafened(newDeafened);
+    const myUserId = useAuthStore.getState().identity?.userId;
+    const isCurrentlyDeafened =
+      store.audioState === UserAudioState.DEAFENED || store.isDeafened;
+
+    const nextAudioState = isCurrentlyDeafened
+      ? UserAudioState.IDLE
+      : UserAudioState.DEAFENED;
+
+    store.setAudioState(nextAudioState, myUserId);
     this.updateAudioTrackState();
 
-    // Mute all remote audio elements
+    // Mute/unmute all remote audio elements
+    const shouldMutePeers = nextAudioState === UserAudioState.DEAFENED;
     this.peerAudioElements.forEach((audio) => {
-      audio.muted = newDeafened;
+      audio.muted = shouldMutePeers;
     });
 
     if (this.currentChannelId) {
       wsService.sendVoiceState(this.currentChannelId, {
-        muted: newDeafened ? true : store.isMuted,
-        deafened: newDeafened,
+        muted: shouldMutePeers,
+        deafened: shouldMutePeers,
         speaking: false,
       });
     }
@@ -922,11 +949,24 @@ class WebRTCVoiceService {
   }
 
   private setLocalSpeaking(speaking: boolean): void {
+    const store = useVoiceStore.getState();
+    const isMutedOrDeafened =
+      store.audioState === UserAudioState.MUTED ||
+      store.audioState === UserAudioState.DEAFENED ||
+      store.isMuted ||
+      store.isDeafened;
+
+    // Prevent speaking conflict while muted or deafened
+    if (speaking && isMutedOrDeafened) {
+      this.lastSpeakingState = false;
+      return;
+    }
+
     this.lastSpeakingState = speaking;
-    useVoiceStore.getState().setSpeaking(speaking);
+    const myUserId = useAuthStore.getState().identity?.userId;
+    store.setSpeaking(speaking, myUserId);
 
     if (this.currentChannelId) {
-      const store = useVoiceStore.getState();
       wsService.sendVoiceState(this.currentChannelId, {
         muted: store.isMuted,
         deafened: store.isDeafened,

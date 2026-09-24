@@ -13,6 +13,8 @@ import {
   IceServerSchema,
   TurnResponseSchema,
   DEFAULT_FALLBACK_ICE_SERVERS,
+  UserAudioState,
+  computeAudioState,
   WsEnvelopeSchema,
   WsClientEvents,
   WsServerEvents,
@@ -326,6 +328,26 @@ describe('Voice Schemas & Protocol', () => {
         return urls.some((u) => u.startsWith('stun:'));
       });
       expect(hasStun).toBe(true);
+    });
+  });
+
+  describe('UserAudioState & Conflict Prevention', () => {
+    it('should correctly prioritize DEAFENED over muted and speaking', () => {
+      expect(computeAudioState({ deafened: true, muted: true, speaking: true })).toBe(UserAudioState.DEAFENED);
+      expect(computeAudioState({ deafened: true, muted: false, speaking: false })).toBe(UserAudioState.DEAFENED);
+    });
+
+    it('should correctly prioritize MUTED over speaking', () => {
+      expect(computeAudioState({ deafened: false, muted: true, speaking: true })).toBe(UserAudioState.MUTED);
+      expect(computeAudioState({ deafened: false, muted: true, speaking: false })).toBe(UserAudioState.MUTED);
+    });
+
+    it('should resolve SPEAKING when unmuted and active', () => {
+      expect(computeAudioState({ deafened: false, muted: false, speaking: true })).toBe(UserAudioState.SPEAKING);
+    });
+
+    it('should resolve IDLE when unmuted, undeafened and not speaking', () => {
+      expect(computeAudioState({ deafened: false, muted: false, speaking: false })).toBe(UserAudioState.IDLE);
     });
   });
 });

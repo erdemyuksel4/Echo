@@ -16,6 +16,7 @@ import {
   Video,
   Info,
 } from 'lucide-react';
+import { UserAudioState, computeAudioState } from '@echo/shared';
 import { useChatStore } from '../stores/useChatStore';
 import { useAuthStore } from '../stores/useAuthStore';
 import { useVoiceStore } from '../stores/useVoiceStore';
@@ -40,7 +41,7 @@ export const ChannelList: React.FC = () => {
     unreadCounts,
   } = useChatStore();
 
-  const { currentChannelId, channelParticipants, isSpeaking, isMuted, isDeafened } =
+  const { currentChannelId, channelParticipants, audioState } =
     useVoiceStore();
 
   const [copied, setCopied] = useState(false);
@@ -552,9 +553,12 @@ export const ChannelList: React.FC = () => {
                     <div className="pl-4 pr-1 py-1 space-y-1">
                       {participants.map((p) => {
                         const isLocal = p.userId === identity?.userId;
-                        const speaking = isLocal ? isSpeaking : p.speaking;
-                        const muted = isLocal ? isMuted : p.muted;
-                        const deafened = isLocal ? isDeafened : p.deafened;
+                        const pAudioState = isLocal
+                          ? audioState
+                          : computeAudioState({ muted: p.muted, deafened: p.deafened, speaking: p.speaking });
+                        const speaking = pAudioState === UserAudioState.SPEAKING;
+                        const muted = pAudioState === UserAudioState.MUTED;
+                        const deafened = pAudioState === UserAudioState.DEAFENED;
 
                         return (
                           <div

@@ -11,6 +11,7 @@ import {
   Video,
   VideoOff,
 } from 'lucide-react';
+import { UserAudioState } from '@echo/shared';
 import { useChatStore } from '../stores/useChatStore';
 import { useVoiceStore } from '../stores/useVoiceStore';
 import { useScreenShareStore } from '../stores/useScreenShareStore';
@@ -24,8 +25,7 @@ export const VoicePanel: React.FC = () => {
     currentGroupName,
     currentChannelId,
     currentChannelName,
-    isMuted,
-    isDeafened,
+    audioState,
     isSpeaking,
     isCameraActive,
     pingMs,
@@ -203,42 +203,52 @@ export const VoicePanel: React.FC = () => {
         {/* Audio control buttons row */}
         <div className="flex items-center justify-around rounded-lg bg-slate-900/90 py-1 px-2 border border-slate-800/60">
           {/* Mute button */}
-          <button
-            onClick={() => webrtcService.toggleMute()}
-            className={`flex items-center gap-1.5 rounded px-2.5 py-1 text-xs font-medium transition ${
-              isMuted || isDeafened
-                ? 'bg-rose-500/20 text-rose-400 hover:bg-rose-500/30'
-                : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-            }`}
-            title={isMuted ? 'Mikrofonu Aç' : 'Mikrofonu Kapat'}
-          >
-            {isMuted || isDeafened ? (
-              <MicOff className="h-3.5 w-3.5" />
-            ) : (
-              <Mic className="h-3.5 w-3.5" />
-            )}
-            <span>{isMuted || isDeafened ? 'Susturuldu' : 'Sustur'}</span>
-          </button>
+          {(() => {
+            const isMuted = audioState === UserAudioState.MUTED || audioState === UserAudioState.DEAFENED;
+            return (
+              <button
+                onClick={() => webrtcService.toggleMute()}
+                className={`flex items-center gap-1.5 rounded px-2.5 py-1 text-xs font-medium transition ${
+                  isMuted
+                    ? 'bg-rose-500/20 text-rose-400 hover:bg-rose-500/30'
+                    : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                }`}
+                title={isMuted ? 'Mikrofonu Aç' : 'Mikrofonu Kapat'}
+              >
+                {isMuted ? (
+                  <MicOff className="h-3.5 w-3.5" />
+                ) : (
+                  <Mic className="h-3.5 w-3.5" />
+                )}
+                <span>{isMuted ? 'Susturuldu' : 'Sustur'}</span>
+              </button>
+            );
+          })()}
 
           <div className="h-4 w-px bg-slate-800" />
 
           {/* Deafen button */}
-          <button
-            onClick={() => webrtcService.toggleDeafen()}
-            className={`flex items-center gap-1.5 rounded px-2.5 py-1 text-xs font-medium transition ${
-              isDeafened
-                ? 'bg-rose-500/20 text-rose-400 hover:bg-rose-500/30'
-                : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-            }`}
-            title={isDeafened ? 'Sağırlaştırmayı Kaldır' : 'Sağırlaştır'}
-          >
-            {isDeafened ? (
-              <VolumeX className="h-3.5 w-3.5" />
-            ) : (
-              <Headphones className="h-3.5 w-3.5" />
-            )}
-            <span>{isDeafened ? 'Sağır' : 'Kulaklık'}</span>
-          </button>
+          {(() => {
+            const isDeafened = audioState === UserAudioState.DEAFENED;
+            return (
+              <button
+                onClick={() => webrtcService.toggleDeafen()}
+                className={`flex items-center gap-1.5 rounded px-2.5 py-1 text-xs font-medium transition ${
+                  isDeafened
+                    ? 'bg-rose-500/20 text-rose-400 hover:bg-rose-500/30'
+                    : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                }`}
+                title={isDeafened ? 'Sağırlaştırmayı Kaldır' : 'Sağırlaştır'}
+              >
+                {isDeafened ? (
+                  <VolumeX className="h-3.5 w-3.5" />
+                ) : (
+                  <Headphones className="h-3.5 w-3.5" />
+                )}
+                <span>{isDeafened ? 'Sağır' : 'Kulaklık'}</span>
+              </button>
+            );
+          })()}
         </div>
       </div>
 

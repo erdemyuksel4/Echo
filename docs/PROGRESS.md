@@ -470,4 +470,19 @@ Bu dosya her faz ve görev sonunda güncellenir.
 - [x] **Otomatik Dağıtım (v0.1.14):**
   - Typecheck, ESLint ve tüm testler (74/74) başarıyla geçti.
 
+## Ses Durum Makinesi (UserAudioState Enum) & İkon / Durum Çakışması Önleme
+
+- [x] **UserAudioState Enum Tanımlandı:**
+  - `@echo/shared` içine `UserAudioState` (`IDLE`, `SPEAKING`, `MUTED`, `DEAFENED`) ve `computeAudioState()` yardımcı fonksiyonu eklendi.
+  - Birbirinden bağımsız kontrolsüz boolean bayrakları yerine, tek bir durum makinesi (state machine) ile durumların birbirini ezmesi ve çakışması önlendi.
+- [x] **Susturmayı Açınca İkonun Kalması Hatası Giderildi:**
+  - `useVoiceStore.ts` içinde `setAudioState`, `setMuted`, `setDeafened` ve `setSpeaking` fonksiyonları durum makinesiyle atomik hale getirildi.
+  - Kullanıcı susturmayı açtığında (`unmute`), durum doğrudan `UserAudioState.IDLE`'a çekilerek hem `isMuted` hem `isDeafened` anında temizlendi ve yerel katılımcı listesi (`channelParticipants`) aynı işlemde güncellendi; böylece hem ses panelinde hem de kanal listesinde susturuldu ikonunun asılı kalması engellendi.
+- [x] **Aynı Anda Çakışmalar Kesin Olarak Engellendi:**
+  - Susturulmuş (`MUTED`) veya sağırlaştırılmış (`DEAFENED`) bir kullanıcının VAD veya PTT ile `SPEAKING` durumuna geçmesi engellendi (`setSpeaking` koruması).
+  - Sağırlaştırılan kullanıcının kulaklığı açıldığında (`undeafen`), `isMuted: undefined` kalması sorunu çözülerek doğrudan `IDLE` durumuna geçiş sağlandı.
+  - `VoicePanel`, `ChannelList`, `VoiceStageView` ve `MemberList` bileşenleri `computeAudioState` üzerinden tutarlı ikon gösterimi yapacak şekilde güncellendi.
+- [x] **Birim Testleri:**
+  - `packages/shared/src/__tests__/voice.test.ts` içine durum önceliklendirme ve çakışma önleme testleri eklendi (54/54 test geçti).
+
 

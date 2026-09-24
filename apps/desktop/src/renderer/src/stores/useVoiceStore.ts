@@ -1,5 +1,10 @@
 import { create } from 'zustand';
-import type { VoiceParticipant, PeerDiagnosticsStats } from '@echo/shared';
+import {
+  type VoiceParticipant,
+  type PeerDiagnosticsStats,
+  UserAudioState,
+  VoiceConnectionState,
+} from '@echo/shared';
 
 export type VoiceInputMode = 'vad' | 'ptt';
 
@@ -8,7 +13,8 @@ export interface VoiceState {
   currentGroupName: string | null;
   currentChannelId: string | null;
   currentChannelName: string | null;
-  connectionStatus: 'disconnected' | 'connecting' | 'connected';
+  connectionStatus: 'disconnected' | 'connecting' | 'connected' | VoiceConnectionState;
+  audioState: UserAudioState;
   isMuted: boolean;
   isDeafened: boolean;
   isSpeaking: boolean;
@@ -42,9 +48,10 @@ export interface VoiceState {
   ) => void;
   setConnected: (channelId: string) => void;
   setDisconnected: () => void;
-  setMuted: (muted: boolean) => void;
-  setDeafened: (deafened: boolean) => void;
-  setSpeaking: (speaking: boolean) => void;
+  setAudioState: (state: UserAudioState, myUserId?: string) => void;
+  setMuted: (muted: boolean, myUserId?: string) => void;
+  setDeafened: (deafened: boolean, myUserId?: string) => void;
+  setSpeaking: (speaking: boolean, myUserId?: string) => void;
   setCameraActive: (active: boolean) => void;
   setPeerCameraStream: (peerId: string, stream: MediaStream) => void;
   removePeerCameraStream: (peerId: string) => void;
@@ -104,12 +111,13 @@ const getInitialPttReleaseDelay = (): number => {
   }
 };
 
-export const useVoiceStore = create<VoiceState>((set) => ({
+export const useVoiceStore = create<VoiceState>((set, get) => ({
   currentGroupId: null,
   currentGroupName: null,
   currentChannelId: null,
   currentChannelName: null,
   connectionStatus: 'disconnected',
+  audioState: UserAudioState.IDLE,
   isMuted: false,
   isDeafened: false,
   isSpeaking: false,
@@ -154,6 +162,9 @@ export const useVoiceStore = create<VoiceState>((set) => ({
       currentChannelId: null,
       currentChannelName: null,
       connectionStatus: 'disconnected',
+      audioState: UserAudioState.IDLE,
+      isMuted: false,
+      isDeafened: false,
       isSpeaking: false,
       isCameraActive: false,
       cameraStreams: {},
@@ -163,9 +174,80 @@ export const useVoiceStore = create<VoiceState>((set) => ({
       isMicUnavailable: false,
     }),
 
-  setMuted: (isMuted) => set({ isMuted }),
-  setDeafened: (isDeafened) => set({ isDeafened, isMuted: isDeafened ? true : undefined }),
-  setSpeaking: (isSpeaking) => set({ isSpeaking }),
+  setAudioState: (nextAudioState, myUserId) =>
+    set((state) => {
+      let isMuted = false;
+      let isDeafened = false;
+      let isSpeaking = false;
+
+      switch (nextAudioState) {
+        case UserAudioState.DEAFENED:
+          isDeafened = true;
+          isMuted = true;
+          isSpeaking = false;
+          break;
+        case UserAudioState.MUTED:
+          isDeafened = false;
+          isMuted = true;
+          isSpeaking = false;
+          break;
+        case UserAudioState.SPEAKING:
+          isDeafened = false;
+          isMuted = false;
+          isSpeaking = true;
+          break;
+        case UserAudioState.IDLE:
+        default:
+          isDeafened = false;
+          isMuted = false;
+          isSpeaking = false;
+          break;
+      }
+
+      let updatedParticipants = state.channelParticipants;
+      if (state.currentChannelId && myUserId) {
+        const list = state.channelParticipants[state.currentChannelId];
+        if (list) {
+          updatedParticipants = {
+            ...state.channelParticipants,
+            [state.currentChannelId]: list.map((p) =>
+              p.userId === myUserId
+                ? { ...p, muted: isMuted, deafened: isDeafened, speaking: isSpeaking }
+                : p,
+            ),
+          };
+        }
+      }
+
+      return {
+        audioState: nextAudioState,
+        isMuted,
+        isDeafened,
+        isSpeaking,
+        channelParticipants: updatedParticipants,
+      };
+    }),
+
+  setMuted: (isMuted, myUserId) => {
+    const nextState = isMuted ? UserAudioState.MUTED : UserAudioState.IDLE;
+    get().setAudioState(nextState, myUserId);
+  },
+
+  setDeafened: (isDeafened, myUserId) => {
+    const nextState = isDeafened ? UserAudioState.DEAFENED : UserAudioState.IDLE;
+    get().setAudioState(nextState, myUserId);
+  },
+
+  setSpeaking: (isSpeaking, myUserId) => {
+    const current = get().audioState;
+    // Conflict prevention: cannot transition to speaking if muted or deafened
+    if (isSpeaking && (current === UserAudioState.MUTED || current === UserAudioState.DEAFENED || get().isMuted || get().isDeafened)) {
+      return;
+    }
+    const nextState = isSpeaking ? UserAudioState.SPEAKING : UserAudioState.IDLE;
+    get().setAudioState(nextState, myUserId);
+  },
+
   setCameraActive: (isCameraActive) => set({ isCameraActive }),
   setPeerCameraStream: (peerId, stream) =>
     set((state) => ({
@@ -253,17 +335,19 @@ export const useVoiceStore = create<VoiceState>((set) => ({
       return {
         channelParticipants: {
           ...state.channelParticipants,
-          [channelId]: list.map((p) =>
-            p.userId === userId
-              ? {
-                  ...p,
-                  muted: update.muted,
-                  deafened: update.deafened,
-                  speaking: update.speaking,
-                  camera: update.camera !== undefined ? update.camera : p.camera,
-                }
-              : p,
-          ),
+          [channelId]: list.map((p) => {
+            if (p.userId !== userId) return p;
+            const deafened = Boolean(update.deafened);
+            const muted = deafened || Boolean(update.muted);
+            const speaking = !muted && !deafened && Boolean(update.speaking);
+            return {
+              ...p,
+              muted,
+              deafened,
+              speaking,
+              camera: update.camera !== undefined ? update.camera : p.camera,
+            };
+          }),
         },
       };
     }),

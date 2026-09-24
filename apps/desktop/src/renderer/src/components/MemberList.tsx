@@ -1,5 +1,6 @@
 import React from 'react';
 import { Crown, Shield, MessageSquare } from 'lucide-react';
+import { UserAudioState, computeAudioState } from '@echo/shared';
 import { useChatStore } from '../stores/useChatStore';
 import { useAuthStore } from '../stores/useAuthStore';
 import { useVoiceStore } from '../stores/useVoiceStore';
@@ -9,7 +10,7 @@ import { wsService } from '../services/websocket';
 export const MemberList: React.FC = () => {
   const { members, activeGroupId } = useChatStore();
   const { identity } = useAuthStore();
-  const { channelParticipants, isSpeaking } = useVoiceStore();
+  const { channelParticipants, audioState } = useVoiceStore();
 
   if (!activeGroupId) return null;
 
@@ -20,9 +21,13 @@ export const MemberList: React.FC = () => {
     const avatarColor = member.pubkey ? '#' + member.pubkey.substring(0, 6) : '#6366f1';
     const isLocal = member.userId === identity?.userId;
     const isSpeakingMember = isLocal
-      ? isSpeaking
+      ? audioState === UserAudioState.SPEAKING
       : Object.values(channelParticipants).some((list) =>
-          list.some((p) => p.userId === member.userId && p.speaking),
+          list.some(
+            (p) =>
+              p.userId === member.userId &&
+              computeAudioState(p) === UserAudioState.SPEAKING,
+          ),
         );
 
     return (
