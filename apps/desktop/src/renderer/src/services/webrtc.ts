@@ -101,6 +101,14 @@ class WebRTCVoiceService {
         noiseSuppression: true,
         autoGainControl: true,
       };
+      // Enhanced Chromium DSP audio processing: Highpass filter (cuts low AC/fan rumbles) and typing suppression
+      Object.assign(audioConstraints, {
+        googEchoCancellation: true,
+        googAutoGainControl: true,
+        googNoiseSuppression: true,
+        googHighpassFilter: true,
+        googTypingNoiseDetection: true,
+      });
       if (this.selectedInputDeviceId && this.selectedInputDeviceId !== 'default') {
         audioConstraints.deviceId = { exact: this.selectedInputDeviceId };
       }

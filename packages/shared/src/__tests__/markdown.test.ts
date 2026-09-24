@@ -70,4 +70,14 @@ describe('Markdown Sanitizer and Parser', () => {
     expect(mentions[0]).toEqual({ type: 'mention', target: 'erdem' });
     expect(mentions[1]).toEqual({ type: 'mention', target: 'everyone' });
   });
+
+  it('parses Turkish characters and @herkes mentions properly', () => {
+    const raw = 'Selam @şükrü, @çağlar ve @herkes hoşgeldiniz!';
+    const tokens = parseMarkdownTokens(raw);
+    const mentions = tokens.filter((t) => t.type === 'mention');
+    expect(mentions.length).toBe(3);
+    expect(mentions[0]).toEqual({ type: 'mention', target: 'şükrü' });
+    expect(mentions[1]).toEqual({ type: 'mention', target: 'çağlar' });
+    expect(mentions[2]).toEqual({ type: 'mention', target: 'herkes' });
+  });
 });

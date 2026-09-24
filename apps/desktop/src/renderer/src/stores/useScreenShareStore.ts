@@ -16,6 +16,7 @@ interface ScreenShareStoreState {
   activeShares: ScreenShareState[];
   viewingShare: ViewingShareState | null;
   viewerCount: number;
+  isModalViewerOpen: boolean;
 
   setIsSharing: (sharing: boolean, stream?: MediaStream | null) => void;
   setActiveShares: (shares: ScreenShareState[]) => void;
@@ -23,6 +24,8 @@ interface ScreenShareStoreState {
   removeShare: (userId: string) => void;
   setViewingShare: (viewing: ViewingShareState | null) => void;
   setViewerCount: (count: number) => void;
+  openModalViewer: () => void;
+  closeModalViewer: () => void;
 
   startSharing: (
     channelId: string,
@@ -42,9 +45,12 @@ export const useScreenShareStore = create<ScreenShareStoreState>((set, get) => (
   activeShares: [],
   viewingShare: null,
   viewerCount: 0,
+  isModalViewerOpen: false,
 
   setIsSharing: (isSharing, localStream = null) => set({ isSharing, localStream }),
   setActiveShares: (activeShares) => set({ activeShares }),
+  openModalViewer: () => set({ isModalViewerOpen: true }),
+  closeModalViewer: () => set({ isModalViewerOpen: false }),
 
   addOrUpdateShare: (share) =>
     set((state) => {
@@ -118,6 +124,6 @@ export const useScreenShareStore = create<ScreenShareStoreState>((set, get) => (
     if (current) {
       screenShareTransport.stopWatching(current.userId);
     }
-    set({ viewingShare: null });
+    set({ viewingShare: null, isModalViewerOpen: false });
   },
 }));

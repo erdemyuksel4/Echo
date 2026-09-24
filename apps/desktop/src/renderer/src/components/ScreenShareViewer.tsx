@@ -3,7 +3,7 @@ import { Maximize2, Minimize2, Volume2, VolumeX, X, Radio, Loader2 } from 'lucid
 import { useScreenShareStore } from '../stores/useScreenShareStore';
 
 export const ScreenShareViewer: React.FC = () => {
-  const { viewingShare, stopWatching } = useScreenShareStore();
+  const { viewingShare, isModalViewerOpen, closeModalViewer } = useScreenShareStore();
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
 
@@ -66,7 +66,7 @@ export const ScreenShareViewer: React.FC = () => {
     }
   };
 
-  if (!viewingShare) return null;
+  if (!viewingShare || !isModalViewerOpen) return null;
 
   return (
     <div
@@ -149,9 +149,9 @@ export const ScreenShareViewer: React.FC = () => {
 
             {/* Close / Leave Stream Button */}
             <button
-              onClick={stopWatching}
-              className="rounded-xl bg-rose-600/80 backdrop-blur p-2 text-white hover:bg-rose-500 border border-rose-500/40 shadow transition"
-              title="Yayından Ayrıl"
+              onClick={closeModalViewer}
+              className="rounded-xl bg-slate-800/80 backdrop-blur p-2 text-slate-300 hover:text-white border border-slate-700/60 shadow transition"
+              title="Pencereyi Kapat"
             >
               <X className="h-4 w-4" />
             </button>

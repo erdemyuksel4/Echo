@@ -57,9 +57,9 @@ export function parseMarkdownTokens(rawText: string): MarkdownToken[] {
 
   // First extract codeblocks (triple backticks)
   const codeBlockRegex = /^```([a-zA-Z0-9_+-]*)\n?([\s\S]*?)```/;
-  // Inline tokens regex
+  // Inline tokens regex (with unicode \p{L} support for mentions)
   const inlineRegex =
-    /(`([^`]+)`)|(\*\*([^*]+)\*\*)|(\*([^*]+)\*)|(__([^_]+)__)|(_([^_]+)_)|(~~([^~]+)~~)|(\|\|([^|]+)\|\|)|(\[([^\]]+)\]\((https?:\/\/[^\s)]+)\))|((https?:\/\/[^\s]+))|(@([a-zA-Z0-9_-]+))/;
+    /(`([^`]+)`)|(\*\*([^*]+)\*\*)|(\*([^*]+)\*)|(__([^_]+)__)|(_([^_]+)_)|(~~([^~]+)~~)|(\|\|([^|]+)\|\|)|(\[([^\]]+)\]\((https?:\/\/[^\s)]+)\))|((https?:\/\/[^\s]+))|(@([\p{L}\p{N}_-]+))/u;
 
   while (remaining.length > 0) {
     // Check codeblock at current start

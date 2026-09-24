@@ -277,15 +277,18 @@ export const ChatMessageItem: React.FC<Props> = ({
           );
         }
         case 'mention': {
-          const isMe = identity?.displayName && token.target === identity.displayName;
-          const isEveryone = token.target === 'everyone';
+          const lowerTarget = token.target.toLowerCase();
+          const isEveryone = lowerTarget === 'everyone' || lowerTarget === 'herkes' || lowerTarget === 'here';
+          const isMe = identity?.displayName && (token.target === identity.displayName || lowerTarget === identity.displayName.toLowerCase());
           return (
             <span
               key={idx}
-              className={`rounded px-1.5 py-0.5 font-semibold text-xs transition ${
-                isMe || isEveryone
-                  ? 'bg-indigo-600/30 text-indigo-300 border border-indigo-500/40'
-                  : 'bg-slate-800 text-indigo-400'
+              className={`inline-flex items-center rounded px-1.5 py-0.5 font-semibold text-xs transition cursor-pointer ${
+                isEveryone
+                  ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30 hover:bg-amber-500/30'
+                  : isMe
+                    ? 'bg-indigo-600/30 text-indigo-200 border border-indigo-500/40 hover:bg-indigo-600/40'
+                    : 'bg-indigo-950/40 text-indigo-300 hover:bg-indigo-900/50 hover:text-white'
               }`}
             >
               @{token.target}
@@ -346,8 +349,21 @@ export const ChatMessageItem: React.FC<Props> = ({
     );
   }
 
+  const isMentioned = Boolean(
+    identity?.displayName &&
+      (message.content.includes(`@${identity.displayName}`) ||
+        message.content.toLowerCase().includes('@everyone') ||
+        message.content.toLowerCase().includes('@herkes'))
+  );
+
   return (
-    <div className="group relative flex items-start gap-3 -mx-4 px-4 py-1.5 rounded transition-colors hover:bg-slate-800/40">
+    <div
+      className={`group relative flex items-start gap-3 -mx-4 px-4 py-1.5 rounded transition-colors ${
+        isMentioned
+          ? 'bg-indigo-950/25 border-l-2 border-indigo-500 hover:bg-indigo-950/40'
+          : 'hover:bg-slate-800/40'
+      }`}
+    >
       {/* Action Toolbar on Hover */}
       <div className="absolute right-4 -top-3 z-20 hidden group-hover:flex items-center rounded-lg border border-slate-700/60 bg-slate-900 shadow-xl px-1 py-0.5 gap-0.5 text-slate-400">
         {/* Quick Reaction Button */}

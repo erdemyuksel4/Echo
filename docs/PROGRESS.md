@@ -497,3 +497,22 @@ Bu dosya her faz ve görev sonunda güncellenir.
   - `webrtc.ts` içine `syncTracks` metodu eklendi. Teklif oluştururken (`initiateOffer`), teklif karşılarken (`handleOffer`) ve yeni eş oluşturulurken (`getOrCreatePeerConnection`) ses ile birlikte kamera parçalarının da (`localCameraStream`) eş bağlantısına eksiksiz eklenmesi sağlandı.
 - [x] **Otomatik Dağıtım (v0.1.15):**
   - Typecheck, ESLint ve tüm testler (78/78) başarıyla geçti.
+
+## Kullanıcı & Herkes Etiketleme, Sahne İçi Ekran Yayını & Gürültü Engelleme (v0.1.16)
+
+- [x] **Kullanıcı ve @herkes / @everyone Etiketleme (Discord Tarzı Mentions):**
+  - Sohbette `@` yazıldığında kanal/grup üyelerini ve `@herkes` / `@everyone` seçeneğini gösteren açılır menü (mention autocomplete popover) entegre edildi.
+  - Klavye (Yukarı/Aşağı ok, Enter/Tab, Escape) ve fare ile seçim desteği sağlandı.
+  - `packages/shared/src/markdown.ts` içinde Unicode harf desteği (`\p{L}`) eklenerek Türkçe karakterli (ç, ğ, ı, ö, ş, ü vb.) kullanıcı adları sorunsuz ayrıştırıldı.
+  - `ChatMessageItem` içinde `@DisplayName` (indigo rozet) ve `@herkes` (amber rozet) olarak Discord tarzı rozetlendi.
+  - Kullanıcının etiketlendiği mesaj satırlarına sol kenarlık ve renkli arka plan vurgusu eklendi.
+- [x] **Discord Tarzı Sahne İçi Ekran Yayını & Tıkla-İzle (VoiceStageView ScreenShareTile):**
+  - Ekran paylaşımı açıldığında ekranı kaplayan zoraki modal yerine, `VoiceStageView` ortasındaki ızgarada (grid) kamera kutusu gibi yer alan `ScreenShareTile` geliştirildi.
+  - **Tıkla-İzle Akışı:** Diğer kullanıcılar için ilk başta yayıncının profilini, "CANLI YAYIN" rozetini ve "Yayını İzle" butonunu içeren şık bir önizleme kartı gösterildi. Tıklanana kadar bant genişliği harcanması engellendi. Tıklandığında canlı yayın doğrudan o kutunun içinde oynamaya başlar.
+  - Kutuda "İzlemeyi Bırak" ve "Tam Ekran" butonları yer aldı.
+  - Yayıncının kendi ekranı ve "Yayını Durdur" butonu sahnede kamera gibi yer aldı.
+- [x] **Ses Sahnesi Yalnızca Ses Kanalına Tıklanınca Görünür:**
+  - Kullanıcı ses kanalındayken soldan metin kanalına (#genel) tıkladığında ses arka planda devam ederken ana ekranda metin sohbeti (`ChatArea`) kalır; sol menüden ses kanalına tıklandığında kamera ve yayınların olduğu `VoiceStageView` sahnesi görüntülenir.
+- [x] **Gelişmiş WebRTC DSP Gürültü Engelleme (Chromium Highpass & Typing Noise Detection):**
+  - `webrtc.ts` içine `googHighpassFilter` (klima/fan ve dip uğultularını keser) ve `googTypingNoiseDetection` (klavye tıkırtılarını filtreler) parametreleri entegre edildi.
+

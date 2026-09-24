@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Hash, Send, CornerUpLeft, X, Image, Paperclip } from 'lucide-react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { Hash, Send, CornerUpLeft, X, Image, Paperclip, Users } from 'lucide-react';
 import type { Attachment, GiphyItem } from '@echo/shared';
 import { useChatStore } from '../stores/useChatStore';
 import { useAuthStore } from '../stores/useAuthStore';
@@ -29,8 +29,12 @@ export const ChatArea: React.FC = () => {
   const [showGiphyPicker, setShowGiphyPicker] = useState(false);
   const [isDraggingOver, setIsDraggingOver] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [showMentionPopup, setShowMentionPopup] = useState(false);
+  const [mentionQuery, setMentionQuery] = useState('');
+  const [mentionIndex, setMentionIndex] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
   const dragCounterRef = useRef(0);
 
   const activeChannel = channels.find((c) => c.id === activeChannelId);
@@ -163,7 +167,88 @@ export const ChatArea: React.FC = () => {
     }
   };
 
+  const mentionItems = useMemo(() => {
+    if (!showMentionPopup) return [];
+    const query = mentionQuery.toLowerCase();
+    const items: Array<{
+      id: string;
+      displayName: string;
+      subtitle?: string;
+      isEveryone?: boolean;
+    }> = [];
+
+    if (!query || 'herkes'.includes(query) || 'everyone'.includes(query)) {
+      items.push({
+        id: 'everyone',
+        displayName: 'herkes',
+        subtitle: 'Bu kanaldaki herkese bildirim gönderir',
+        isEveryone: true,
+      });
+    }
+
+    const matchedMembers = members.filter((m) =>
+      m.displayName.toLowerCase().includes(query),
+    );
+    for (const m of matchedMembers) {
+      items.push({
+        id: m.userId,
+        displayName: m.displayName,
+        subtitle: m.role === 'owner' ? 'Grup Kurucusu' : m.role === 'admin' ? 'Yönetici' : 'Üye',
+      });
+    }
+
+    return items;
+  }, [showMentionPopup, mentionQuery, members]);
+
+  const insertMention = (item: { displayName: string; isEveryone?: boolean }) => {
+    if (!inputRef.current) return;
+    const input = inputRef.current;
+    const cursorPos = input.selectionStart ?? inputContent.length;
+    const textBefore = inputContent.slice(0, cursorPos);
+    const textAfter = inputContent.slice(cursorPos);
+
+    const atMatch = textBefore.match(/(@([\p{L}\p{N}_-]*))$/u);
+    if (atMatch) {
+      const matchIndex = atMatch.index ?? 0;
+      const mentionText = item.isEveryone ? '@herkes ' : `@${item.displayName} `;
+      const newContent = textBefore.slice(0, matchIndex) + mentionText + textAfter;
+      setInputContent(newContent);
+      setShowMentionPopup(false);
+      const newCursorPos = matchIndex + mentionText.length;
+      setTimeout(() => {
+        input.focus();
+        input.setSelectionRange(newCursorPos, newCursorPos);
+      }, 0);
+    }
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (showMentionPopup && mentionItems.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setMentionIndex((prev) => (prev + 1) % mentionItems.length);
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setMentionIndex((prev) => (prev - 1 + mentionItems.length) % mentionItems.length);
+        return;
+      }
+      if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault();
+        const selected = mentionItems[mentionIndex];
+        if (selected) {
+          insertMention(selected);
+        }
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setShowMentionPopup(false);
+        return;
+      }
+    }
+
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSendMessage();
@@ -171,9 +256,21 @@ export const ChatArea: React.FC = () => {
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setInputContent(e.target.value);
+    const val = e.target.value;
+    setInputContent(val);
     if (activeChannelId) {
       wsService.sendTyping(activeChannelId);
+    }
+
+    const cursorPos = e.target.selectionStart ?? val.length;
+    const textBefore = val.slice(0, cursorPos);
+    const atMatch = textBefore.match(/(@([\p{L}\p{N}_-]*))$/u);
+    if (atMatch) {
+      setShowMentionPopup(true);
+      setMentionQuery(atMatch[2] ?? '');
+      setMentionIndex(0);
+    } else {
+      setShowMentionPopup(false);
     }
   };
 
@@ -321,6 +418,59 @@ export const ChatArea: React.FC = () => {
 
       {/* Input Form */}
       <div className="p-4 pt-1 relative">
+        {/* Mention Autocomplete Popover */}
+        {showMentionPopup && mentionItems.length > 0 && (
+          <div className="absolute bottom-full left-4 right-4 mb-2 z-50 rounded-xl border border-slate-800 bg-slate-950/95 backdrop-blur-md shadow-2xl p-1.5 max-h-56 overflow-y-auto">
+            <div className="flex items-center justify-between px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400 border-b border-slate-800/80 mb-1">
+              <span>Etiketlenecek Kişi veya Grup</span>
+              <span className="text-[9px] font-mono text-slate-500">Tab / Enter ile seç</span>
+            </div>
+            <div className="space-y-0.5">
+              {mentionItems.map((item, idx) => {
+                const isSelected = idx === mentionIndex;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => insertMention(item)}
+                    onMouseEnter={() => setMentionIndex(idx)}
+                    className={`flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left text-xs transition ${
+                      isSelected
+                        ? 'bg-indigo-600/30 text-white font-medium border border-indigo-500/40'
+                        : 'text-slate-300 hover:bg-slate-900 border border-transparent'
+                    }`}
+                  >
+                    {item.isEveryone ? (
+                      <div className="flex h-7 w-7 items-center justify-center rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30 shrink-0">
+                        <Users className="h-4 w-4" />
+                      </div>
+                    ) : (
+                      <div className="flex h-7 w-7 items-center justify-center rounded-full bg-indigo-600 text-white font-bold text-xs shrink-0 shadow">
+                        {item.displayName.charAt(0).toUpperCase()}
+                      </div>
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-semibold truncate">
+                          {item.isEveryone ? '@herkes' : `@${item.displayName}`}
+                        </span>
+                        {item.isEveryone && (
+                          <span className="rounded bg-amber-500/20 px-1 py-0.2 text-[9px] font-bold text-amber-300 border border-amber-500/30">
+                            Herkes
+                          </span>
+                        )}
+                      </div>
+                      {item.subtitle && (
+                        <p className="text-[10px] text-slate-400 truncate">{item.subtitle}</p>
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {/* GIF Picker */}
         {showGiphyPicker && (
           <GiphyPicker onSelect={handleGifSelect} onClose={() => setShowGiphyPicker(false)} />
@@ -446,6 +596,7 @@ export const ChatArea: React.FC = () => {
           {/* Text Input */}
           <div className="flex-1 relative">
             <input
+              ref={inputRef}
               type="text"
               value={inputContent}
               onChange={handleInputChange}

@@ -13,10 +13,16 @@ import {
   Users,
   Radio,
   Activity,
+  Monitor,
+  MonitorOff,
+  Eye,
+  EyeOff,
+  Loader2,
 } from 'lucide-react';
 import {
   type Channel,
   type VoiceParticipant,
+  type ScreenShareState,
   UserAudioState,
   computeAudioState,
 } from '@echo/shared';
@@ -155,6 +161,201 @@ const ParticipantTile: React.FC<ParticipantTileProps> = ({
   );
 };
 
+interface ScreenShareTileProps {
+  share: ScreenShareState;
+  isLocal: boolean;
+  channelId: string;
+}
+
+const ScreenShareTile: React.FC<ScreenShareTileProps> = ({ share, isLocal, channelId }) => {
+  const {
+    localStream,
+    viewingShare,
+    watchStream,
+    stopWatching,
+    stopSharing,
+    openModalViewer,
+  } = useScreenShareStore();
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  const isCurrentlyViewing = isLocal || viewingShare?.userId === share.userId;
+  const stream = isLocal ? localStream : viewingShare?.stream;
+  const isLoading = !isLocal && viewingShare?.userId === share.userId && viewingShare.isLoading;
+
+  const attachVideo = (el: HTMLVideoElement | null) => {
+    videoRef.current = el;
+    if (el && stream) {
+      if (el.srcObject !== stream) {
+        el.srcObject = stream;
+      }
+      el.muted = isLocal;
+      void el.play().catch((e) => console.warn('Tile video play error:', e));
+    }
+  };
+
+  useEffect(() => {
+    if (videoRef.current && stream) {
+      if (videoRef.current.srcObject !== stream) {
+        videoRef.current.srcObject = stream;
+      }
+      videoRef.current.muted = isLocal;
+      void videoRef.current.play().catch((e) => console.warn('Tile video play error:', e));
+    }
+  }, [stream, isLocal]);
+
+  const toggleTileFullscreen = () => {
+    if (!containerRef.current) return;
+    if (!document.fullscreenElement) {
+      void containerRef.current.requestFullscreen();
+      setIsFullscreen(true);
+    } else {
+      void document.exitFullscreen();
+      setIsFullscreen(false);
+    }
+  };
+
+  useEffect(() => {
+    const handleFs = () => {
+      setIsFullscreen(document.fullscreenElement === containerRef.current);
+    };
+    document.addEventListener('fullscreenchange', handleFs);
+    return () => document.removeEventListener('fullscreenchange', handleFs);
+  }, []);
+
+  return (
+    <div
+      ref={containerRef}
+      className={`group relative flex flex-col items-center justify-center rounded-2xl bg-slate-950 border border-slate-800/90 overflow-hidden aspect-video shadow-xl transition-all duration-200 hover:border-slate-700 ${
+        isFullscreen ? 'w-full h-full rounded-none' : ''
+      }`}
+    >
+      {isCurrentlyViewing ? (
+        <>
+          {isLoading ? (
+            <div className="flex flex-col items-center justify-center gap-3 text-slate-400">
+              <Loader2 className="h-8 w-8 animate-spin text-indigo-500" />
+              <span className="text-xs font-semibold text-slate-300">
+                {share.displayName} kullanıcısının yayınına bağlanılıyor...
+              </span>
+            </div>
+          ) : stream ? (
+            <video
+              ref={attachVideo}
+              autoPlay
+              playsInline
+              muted={isLocal}
+              className="w-full h-full object-contain bg-black"
+            />
+          ) : (
+            <div className="flex flex-col items-center justify-center gap-2 text-slate-500 text-xs">
+              <Monitor className="h-8 w-8 text-slate-600" />
+              <span>Yayın hazırlanıyor...</span>
+            </div>
+          )}
+
+          {/* Top Bar Hover Overlay */}
+          <div className="absolute top-2.5 inset-x-2.5 flex items-center justify-between z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5 rounded-md bg-rose-600 px-2 py-0.5 text-[11px] font-bold text-white shadow">
+                <Radio className="h-3 w-3 animate-pulse" />
+                <span>CANLI</span>
+              </div>
+              <span className="rounded-md bg-slate-950/80 backdrop-blur px-2 py-0.5 text-[11px] font-medium text-slate-300 border border-slate-800">
+                {isLocal ? 'Senin Ekranın' : `${share.displayName} kullanıcısının ekranı`}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={toggleTileFullscreen}
+                className="rounded-lg bg-slate-950/80 backdrop-blur p-1.5 text-slate-300 hover:text-white hover:bg-slate-800 transition border border-slate-800"
+                title={isFullscreen ? 'Tam Ekrandan Çık' : 'Tam Ekran'}
+              >
+                {isFullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
+              </button>
+              <button
+                type="button"
+                onClick={openModalViewer}
+                className="rounded-lg bg-slate-950/80 backdrop-blur p-1.5 text-slate-300 hover:text-white hover:bg-slate-800 transition border border-slate-800"
+                title="Ayrı Pencerede Büyüt"
+              >
+                <Maximize2 className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </div>
+
+          {/* Bottom Bar Controls Overlay */}
+          <div className="absolute bottom-2.5 inset-x-2.5 flex items-center justify-between rounded-xl bg-slate-950/85 backdrop-blur px-3 py-1.5 border border-slate-800/80 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+            <div className="flex items-center gap-2 min-w-0">
+              <Monitor className="h-3.5 w-3.5 text-indigo-400 shrink-0" />
+              <span className="text-xs font-semibold text-white truncate">
+                {isLocal ? 'Ekran Paylaşımın' : share.displayName}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              {isLocal ? (
+                <button
+                  type="button"
+                  onClick={() => stopSharing(channelId)}
+                  className="flex items-center gap-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white px-2.5 py-1 text-xs font-semibold shadow transition"
+                >
+                  <MonitorOff className="h-3.5 w-3.5" />
+                  <span>Yayını Durdur</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => stopWatching()}
+                  className="flex items-center gap-1.5 rounded-lg bg-slate-800 hover:bg-rose-600 text-slate-200 hover:text-white px-2.5 py-1 text-xs font-semibold border border-slate-700/60 transition"
+                >
+                  <EyeOff className="h-3.5 w-3.5" />
+                  <span>İzlemeyi Bırak</span>
+                </button>
+              )}
+            </div>
+          </div>
+        </>
+      ) : (
+        /* Remote preview card: Click to watch */
+        <div className="flex flex-col items-center justify-center p-6 text-center select-none w-full h-full bg-gradient-to-b from-slate-900/90 to-slate-950">
+          <div className="absolute top-3 left-3 flex items-center gap-1.5 rounded-md bg-rose-600 px-2 py-0.5 text-[11px] font-bold text-white shadow-md">
+            <Radio className="h-3 w-3 animate-pulse" />
+            <span>CANLI YAYIN</span>
+          </div>
+
+          <div className="relative mb-3">
+            <div
+              className="flex h-16 w-16 items-center justify-center rounded-full text-xl font-black text-white shadow-xl ring-2 ring-indigo-500/50"
+              style={{ backgroundColor: '#6366f1' }}
+            >
+              {share.displayName.charAt(0).toUpperCase()}
+            </div>
+            <div className="absolute -bottom-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full bg-rose-600 text-white shadow">
+              <Monitor className="h-3.5 w-3.5" />
+            </div>
+          </div>
+
+          <h3 className="text-sm font-bold text-white">{share.displayName}</h3>
+          <p className="text-xs text-slate-400 mt-0.5">ekranını paylaşıyor</p>
+
+          <button
+            type="button"
+            onClick={() => watchStream(share.userId, share.displayName, channelId)}
+            className="mt-4 flex items-center gap-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white px-4 py-2 text-xs font-bold transition shadow-lg shadow-indigo-600/30 cursor-pointer"
+          >
+            <Eye className="h-4 w-4" />
+            <span>Yayını İzle</span>
+          </button>
+        </div>
+      )}
+    </div>
+  );
+};
+
 export const VoiceStageView: React.FC<Props> = ({ channel }) => {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -172,10 +373,28 @@ export const VoiceStageView: React.FC<Props> = ({ channel }) => {
     setDiagnosticsOpen,
   } = useVoiceStore();
 
-  const { isSharing, stopSharing } = useScreenShareStore();
+  const { isSharing, stopSharing, activeShares } = useScreenShareStore();
 
   const isCurrentChannel = currentChannelId === channel.id;
   const participants = channelParticipants[channel.id] ?? [];
+
+  // Active screen shares for this channel
+  const channelShares = activeShares.filter((s) => s.channelId === channel.id);
+  const isLocalSharingHere = isSharing && currentChannelId === channel.id;
+  const hasLocalInShares = channelShares.some((s) => s.userId === identity?.userId);
+  const effectiveShares: ScreenShareState[] = [...channelShares];
+  if (isLocalSharingHere && !hasLocalInShares && identity) {
+    effectiveShares.push({
+      channelId: channel.id,
+      userId: identity.userId,
+      displayName: identity.displayName,
+      isSharing: true,
+      quality: '720p30',
+      mode: 'motion',
+      hasAudio: false,
+      viewersCount: 0,
+    });
+  }
 
   // Toggle fullscreen mode
   const handleToggleFullscreen = () => {
@@ -218,18 +437,18 @@ export const VoiceStageView: React.FC<Props> = ({ channel }) => {
     }
   };
 
-  // Determine grid columns based on participant count
-  const count = Math.max(1, participants.length);
+  // Determine grid columns based on total tile count (participants + screen shares)
+  const totalCount = Math.max(1, participants.length + effectiveShares.length);
   const gridLayoutClass =
-    count === 1
-      ? 'grid-cols-1 max-w-2xl'
-      : count === 2
-        ? 'grid-cols-1 md:grid-cols-2 max-w-4xl'
-        : count <= 4
-          ? 'grid-cols-2 max-w-4xl'
-          : count <= 6
-            ? 'grid-cols-2 lg:grid-cols-3 max-w-5xl'
-            : 'grid-cols-2 md:grid-cols-3 lg:grid-cols-4 max-w-6xl';
+    totalCount === 1
+      ? 'grid-cols-1 max-w-3xl'
+      : totalCount === 2
+        ? 'grid-cols-1 md:grid-cols-2 max-w-5xl'
+        : totalCount <= 4
+          ? 'grid-cols-2 max-w-5xl'
+          : totalCount <= 6
+            ? 'grid-cols-2 lg:grid-cols-3 max-w-6xl'
+            : 'grid-cols-2 md:grid-cols-3 lg:grid-cols-4 max-w-7xl';
 
   return (
     <div
@@ -288,7 +507,7 @@ export const VoiceStageView: React.FC<Props> = ({ channel }) => {
 
       {/* Main Video Stage Area */}
       <div className="flex-1 overflow-y-auto p-4 flex flex-col items-center justify-center">
-        {participants.length === 0 ? (
+        {participants.length === 0 && effectiveShares.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-4 text-center max-w-sm p-8 rounded-3xl bg-slate-950/40 border border-slate-800/60">
             <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shadow-lg shadow-emerald-500/10">
               <Radio className="h-8 w-8 animate-pulse" />
@@ -310,6 +529,17 @@ export const VoiceStageView: React.FC<Props> = ({ channel }) => {
           </div>
         ) : (
           <div className={`grid w-full gap-3.5 my-auto ${gridLayoutClass}`}>
+            {/* Screen share tiles in stage center */}
+            {effectiveShares.map((s) => (
+              <ScreenShareTile
+                key={`share-${s.userId}`}
+                share={s}
+                isLocal={s.userId === identity?.userId}
+                channelId={channel.id}
+              />
+            ))}
+
+            {/* Participant camera/voice tiles */}
             {participants.map((p) => {
               const isLocal = p.userId === identity?.userId;
               const stream = isLocal

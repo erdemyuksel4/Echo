@@ -591,6 +591,7 @@ export const ChannelList: React.FC = () => {
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();
+                                  setActiveChannel(channel.id);
                                   if (!isLocal) {
                                     void watchStream(p.userId, p.displayName, channel.id);
                                   }
