@@ -80,6 +80,7 @@ export const SettingsModal: React.FC<Props> = ({ isOpen, onClose, initialTab = '
 
   const [isTestingMic, setIsTestingMic] = useState(false);
   const [micLevel, setMicLevel] = useState(0);
+  const [loopbackEnabled, setLoopbackEnabled] = useState(true);
 
   const [videoDevices, setVideoDevices] = useState<MediaDeviceInfo[]>([]);
   const [selectedVideoId, setSelectedVideoId] = useState<string>(
@@ -194,7 +195,7 @@ export const SettingsModal: React.FC<Props> = ({ isOpen, onClose, initialTab = '
     if (isTestingMic) {
       const cleanup = webrtcService.testMicrophone((level) => {
         setMicLevel(level);
-      });
+      }, loopbackEnabled);
       return () => {
         cleanup();
       };
@@ -203,6 +204,13 @@ export const SettingsModal: React.FC<Props> = ({ isOpen, onClose, initialTab = '
       return undefined;
     }
   }, [isTestingMic]);
+
+  const handleToggleLoopback = (enabled: boolean) => {
+    setLoopbackEnabled(enabled);
+    if (isTestingMic) {
+      webrtcService.setTestMicLoopback(enabled);
+    }
+  };
 
   useEffect(() => {
     if (isTestingCamera && testVideoRef.current) {
@@ -399,26 +407,31 @@ export const SettingsModal: React.FC<Props> = ({ isOpen, onClose, initialTab = '
                   </select>
 
                   {/* Mic Test Button & Level Meter */}
-                  <div className="pt-1 space-y-2">
+                  <div className="pt-2 space-y-3 border-t border-slate-800/80">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-medium text-slate-300">Mikrofon Seviyesi</span>
+                      <div>
+                        <span className="text-xs font-semibold text-white">Mikrofon Testi &amp; Ses Yansıtma</span>
+                        <p className="text-[11px] text-slate-400">
+                          Sesinizi konuşarak test edin ve gürültü engellemenin etkisini duyun
+                        </p>
+                      </div>
                       <button
                         type="button"
                         onClick={() => setIsTestingMic(!isTestingMic)}
-                        className={`flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-semibold transition ${
+                        className={`flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-xs font-semibold shadow-sm transition ${
                           isTestingMic
-                            ? 'bg-rose-600 text-white hover:bg-rose-500'
-                            : 'bg-indigo-600 text-white hover:bg-indigo-500'
+                            ? 'bg-rose-600 text-white hover:bg-rose-500 shadow-rose-600/20'
+                            : 'bg-indigo-600 text-white hover:bg-indigo-500 shadow-indigo-600/20'
                         }`}
                       >
                         {isTestingMic ? (
                           <>
-                            <Square className="h-3 w-3" />
+                            <Square className="h-3.5 w-3.5 fill-current" />
                             <span>Testi Durdur</span>
                           </>
                         ) : (
                           <>
-                            <Play className="h-3 w-3" />
+                            <Play className="h-3.5 w-3.5 fill-current" />
                             <span>Mikrofonu Test Et</span>
                           </>
                         )}
@@ -426,22 +439,54 @@ export const SettingsModal: React.FC<Props> = ({ isOpen, onClose, initialTab = '
                     </div>
 
                     {/* Visual Live Volume Meter Bar */}
-                    <div className="h-3 w-full bg-slate-800 rounded-full overflow-hidden border border-slate-700/50 p-0.5">
-                      <div
-                        className={`h-full rounded-full transition-all duration-75 ${
-                          micLevel > 0.6
-                            ? 'bg-rose-500'
-                            : micLevel > 0.2
-                              ? 'bg-emerald-400 shadow-sm shadow-emerald-400/50'
-                              : 'bg-slate-600'
-                        }`}
-                        style={{ width: `${Math.min(100, Math.round(micLevel * 100))}%` }}
-                      />
+                    <div className="space-y-1">
+                      <div className="h-3 w-full bg-slate-800 rounded-full overflow-hidden border border-slate-700/50 p-0.5">
+                        <div
+                          className={`h-full rounded-full transition-all duration-75 ${
+                            micLevel > 0.6
+                              ? 'bg-rose-500'
+                              : micLevel > 0.2
+                                ? 'bg-emerald-400 shadow-sm shadow-emerald-400/50'
+                                : 'bg-slate-600'
+                          }`}
+                          style={{ width: `${Math.min(100, Math.round(micLevel * 100))}%` }}
+                        />
+                      </div>
                     </div>
+
+                    {/* Loopback Toggle (Sesimi Bana Dinlet) */}
+                    <div className="flex items-center justify-between rounded-lg bg-slate-900/50 border border-slate-800/80 px-3 py-2">
+                      <div className="flex items-center gap-2.5">
+                        <Headphones className="h-4 w-4 text-indigo-400" />
+                        <div>
+                          <div className="text-xs font-medium text-slate-200">Sesimi Bana Yansıt (Kulaklıkta Dinle)</div>
+                          <div className="text-[10px] text-slate-400">
+                            Mikrofona konuştuğunuzda filtrelenmiş sesiniz anında kulaklığınıza yansıtılır
+                          </div>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleToggleLoopback(!loopbackEnabled)}
+                        className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${
+                          loopbackEnabled ? 'bg-indigo-600' : 'bg-slate-700'
+                        }`}
+                      >
+                        <span
+                          className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                            loopbackEnabled ? 'translate-x-6' : 'translate-x-1'
+                          }`}
+                        />
+                      </button>
+                    </div>
+
                     {isTestingMic && (
-                      <p className="text-[11px] text-emerald-400">
-                        Mikrofona konuşun: Yeşil bar sesinizi algıladıkça sağa doğru yükselecektir.
-                      </p>
+                      <div className="rounded-lg bg-emerald-950/30 border border-emerald-500/30 p-2.5 text-[11px] text-emerald-300 flex items-start gap-2">
+                        <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse mt-1 shrink-0" />
+                        <div>
+                          <strong>Canlı Ses Testi Aktif:</strong> {loopbackEnabled ? 'Mikrofona konuşun; arka plan uğultularının ve klavye seslerinin aşağıdaki filtreler tarafından nasıl kesildiğini kendi kulaklığınızdan dinleyebilirsiniz.' : 'Mikrofon seviyesi yeşil barda gösterilmektedir (ses yansıtma kapalı).'}
+                        </div>
+                      </div>
                     )}
                   </div>
                 </div>

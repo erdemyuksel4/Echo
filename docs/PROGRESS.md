@@ -532,5 +532,11 @@ Bu dosya her faz ve görev sonunda güncellenir.
   - Ayarlar modalındaki canlı mikrofon seviye testi, seçilen aktif gürültü engelleme filtrelerini dikkate alarak çalışır.
 - [x] **Ayarlar -> Ses & Görüntü Arayüzü:**
   - Mikrofon ayarının hemen altına Discord tarzı modern switch'ler ve açıklayıcı etiketlerle yeni bir ses işleme paneli eklendi.
+- [x] **Canlı Ses Yansıtma & Gürültü Engelleme Testi (Loopback):**
+  - "Mikrofonu Test Et" düğmesine basıldığında kullanıcının sesi kulaklığına anında geri yansıtılır (loopback).
+  - Kullanıcı mikrofona konuştuğunda filtrelenmiş kendi sesini duyar; gürültü engelleme, klavye bastırma ve dip uğultusu filtrelerinin etkisini anlık olarak işitebilir.
+  - Test esnasında filtre anahtarları açılıp kapatıldığında kısıtlamalar canlı test akışına anında uygulanır.
+  - İsteğe bağlı olarak "Sesimi Bana Yansıt" anahtarı ile kulaklık geri bildirimi anlık olarak açılıp kapatılabilir.
+
 
 

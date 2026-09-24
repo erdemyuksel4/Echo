@@ -79,6 +79,8 @@ class WebRTCVoiceService {
   private selectedVideoDeviceId: string | null = null;
   private localCameraStream: MediaStream | null = null;
   private outputVolume = 1.0;
+  private testMicStream: MediaStream | null = null;
+  private testMicAudioEl: HTMLAudioElement | null = null;
 
   async init(): Promise<void> {
     await iceServersService.fetchIceServers();
@@ -1153,6 +1155,19 @@ class WebRTCVoiceService {
         }
       }
     }
+
+    // Apply live to test microphone stream if running
+    if (this.testMicStream) {
+      const testTrack = this.testMicStream.getAudioTracks()[0];
+      if (testTrack) {
+        try {
+          await testTrack.applyConstraints(this.getAudioConstraints());
+          console.log('[Echo WebRTC] Applied audio processing constraints to test mic live:', this.audioProcessing);
+        } catch (err) {
+          console.warn('[Echo WebRTC] Failed to apply audio constraints to test mic dynamically:', err);
+        }
+      }
+    }
   }
 
   private async reacquireLocalAudio(): Promise<void> {
@@ -1286,6 +1301,17 @@ class WebRTCVoiceService {
         }
       }
     }
+
+    if (
+      this.testMicAudioEl &&
+      typeof (this.testMicAudioEl as unknown as { setSinkId?: (id: string) => Promise<void> }).setSinkId === 'function'
+    ) {
+      try {
+        await (this.testMicAudioEl as unknown as { setSinkId: (id: string) => Promise<void> }).setSinkId(sinkId);
+      } catch (err) {
+        console.warn('Failed to setSinkId on test mic audio element:', err);
+      }
+    }
   }
 
   setOutputVolume(volume: number): void {
@@ -1293,6 +1319,9 @@ class WebRTCVoiceService {
     this.peerAudioElements.forEach((audio) => {
       audio.volume = this.outputVolume;
     });
+    if (this.testMicAudioEl) {
+      this.testMicAudioEl.volume = this.outputVolume;
+    }
   }
 
   getOutputVolume(): number {
@@ -1307,11 +1336,15 @@ class WebRTCVoiceService {
     return this.selectedOutputDeviceId;
   }
 
-  testMicrophone(onLevel: (rms: number) => void): () => void {
+  testMicrophone(
+    onLevel: (rms: number) => void,
+    enableLoopback: boolean = true,
+  ): () => void {
     let active = true;
     let testAudioContext: AudioContext | null = null;
     let stream: MediaStream | null = null;
     let interval: ReturnType<typeof setInterval> | null = null;
+    let audioEl: HTMLAudioElement | null = null;
 
     void (async () => {
       try {
@@ -1324,6 +1357,31 @@ class WebRTCVoiceService {
           stream.getTracks().forEach((t) => t.stop());
           return;
         }
+
+        this.testMicStream = stream;
+
+        // Loopback: play audio back into user's headphones/speakers with noise cancellation applied
+        audioEl = new Audio();
+        audioEl.setAttribute('data-echo-test-mic', 'true');
+        audioEl.autoplay = true;
+        audioEl.muted = !enableLoopback;
+        audioEl.volume = this.outputVolume;
+        audioEl.style.display = 'none';
+        document.body.appendChild(audioEl);
+        audioEl.srcObject = stream;
+        this.testMicAudioEl = audioEl;
+
+        if (
+          this.selectedOutputDeviceId &&
+          typeof (audioEl as unknown as { setSinkId?: (id: string) => Promise<void> }).setSinkId === 'function'
+        ) {
+          const sinkId = this.selectedOutputDeviceId === 'default' ? '' : this.selectedOutputDeviceId;
+          (audioEl as unknown as { setSinkId: (id: string) => Promise<void> })
+            .setSinkId(sinkId)
+            .catch((err: unknown) => console.warn('[Echo WebRTC] Test mic setSinkId error:', err));
+        }
+
+        void audioEl.play().catch((e) => console.warn('[Echo WebRTC] Test mic audio play prevented:', e));
 
         const AudioCtx =
           window.AudioContext ||
@@ -1352,11 +1410,28 @@ class WebRTCVoiceService {
 
     return () => {
       active = false;
+      this.testMicStream = null;
+      if (this.testMicAudioEl) {
+        try {
+          this.testMicAudioEl.pause();
+          this.testMicAudioEl.srcObject = null;
+          this.testMicAudioEl.remove();
+        } catch {
+          // Ignore
+        }
+        this.testMicAudioEl = null;
+      }
       if (interval) clearInterval(interval);
       if (testAudioContext) void testAudioContext.close();
       if (stream) stream.getTracks().forEach((t) => t.stop());
       onLevel(0);
     };
+  }
+
+  setTestMicLoopback(enable: boolean): void {
+    if (this.testMicAudioEl) {
+      this.testMicAudioEl.muted = !enable;
+    }
   }
 
   getLocalCameraStream(): MediaStream | null {
