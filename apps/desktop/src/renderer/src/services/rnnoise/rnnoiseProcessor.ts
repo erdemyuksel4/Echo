@@ -151,12 +151,16 @@ export async function createRNNoiseProcessor(
         frameChunk[i] = frameChunk[i]! * 32768;
       }
 
-      // Run deep learning inference
-      denoiseState.processFrame(frameChunk);
+      // Run deep learning inference (returns voice activity probability [0.0 - 1.0])
+      const vadProb = denoiseState.processFrame(frameChunk);
+
+      // If voice activity is very low (no speech, only keyboard/fan clicks),
+      // apply soft attenuation to guarantee absolute dead silence
+      const voiceGate = vadProb < 0.08 ? 0 : vadProb < 0.25 ? (vadProb - 0.08) / 0.17 : 1.0;
 
       // Scale back to Web Audio float [-1.0, 1.0]
       for (let i = 0; i < RNNOISE_FRAME_SIZE; i++) {
-        frameChunk[i] = frameChunk[i]! / 32768;
+        frameChunk[i] = (frameChunk[i]! / 32768) * voiceGate;
       }
 
       outputQueue.write(frameChunk);
@@ -172,6 +176,13 @@ export async function createRNNoiseProcessor(
   // Wire up audio graph
   sourceNode.connect(processorNode);
   processorNode.connect(destinationNode);
+
+  // Keep AudioContext clock pumping and protect processorNode from V8 garbage collection
+  const silentGain = audioContext.createGain();
+  silentGain.gain.value = 0;
+  processorNode.connect(silentGain);
+  silentGain.connect(audioContext.destination);
+  (audioContext as unknown as { _keepAliveProcessor?: ScriptProcessorNode })._keepAliveProcessor = processorNode;
 
   const destinationTrack = destinationNode.stream.getAudioTracks()[0];
   if (!destinationTrack) {
@@ -189,6 +200,7 @@ export async function createRNNoiseProcessor(
       processorNode.onaudioprocess = null;
       sourceNode.disconnect();
       processorNode.disconnect();
+      silentGain.disconnect();
       destinationNode.disconnect();
     } catch {
       // Ignore
