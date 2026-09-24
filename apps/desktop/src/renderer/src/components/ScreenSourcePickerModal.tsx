@@ -288,6 +288,37 @@ export const ScreenSourcePickerModal: React.FC<ScreenSourcePickerModalProps> = (
               <Volume2 className="h-4 w-4 text-indigo-400" />
               <span>Sistem sesini de paylaş (Oyun ve müzik sesi)</span>
             </label>
+
+            {hasAudio && activeTab === 'screen' && (
+              <div className="flex items-start gap-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 p-3 text-xs text-amber-300">
+                <AlertTriangle className="h-4 w-4 flex-shrink-0 text-amber-400 mt-0.5" />
+                <div className="space-y-1">
+                  <p className="font-semibold text-amber-200">Sistem Sesi & Yankı Bilgilendirmesi</p>
+                  <p className="text-amber-300/90 leading-relaxed">
+                    Tüm masaüstü paylaşıldığında sistem sesine sesli sohbet sesleri karışabilir; yalnızca oyun/uygulama sesini paylaşmak için <strong>Pencere</strong> sekmesinden oyunu seçmeniz önerilir.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveTab('window');
+                      if (windowSources.length > 0) setSelectedSourceId(windowSources[0]!.id);
+                    }}
+                    className="mt-1 text-[11px] font-bold text-amber-400 hover:text-amber-300 underline underline-offset-2 flex items-center gap-1 cursor-pointer"
+                  >
+                    Pencere sekmesine geç →
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {hasAudio && activeTab === 'window' && (
+              <div className="flex items-center gap-2 rounded-xl bg-indigo-500/10 border border-indigo-500/30 p-2.5 text-xs text-indigo-300">
+                <Volume2 className="h-4 w-4 flex-shrink-0 text-indigo-400" />
+                <span>
+                  Echo akıllı yankı önleyici ve ses ducking sistemi, ses kanalındaki arkadaşlarınız konuştuğunda yayın sesini otomatik dengeleyerek yankıyı önler.
+                </span>
+              </div>
+            )}
           </div>
 
           {errorMsg && (

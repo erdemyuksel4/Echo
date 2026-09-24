@@ -18,6 +18,12 @@ interface ScreenShareStoreState {
   viewerCount: number;
   isModalViewerOpen: boolean;
 
+  // Viewer Audio Controls
+  viewerVolume: number;
+  isViewerMuted: boolean;
+  setViewerVolume: (volume: number) => void;
+  setIsViewerMuted: (isMuted: boolean) => void;
+
   setIsSharing: (sharing: boolean, stream?: MediaStream | null) => void;
   setActiveShares: (shares: ScreenShareState[]) => void;
   addOrUpdateShare: (share: ScreenShareState) => void;
@@ -39,6 +45,23 @@ interface ScreenShareStoreState {
   stopWatching: () => void;
 }
 
+const getInitialViewerVolume = (): number => {
+  try {
+    const val = localStorage.getItem('echo_screen_share_volume');
+    return val !== null ? Math.max(0, Math.min(1, parseFloat(val))) : 1.0;
+  } catch {
+    return 1.0;
+  }
+};
+
+const getInitialViewerMuted = (): boolean => {
+  try {
+    return localStorage.getItem('echo_screen_share_muted') === 'true';
+  } catch {
+    return false;
+  }
+};
+
 export const useScreenShareStore = create<ScreenShareStoreState>((set, get) => ({
   isSharing: false,
   localStream: null,
@@ -46,6 +69,27 @@ export const useScreenShareStore = create<ScreenShareStoreState>((set, get) => (
   viewingShare: null,
   viewerCount: 0,
   isModalViewerOpen: false,
+
+  viewerVolume: getInitialViewerVolume(),
+  isViewerMuted: getInitialViewerMuted(),
+
+  setViewerVolume: (viewerVolume) => {
+    try {
+      localStorage.setItem('echo_screen_share_volume', String(viewerVolume));
+    } catch {
+      // Ignore
+    }
+    set({ viewerVolume });
+  },
+
+  setIsViewerMuted: (isViewerMuted) => {
+    try {
+      localStorage.setItem('echo_screen_share_muted', String(isViewerMuted));
+    } catch {
+      // Ignore
+    }
+    set({ isViewerMuted });
+  },
 
   setIsSharing: (isSharing, localStream = null) => set({ isSharing, localStream }),
   setActiveShares: (activeShares) => set({ activeShares }),

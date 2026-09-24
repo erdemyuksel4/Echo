@@ -538,5 +538,16 @@ Bu dosya her faz ve görev sonunda güncellenir.
   - Test esnasında filtre anahtarları açılıp kapatıldığında kısıtlamalar canlı test akışına anında uygulanır.
   - İsteğe bağlı olarak "Sesimi Bana Yansıt" anahtarı ile kulaklık geri bildirimi anlık olarak açılıp kapatılabilir.
 
+## Ekran Sesi Yankı Önleme Sistemi (Akıllı Ducking & Bağımsız Ses Kontrolleri)
 
-
+- [x] **İzleyici Tarafında Akıllı Yankı Önleme (Viewer-side Self-Voice Ducking):**
+  - Yayını izleyen kullanıcı ses kanalında konuştuğunda (`isSpeaking: true`), izlediği yayının sesine anlık hafif sönümleme/ducking (0.05) uygulandı.
+  - Konuşma bittikten sonra 400ms eko kuyruğu tutma (echo-tail hold) süresi ile Windows Stereo Mix loopback üzerinden gecikmeli gelebilecek kendi sesinin yankılanması tamamen engellendi (`useScreenShareViewerDucking`).
+- [x] **Streamer Tarafında Voice Chat Ducking:**
+  - Streamer ekran sesini paylaştığında Web Audio API `GainNode` üzerinden geçirildi (`ScreenAudioDuckingService`).
+  - Ses kanalındaki arkadaşlardan biri konuştuğunda paylaşılan ekran sesi otomatik olarak ducking edilerek (%15 seviyesine) sesli sohbet sızıntısı ve döngüsel çınlama minimize edildi.
+- [x] **Ekran Paylaşımı Ses Kontrolü (Volume Slider & Mute Butonu):**
+  - Hem `VoiceStageView` (`ScreenShareTile`) hem de `ScreenShareViewer` üzerine izleyiciler için bağımsız ses seviyesi çubuğu (slider), hoparlör susturma butonu ve yankı koruması devredeyken animasyonlu "Yankı Koruması" rozeti eklendi.
+  - Kullanıcı tercihleri `localStorage` üzerinde saklanarak pencereler arası senkronize edildi.
+- [x] **Pencere Paylaşımı Bilgilendirme Rozeti:**
+  - `ScreenSourcePickerModal` üzerinde "Sistem sesini de paylaş" açıldığında tüm masaüstü paylaşımında sesli sohbet seslerinin sistem sesine karışabileceği uyarısı ve tek tıkla "Pencere sekmesine geç" yönlendirmesi eklendi.

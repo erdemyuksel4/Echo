@@ -513,6 +513,42 @@ export const SettingsModal: React.FC<Props> = ({ isOpen, onClose, initialTab = '
                   </div>
 
                   <div className="space-y-3 pt-1">
+                    {/* RNNoise AI Noise Suppression */}
+                    <div className="relative overflow-hidden rounded-xl bg-gradient-to-r from-emerald-950/40 via-slate-900/80 to-slate-900/60 border border-emerald-500/40 p-3.5 shadow-lg shadow-emerald-950/20">
+                      <div className="flex items-center justify-between">
+                        <div className="pr-4">
+                          <div className="flex items-center gap-2">
+                            <div className="text-xs font-bold text-white tracking-wide">
+                              Yapay Zeka Destekli Gürültü Engelleme (RNNoise - Standart / Derin Öğrenme)
+                            </div>
+                            <span className="relative flex h-2 w-2">
+                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                            </span>
+                            <span className="inline-flex items-center rounded-md bg-emerald-500/20 px-2 py-0.5 text-[10px] font-bold text-emerald-400 border border-emerald-500/30">
+                              YAPAY ZEKA
+                            </span>
+                          </div>
+                          <div className="text-[11px] text-slate-300 mt-0.5">
+                            Klavye vuruşlarını, fare tıklamalarını ve arka plandaki tüm sesleri yapay zeka ile sıfırlar.
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleAudioProcessingToggle('rnnoise')}
+                          className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${
+                            audioProcessing.rnnoise ? 'bg-emerald-500 shadow-sm shadow-emerald-500/50' : 'bg-slate-700'
+                          }`}
+                        >
+                          <span
+                            className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                              audioProcessing.rnnoise ? 'translate-x-6' : 'translate-x-1'
+                            }`}
+                          />
+                        </button>
+                      </div>
+                    </div>
+
                     {/* Noise Suppression */}
                     <div className="flex items-center justify-between rounded-lg bg-slate-900/60 border border-slate-800/80 p-3">
                       <div className="pr-4">

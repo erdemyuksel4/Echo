@@ -1,17 +1,31 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Maximize2, Minimize2, Volume2, VolumeX, X, Radio, Loader2 } from 'lucide-react';
 import { useScreenShareStore } from '../stores/useScreenShareStore';
+import { useScreenShareViewerDucking } from '../hooks/useScreenShareViewerDucking';
 
 export const ScreenShareViewer: React.FC = () => {
-  const { viewingShare, isModalViewerOpen, closeModalViewer } = useScreenShareStore();
+  const {
+    viewingShare,
+    isModalViewerOpen,
+    closeModalViewer,
+    viewerVolume,
+    isViewerMuted,
+    setViewerVolume,
+    setIsViewerMuted,
+  } = useScreenShareStore();
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
 
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [volume, setVolume] = useState(1.0);
-  const [isMuted, setIsMuted] = useState(false);
   const [showControls, setShowControls] = useState(true);
   const controlsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const { isDucked } = useScreenShareViewerDucking({
+    videoRef,
+    userVolume: viewerVolume,
+    isMuted: isViewerMuted,
+    isLocal: false,
+  });
 
   const attachVideo = (el: HTMLVideoElement | null) => {
     videoRef.current = el;
@@ -19,7 +33,8 @@ export const ScreenShareViewer: React.FC = () => {
       if (el.srcObject !== viewingShare.stream) {
         el.srcObject = viewingShare.stream;
       }
-      el.volume = isMuted ? 0 : volume;
+      el.muted = isViewerMuted;
+      el.volume = isViewerMuted ? 0 : viewerVolume;
       void el.play().catch((err) => console.warn('Autoplay error:', err));
     }
   };
@@ -29,15 +44,11 @@ export const ScreenShareViewer: React.FC = () => {
       if (videoRef.current.srcObject !== viewingShare.stream) {
         videoRef.current.srcObject = viewingShare.stream;
       }
+      videoRef.current.muted = isViewerMuted;
+      videoRef.current.volume = isViewerMuted ? 0 : viewerVolume;
       void videoRef.current.play().catch((err) => console.warn('Autoplay error:', err));
     }
-  }, [viewingShare?.stream]);
-
-  useEffect(() => {
-    if (videoRef.current) {
-      videoRef.current.volume = isMuted ? 0 : volume;
-    }
-  }, [volume, isMuted]);
+  }, [viewingShare?.stream, isViewerMuted, viewerVolume]);
 
   useEffect(() => {
     const handleFullscreenChange = () => {
@@ -115,10 +126,12 @@ export const ScreenShareViewer: React.FC = () => {
             {/* Audio Volume Slider */}
             <div className="flex items-center gap-2 rounded-xl bg-slate-900/80 backdrop-blur px-3 py-1.5 border border-slate-700/60 shadow">
               <button
-                onClick={() => setIsMuted(!isMuted)}
+                type="button"
+                onClick={() => setIsViewerMuted(!isViewerMuted)}
                 className="text-slate-300 hover:text-white transition"
+                title={isViewerMuted ? 'Yayın Sesini Aç' : 'Yayın Sesini Sustur'}
               >
-                {isMuted || volume === 0 ? (
+                {isViewerMuted || viewerVolume === 0 ? (
                   <VolumeX className="h-4 w-4 text-rose-400" />
                 ) : (
                   <Volume2 className="h-4 w-4 text-slate-200" />
@@ -129,13 +142,22 @@ export const ScreenShareViewer: React.FC = () => {
                 min="0"
                 max="1"
                 step="0.05"
-                value={isMuted ? 0 : volume}
+                value={isViewerMuted ? 0 : viewerVolume}
                 onChange={(e) => {
-                  setVolume(parseFloat(e.target.value));
-                  if (isMuted) setIsMuted(false);
+                  setViewerVolume(parseFloat(e.target.value));
+                  if (isViewerMuted) setIsViewerMuted(false);
                 }}
                 className="w-20 accent-indigo-500 cursor-pointer"
+                title={`Yayın Sesi: %${Math.round((isViewerMuted ? 0 : viewerVolume) * 100)}`}
               />
+              {isDucked && (
+                <span
+                  className="text-[10px] font-bold text-amber-300 bg-amber-500/20 border border-amber-500/40 px-1.5 py-0.5 rounded animate-pulse"
+                  title="Konuştuğunuz için sesiniz yayından yankılanmasın diye yayın sesi otomatik olarak kısıldı"
+                >
+                  Yankı Koruması
+                </span>
+              )}
             </div>
 
             {/* Fullscreen Toggle */}

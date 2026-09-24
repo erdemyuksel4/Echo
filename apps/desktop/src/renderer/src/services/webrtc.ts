@@ -8,6 +8,11 @@ import { useVoiceStore } from '../stores/useVoiceStore';
 import { useAuthStore } from '../stores/useAuthStore';
 import { wsService } from './websocket';
 import { iceServersService } from './iceServers';
+import {
+  createRNNoiseProcessor,
+  type RNNoiseProcessorInstance,
+  getRnnoise,
+} from './rnnoise/rnnoiseProcessor';
 
 interface PreviousPeerStats {
   bytesReceived: number;
@@ -15,6 +20,7 @@ interface PreviousPeerStats {
 }
 
 export interface AudioProcessingSettings {
+  rnnoise: boolean;
   noiseSuppression: boolean;
   echoCancellation: boolean;
   autoGainControl: boolean;
@@ -23,6 +29,7 @@ export interface AudioProcessingSettings {
 }
 
 const DEFAULT_AUDIO_PROCESSING_SETTINGS: AudioProcessingSettings = {
+  rnnoise: true,
   noiseSuppression: true,
   echoCancellation: true,
   autoGainControl: true,
@@ -32,6 +39,10 @@ const DEFAULT_AUDIO_PROCESSING_SETTINGS: AudioProcessingSettings = {
 
 class WebRTCVoiceService {
   private localStream: MediaStream | null = null;
+  private rawLocalStream: MediaStream | null = null;
+  private rnnoiseProcessorInstance: RNNoiseProcessorInstance | null = null;
+  private rawTestMicStream: MediaStream | null = null;
+  private testMicRnnoiseInstance: RNNoiseProcessorInstance | null = null;
   private audioContext: AudioContext | null = null;
   private analyser: AnalyserNode | null = null;
   private vadInterval: ReturnType<typeof setInterval> | null = null;
@@ -86,6 +97,11 @@ class WebRTCVoiceService {
     await iceServersService.fetchIceServers();
     this.iceServers = iceServersService.getIceServers();
 
+    // Pre-load RNNoise AI neural network WASM in the background
+    void getRnnoise().catch((err) => {
+      console.warn('[Echo WebRTC] RNNoise preloading warning:', err);
+    });
+
     if (typeof navigator !== 'undefined' && navigator.mediaDevices) {
       navigator.mediaDevices.ondevicechange = () => {
         console.log('[Echo WebRTC] Audio/Video device change detected.');
@@ -128,8 +144,9 @@ class WebRTCVoiceService {
       // 1. Get microphone stream with configured Audio Processing
       const audioConstraints = this.getAudioConstraints();
 
+      let rawStream: MediaStream;
       try {
-        this.localStream = await navigator.mediaDevices.getUserMedia({
+        rawStream = await navigator.mediaDevices.getUserMedia({
           audio: audioConstraints,
           video: false,
         });
@@ -137,23 +154,21 @@ class WebRTCVoiceService {
         console.warn('[Echo WebRTC] Selected input device failed, falling back:', deviceErr);
         this.selectedInputDeviceId = null;
         try {
-          this.localStream = await navigator.mediaDevices.getUserMedia({
+          rawStream = await navigator.mediaDevices.getUserMedia({
             audio: this.getAudioConstraints(null),
             video: false,
           });
         } catch {
           console.warn('[Echo WebRTC] Fallback with constraints failed, requesting raw audio: true');
-          this.localStream = await navigator.mediaDevices.getUserMedia({
+          rawStream = await navigator.mediaDevices.getUserMedia({
             audio: true,
             video: false,
           });
         }
       }
 
-      const micTrack = this.localStream.getAudioTracks()[0];
-      if (!micTrack) {
-        throw new Error('Mikrofon ses izi (audio track) bulunamadı');
-      }
+      const micTrack = await this.attachRNNoiseToLocalStream(rawStream);
+      this.localStream = new MediaStream([micTrack]);
 
       // Check if muted by hardware switch or OS
       if (micTrack.muted) {
@@ -252,6 +267,22 @@ class WebRTCVoiceService {
         }
       });
       this.localStream = null;
+    }
+
+    // Stop and clean up RNNoise AI processor
+    if (this.rnnoiseProcessorInstance) {
+      this.rnnoiseProcessorInstance.destroy();
+      this.rnnoiseProcessorInstance = null;
+    }
+    if (this.rawLocalStream) {
+      this.rawLocalStream.getTracks().forEach((t) => {
+        try {
+          t.stop();
+        } catch {
+          // Ignore
+        }
+      });
+      this.rawLocalStream = null;
     }
 
     // Stop local camera stream tracks
@@ -790,6 +821,11 @@ class WebRTCVoiceService {
         t.enabled = canTransmit;
       });
     }
+    if (this.rawLocalStream) {
+      this.rawLocalStream.getAudioTracks().forEach((t) => {
+        t.enabled = canTransmit;
+      });
+    }
 
     if (!canTransmit && (this.lastSpeakingState || store.isSpeaking)) {
       if (this.speakingSilenceTimer) {
@@ -1134,12 +1170,52 @@ class WebRTCVoiceService {
     return constraints;
   }
 
+  private async attachRNNoiseToLocalStream(rawStream: MediaStream): Promise<MediaStreamTrack> {
+    if (this.rnnoiseProcessorInstance) {
+      this.rnnoiseProcessorInstance.destroy();
+      this.rnnoiseProcessorInstance = null;
+    }
+    if (this.rawLocalStream && this.rawLocalStream !== rawStream) {
+      this.rawLocalStream.getTracks().forEach((t) => {
+        try {
+          t.stop();
+        } catch {
+          // Ignore
+        }
+      });
+    }
+    this.rawLocalStream = rawStream;
+    const rawTrack = rawStream.getAudioTracks()[0];
+    if (!rawTrack) {
+      throw new Error('Mikrofon ses izi (audio track) bulunamadı');
+    }
+
+    let activeTrack = rawTrack;
+    try {
+      this.rnnoiseProcessorInstance = await createRNNoiseProcessor(
+        rawTrack,
+        this.audioProcessing.rnnoise,
+      );
+      activeTrack = this.rnnoiseProcessorInstance.destinationTrack;
+      console.log('[Echo WebRTC] Attached RNNoise AI processor to microphone track.');
+    } catch (rnnoiseErr) {
+      console.warn('[Echo WebRTC] Failed to initialize RNNoise processor, falling back to raw audio:', rnnoiseErr);
+    }
+    return activeTrack;
+  }
+
   async updateAudioProcessingSettings(newSettings: Partial<AudioProcessingSettings>): Promise<void> {
     this.audioProcessing = { ...this.audioProcessing, ...newSettings };
     try {
       localStorage.setItem('echo_audio_processing', JSON.stringify(this.audioProcessing));
     } catch {
       // Ignore
+    }
+
+    if (newSettings.rnnoise !== undefined) {
+      this.rnnoiseProcessorInstance?.setEnabled(newSettings.rnnoise);
+      this.testMicRnnoiseInstance?.setEnabled(newSettings.rnnoise);
+      console.log('[Echo WebRTC] Live updated RNNoise filter state to:', newSettings.rnnoise);
     }
 
     // Apply live if localStream is active
@@ -1189,8 +1265,10 @@ class WebRTCVoiceService {
         });
       }
 
-      const newTrack = newStream.getAudioTracks()[0];
-      if (!newTrack) return;
+      const rawTrack = newStream.getAudioTracks()[0];
+      if (!rawTrack) return;
+
+      const newTrack = await this.attachRNNoiseToLocalStream(newStream);
 
       // Replace audio track across all active peer connections
       for (const pc of this.peers.values()) {
@@ -1209,11 +1287,11 @@ class WebRTCVoiceService {
           }
         });
       }
-      this.localStream = newStream;
+      this.localStream = new MediaStream([newTrack]);
       this.updateAudioTrackState();
-      this.setupVAD(newStream);
+      this.setupVAD(this.localStream);
 
-      newTrack.onended = () => {
+      rawTrack.onended = () => {
         if (this.currentChannelId) {
           void this.reacquireLocalAudio();
         }
@@ -1245,26 +1323,29 @@ class WebRTCVoiceService {
           video: false,
         });
 
-        const newTrack = newStream.getAudioTracks()[0];
-        if (newTrack) {
+        const rawTrack = newStream.getAudioTracks()[0];
+        if (rawTrack) {
+          const newTrack = await this.attachRNNoiseToLocalStream(newStream);
           for (const pc of this.peers.values()) {
             const sender = pc.getSenders().find((s) => s.track?.kind === 'audio');
             if (sender) {
               await sender.replaceTrack(newTrack);
             }
           }
-          this.localStream.getAudioTracks().forEach((t) => {
-            try {
-              t.stop();
-            } catch {
-              // Ignore
-            }
-          });
-          this.localStream = newStream;
+          if (this.localStream) {
+            this.localStream.getAudioTracks().forEach((t) => {
+              try {
+                t.stop();
+              } catch {
+                // Ignore
+              }
+            });
+          }
+          this.localStream = new MediaStream([newTrack]);
           this.updateAudioTrackState();
-          this.setupVAD(newStream);
+          this.setupVAD(this.localStream);
 
-          newTrack.onended = () => {
+          rawTrack.onended = () => {
             if (this.currentChannelId) {
               void this.reacquireLocalAudio();
             }
@@ -1342,7 +1423,7 @@ class WebRTCVoiceService {
   ): () => void {
     let active = true;
     let testAudioContext: AudioContext | null = null;
-    let stream: MediaStream | null = null;
+    let rawStream: MediaStream | null = null;
     let interval: ReturnType<typeof setInterval> | null = null;
     let audioEl: HTMLAudioElement | null = null;
 
@@ -1352,13 +1433,44 @@ class WebRTCVoiceService {
           audio: this.getAudioConstraints(),
           video: false,
         };
-        stream = await navigator.mediaDevices.getUserMedia(constraints);
+        rawStream = await navigator.mediaDevices.getUserMedia(constraints);
         if (!active) {
-          stream.getTracks().forEach((t) => t.stop());
+          rawStream.getTracks().forEach((t) => t.stop());
           return;
         }
 
-        this.testMicStream = stream;
+        this.rawTestMicStream = rawStream;
+        const rawTrack = rawStream.getAudioTracks()[0];
+
+        if (this.testMicRnnoiseInstance) {
+          this.testMicRnnoiseInstance.destroy();
+          this.testMicRnnoiseInstance = null;
+        }
+
+        let activeStream = rawStream;
+        if (rawTrack) {
+          try {
+            this.testMicRnnoiseInstance = await createRNNoiseProcessor(
+              rawTrack,
+              this.audioProcessing.rnnoise,
+            );
+            activeStream = this.testMicRnnoiseInstance.destinationStream;
+            console.log('[Echo WebRTC] Attached RNNoise AI processor to test microphone.');
+          } catch (err) {
+            console.warn('[Echo WebRTC] Failed to attach RNNoise to test mic:', err);
+          }
+        }
+
+        if (!active) {
+          if (this.testMicRnnoiseInstance) {
+            this.testMicRnnoiseInstance.destroy();
+            this.testMicRnnoiseInstance = null;
+          }
+          rawStream.getTracks().forEach((t) => t.stop());
+          return;
+        }
+
+        this.testMicStream = activeStream;
 
         // Loopback: play audio back into user's headphones/speakers with noise cancellation applied
         audioEl = new Audio();
@@ -1368,7 +1480,7 @@ class WebRTCVoiceService {
         audioEl.volume = this.outputVolume;
         audioEl.style.display = 'none';
         document.body.appendChild(audioEl);
-        audioEl.srcObject = stream;
+        audioEl.srcObject = activeStream;
         this.testMicAudioEl = audioEl;
 
         if (
@@ -1387,7 +1499,7 @@ class WebRTCVoiceService {
           window.AudioContext ||
           (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
         testAudioContext = new AudioCtx();
-        const source = testAudioContext.createMediaStreamSource(stream);
+        const source = testAudioContext.createMediaStreamSource(activeStream);
         const analyser = testAudioContext.createAnalyser();
         analyser.fftSize = 256;
         source.connect(analyser);
@@ -1411,6 +1523,14 @@ class WebRTCVoiceService {
     return () => {
       active = false;
       this.testMicStream = null;
+      if (this.testMicRnnoiseInstance) {
+        this.testMicRnnoiseInstance.destroy();
+        this.testMicRnnoiseInstance = null;
+      }
+      if (this.rawTestMicStream) {
+        this.rawTestMicStream.getTracks().forEach((t) => t.stop());
+        this.rawTestMicStream = null;
+      }
       if (this.testMicAudioEl) {
         try {
           this.testMicAudioEl.pause();
@@ -1423,7 +1543,6 @@ class WebRTCVoiceService {
       }
       if (interval) clearInterval(interval);
       if (testAudioContext) void testAudioContext.close();
-      if (stream) stream.getTracks().forEach((t) => t.stop());
       onLevel(0);
     };
   }

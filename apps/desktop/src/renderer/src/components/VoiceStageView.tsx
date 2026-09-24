@@ -32,6 +32,7 @@ import { useChatStore } from '../stores/useChatStore';
 import { useScreenShareStore } from '../stores/useScreenShareStore';
 import { webrtcService } from '../services/webrtc';
 import { VoiceDiagnosticsModal } from './VoiceDiagnosticsModal';
+import { useScreenShareViewerDucking } from '../hooks/useScreenShareViewerDucking';
 
 interface Props {
   channel: Channel;
@@ -175,6 +176,10 @@ const ScreenShareTile: React.FC<ScreenShareTileProps> = ({ share, isLocal, chann
     stopWatching,
     stopSharing,
     openModalViewer,
+    viewerVolume,
+    isViewerMuted,
+    setViewerVolume,
+    setIsViewerMuted,
   } = useScreenShareStore();
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -184,13 +189,23 @@ const ScreenShareTile: React.FC<ScreenShareTileProps> = ({ share, isLocal, chann
   const stream = isLocal ? localStream : viewingShare?.stream;
   const isLoading = !isLocal && viewingShare?.userId === share.userId && viewingShare.isLoading;
 
+  const { isDucked } = useScreenShareViewerDucking({
+    videoRef,
+    userVolume: viewerVolume,
+    isMuted: isViewerMuted,
+    isLocal,
+  });
+
   const attachVideo = (el: HTMLVideoElement | null) => {
     videoRef.current = el;
     if (el && stream) {
       if (el.srcObject !== stream) {
         el.srcObject = stream;
       }
-      el.muted = isLocal;
+      el.muted = isLocal || isViewerMuted;
+      if (!isLocal) {
+        el.volume = isViewerMuted ? 0 : viewerVolume;
+      }
       void el.play().catch((e) => console.warn('Tile video play error:', e));
     }
   };
@@ -200,10 +215,13 @@ const ScreenShareTile: React.FC<ScreenShareTileProps> = ({ share, isLocal, chann
       if (videoRef.current.srcObject !== stream) {
         videoRef.current.srcObject = stream;
       }
-      videoRef.current.muted = isLocal;
+      videoRef.current.muted = isLocal || isViewerMuted;
+      if (!isLocal) {
+        videoRef.current.volume = isViewerMuted ? 0 : viewerVolume;
+      }
       void videoRef.current.play().catch((e) => console.warn('Tile video play error:', e));
     }
-  }, [stream, isLocal]);
+  }, [stream, isLocal, isViewerMuted, viewerVolume]);
 
   const toggleTileFullscreen = () => {
     if (!containerRef.current) return;
@@ -297,6 +315,45 @@ const ScreenShareTile: React.FC<ScreenShareTileProps> = ({ share, isLocal, chann
             </div>
 
             <div className="flex items-center gap-2">
+              {/* Audio Volume Controls for Viewers */}
+              {!isLocal && (
+                <div className="flex items-center gap-1.5 rounded-lg bg-slate-900/90 backdrop-blur px-2 py-1 border border-slate-700/60 shadow">
+                  <button
+                    type="button"
+                    onClick={() => setIsViewerMuted(!isViewerMuted)}
+                    className="text-slate-300 hover:text-white transition"
+                    title={isViewerMuted ? 'Yayın Sesini Aç' : 'Yayın Sesini Sustur'}
+                  >
+                    {isViewerMuted || viewerVolume === 0 ? (
+                      <VolumeX className="h-3.5 w-3.5 text-rose-400" />
+                    ) : (
+                      <Volume2 className="h-3.5 w-3.5 text-slate-200" />
+                    )}
+                  </button>
+                  <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.05"
+                    value={isViewerMuted ? 0 : viewerVolume}
+                    onChange={(e) => {
+                      setViewerVolume(parseFloat(e.target.value));
+                      if (isViewerMuted) setIsViewerMuted(false);
+                    }}
+                    className="w-16 h-1 accent-indigo-500 cursor-pointer bg-slate-700 rounded-lg"
+                    title={`Yayın Sesi: %${Math.round((isViewerMuted ? 0 : viewerVolume) * 100)}`}
+                  />
+                  {isDucked && (
+                    <span
+                      className="text-[10px] font-bold text-amber-300 bg-amber-500/20 border border-amber-500/40 px-1.5 py-0.2 rounded animate-pulse"
+                      title="Konuştuğunuz için sesiniz yayından yankılanmasın diye yayın sesi otomatik olarak kısıldı"
+                    >
+                      Yankı Koruması
+                    </span>
+                  )}
+                </div>
+              )}
+
               {isLocal ? (
                 <button
                   type="button"

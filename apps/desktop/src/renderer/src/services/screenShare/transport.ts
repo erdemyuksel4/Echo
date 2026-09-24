@@ -1,6 +1,7 @@
 import { SCREEN_QUALITY_PRESETS, type ScreenQualityPreset } from '@echo/shared';
 import { wsService } from '../websocket';
 import { iceServersService } from '../iceServers';
+import { ScreenAudioDuckingService } from './screenAudioDuckingService';
 
 export interface ScreenShareTransport {
   startSharing(stream: MediaStream, channelId: string, quality: ScreenQualityPreset): Promise<void>;
@@ -21,6 +22,7 @@ interface WatchSignal {
 export class MeshScreenShareTransport implements ScreenShareTransport {
   private localStream: MediaStream | null = null;
   private currentQuality: ScreenQualityPreset = '720p30';
+  private audioDuckingService: ScreenAudioDuckingService = new ScreenAudioDuckingService();
 
   // Publisher side: viewerUserId -> RTCPeerConnection
   private viewerPcs: Map<string, RTCPeerConnection> = new Map();
@@ -37,7 +39,7 @@ export class MeshScreenShareTransport implements ScreenShareTransport {
 
   async startSharing(
     stream: MediaStream,
-    _channelId: string,
+    channelId: string,
     quality: ScreenQualityPreset = '720p30',
   ): Promise<void> {
     try {
@@ -46,11 +48,14 @@ export class MeshScreenShareTransport implements ScreenShareTransport {
       console.warn('[ScreenShare] Failed to refresh ICE servers on startSharing:', e);
     }
 
-    this.localStream = stream;
+    // Process audio track with smart voice chat ducking
+    this.localStream = this.audioDuckingService.processStreamAudio(stream, channelId);
     this.currentQuality = quality;
   }
 
   async stopSharing(): Promise<void> {
+    this.audioDuckingService.cleanup();
+
     // Close all viewer peer connections
     for (const [viewerId, pc] of this.viewerPcs.entries()) {
       pc.close();
