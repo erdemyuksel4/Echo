@@ -20,7 +20,6 @@ interface WatchSignal {
 
 export class MeshScreenShareTransport implements ScreenShareTransport {
   private localStream: MediaStream | null = null;
-  private currentChannelId: string | null = null;
   private currentQuality: ScreenQualityPreset = '720p30';
 
   // Publisher side: viewerUserId -> RTCPeerConnection
@@ -30,6 +29,7 @@ export class MeshScreenShareTransport implements ScreenShareTransport {
   private watchingPcs: Map<string, RTCPeerConnection> = new Map();
   private remoteStreams: Map<string, MediaStream> = new Map();
   private streamResolvers: Map<string, (stream: MediaStream) => void> = new Map();
+  private pendingCandidates: Map<string, RTCIceCandidateInit[]> = new Map();
 
   private get iceServers(): RTCIceServer[] {
     return iceServersService.getIceServers();
@@ -37,11 +37,16 @@ export class MeshScreenShareTransport implements ScreenShareTransport {
 
   async startSharing(
     stream: MediaStream,
-    channelId: string,
+    _channelId: string,
     quality: ScreenQualityPreset = '720p30',
   ): Promise<void> {
+    try {
+      await iceServersService.fetchIceServers();
+    } catch (e) {
+      console.warn('[ScreenShare] Failed to refresh ICE servers on startSharing:', e);
+    }
+
     this.localStream = stream;
-    this.currentChannelId = channelId;
     this.currentQuality = quality;
   }
 
@@ -51,6 +56,7 @@ export class MeshScreenShareTransport implements ScreenShareTransport {
       pc.close();
       this.viewerPcs.delete(viewerId);
     }
+    this.pendingCandidates.clear();
 
     if (this.localStream) {
       for (const track of this.localStream.getTracks()) {
@@ -58,8 +64,6 @@ export class MeshScreenShareTransport implements ScreenShareTransport {
       }
       this.localStream = null;
     }
-
-    this.currentChannelId = null;
   }
 
   getActiveViewerCount(): number {
@@ -72,6 +76,12 @@ export class MeshScreenShareTransport implements ScreenShareTransport {
     if (existing) return existing;
 
     this.stopWatching(targetUserId);
+
+    try {
+      await iceServersService.fetchIceServers();
+    } catch (e) {
+      console.warn('[ScreenShare] Failed to refresh ICE servers on watchStream:', e);
+    }
 
     const pc = new RTCPeerConnection({ iceServers: this.iceServers });
     this.watchingPcs.set(targetUserId, pc);
@@ -91,7 +101,7 @@ export class MeshScreenShareTransport implements ScreenShareTransport {
     };
 
     pc.onicecandidate = (event) => {
-      if (event.candidate && this.currentChannelId) {
+      if (event.candidate) {
         wsService.sendShareSignal(channelId, targetUserId, {
           type: 'watch-candidate',
           candidate: event.candidate.toJSON(),
@@ -115,6 +125,7 @@ export class MeshScreenShareTransport implements ScreenShareTransport {
     }
     this.remoteStreams.delete(targetUserId);
     this.streamResolvers.delete(targetUserId);
+    this.pendingCandidates.delete(targetUserId);
   }
 
   async handleSignal(fromUserId: string, channelId: string, rawSignal: unknown): Promise<void> {
@@ -139,6 +150,7 @@ export class MeshScreenShareTransport implements ScreenShareTransport {
           await pc.setRemoteDescription(
             new RTCSessionDescription({ type: 'answer', sdp: signal.sdp }),
           );
+          await this.drainPendingCandidates(fromUserId, pc);
         }
         break;
       }
@@ -146,12 +158,16 @@ export class MeshScreenShareTransport implements ScreenShareTransport {
         // ICE candidate from either side
         if (signal.candidate) {
           const pc = this.viewerPcs.get(fromUserId) || this.watchingPcs.get(fromUserId);
-          if (pc && pc.remoteDescription) {
+          if (pc && pc.remoteDescription && pc.remoteDescription.type) {
             try {
               await pc.addIceCandidate(new RTCIceCandidate(signal.candidate));
             } catch (err) {
-              console.warn('Failed to add screen share ICE candidate:', err);
+              console.warn('[ScreenShare] Failed to add ICE candidate:', err);
             }
+          } else {
+            const list = this.pendingCandidates.get(fromUserId) ?? [];
+            list.push(signal.candidate);
+            this.pendingCandidates.set(fromUserId, list);
           }
         }
         break;
@@ -253,6 +269,7 @@ export class MeshScreenShareTransport implements ScreenShareTransport {
 
     try {
       await pc.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp }));
+      await this.drainPendingCandidates(publisherUserId, pc);
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
 
@@ -263,6 +280,18 @@ export class MeshScreenShareTransport implements ScreenShareTransport {
     } catch (err) {
       console.error('Failed to handle screen share offer from publisher:', err);
     }
+  }
+
+  private async drainPendingCandidates(userId: string, pc: RTCPeerConnection): Promise<void> {
+    const pending = this.pendingCandidates.get(userId) ?? [];
+    for (const cand of pending) {
+      try {
+        await pc.addIceCandidate(new RTCIceCandidate(cand));
+      } catch (err) {
+        console.warn(`[ScreenShare] Failed to drain pending ICE candidate for ${userId}:`, err);
+      }
+    }
+    this.pendingCandidates.delete(userId);
   }
 
   private preferHardwareCodec(pc: RTCPeerConnection, mimeType = 'video/H264'): void {

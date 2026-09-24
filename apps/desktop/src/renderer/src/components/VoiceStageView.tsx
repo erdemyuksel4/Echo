@@ -50,12 +50,24 @@ const ParticipantTile: React.FC<ParticipantTileProps> = ({
 }) => {
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
+  const attachVideo = (el: HTMLVideoElement | null) => {
+    videoRef.current = el;
+    if (el && stream) {
+      if (el.srcObject !== stream) {
+        el.srcObject = stream;
+      }
+      void el.play().catch((e) => console.warn('Tile video play error:', e));
+    }
+  };
+
   useEffect(() => {
     if (videoRef.current && stream) {
-      videoRef.current.srcObject = stream;
+      if (videoRef.current.srcObject !== stream) {
+        videoRef.current.srcObject = stream;
+      }
       void videoRef.current.play().catch((e) => console.warn('Tile video play error:', e));
     }
-  }, [stream]);
+  }, [stream, participant.camera]);
 
   const hasVideo = Boolean(stream && participant.camera);
 
@@ -69,7 +81,7 @@ const ParticipantTile: React.FC<ParticipantTileProps> = ({
     >
       {hasVideo ? (
         <video
-          ref={videoRef}
+          ref={attachVideo}
           autoPlay
           playsInline
           muted={isLocal}

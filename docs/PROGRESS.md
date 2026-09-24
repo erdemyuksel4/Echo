@@ -485,4 +485,15 @@ Bu dosya her faz ve görev sonunda güncellenir.
 - [x] **Birim Testleri:**
   - `packages/shared/src/__tests__/voice.test.ts` içine durum önceliklendirme ve çakışma önleme testleri eklendi (54/54 test geçti).
 
+## Ekran Paylaşımı & Kamera İletimi İyileştirmeleri (v0.1.15)
 
+- [x] **Ekran Paylaşımı TURN Relay ve ICE Aday İletimi Düzeltildi:**
+  - `MeshScreenShareTransport` içinde izleyicinin ICE adaylarını göndermesini engelleyen kontrol düzeltildi; izleyiciler artık yayıncıya Cloudflare TURN/STUN adaylarını eksiksiz gönderiyor.
+  - Yayıncı ve izleyici taraflarında `setRemoteDescription` öncesi gelen adaylar için `pendingCandidates` kuyruğu oluşturuldu ve bağlantı kurulduğunda `drainPendingCandidates` ile güvenle tüketilmesi sağlandı.
+  - Ekran paylaşımı başlarken ve izleme isteğinde `iceServersService.fetchIceServers()` tetiklenerek en taze TURN kimlik bilgileri alındı.
+- [x] **Video Akışı Bağlama (Callback Ref) ile Siyah Ekran Hatası Çözüldü:**
+  - `VoiceStageView` (katılımcı kamera kutuları) ve `ScreenShareViewer` bileşenlerinde koşullu render edilen `<video>` etiketleri için `attachVideo` callback ref yapısına geçildi; akış DOM'a girdiği anda `srcObject` olarak bağlandı.
+- [x] **İki Yönlü Kamera WebRTC Senkronizasyonu (`syncTracks`):**
+  - `webrtc.ts` içine `syncTracks` metodu eklendi. Teklif oluştururken (`initiateOffer`), teklif karşılarken (`handleOffer`) ve yeni eş oluşturulurken (`getOrCreatePeerConnection`) ses ile birlikte kamera parçalarının da (`localCameraStream`) eş bağlantısına eksiksiz eklenmesi sağlandı.
+- [x] **Otomatik Dağıtım (v0.1.15):**
+  - Typecheck, ESLint ve tüm testler (78/78) başarıyla geçti.

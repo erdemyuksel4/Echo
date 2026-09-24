@@ -399,6 +399,40 @@ class WebRTCVoiceService {
     }
   }
 
+  private syncTracks(pc: RTCPeerConnection): void {
+    if (this.localStream) {
+      const audioTrack = this.localStream.getAudioTracks()[0];
+      if (audioTrack) {
+        const audioSender = pc.getSenders().find((s) => s.track?.kind === 'audio');
+        if (!audioSender) {
+          try {
+            pc.addTrack(audioTrack, this.localStream);
+          } catch (e) {
+            console.warn('[Echo WebRTC] Failed to add audio track to pc:', e);
+          }
+        } else if (audioSender.track !== audioTrack) {
+          void audioSender.replaceTrack(audioTrack);
+        }
+      }
+    }
+
+    if (this.localCameraStream) {
+      const videoTrack = this.localCameraStream.getVideoTracks()[0];
+      if (videoTrack) {
+        const videoSender = pc.getSenders().find((s) => s.track?.kind === 'video');
+        if (!videoSender) {
+          try {
+            pc.addTrack(videoTrack, this.localCameraStream);
+          } catch (e) {
+            console.warn('[Echo WebRTC] Failed to add video track to pc:', e);
+          }
+        } else if (videoSender.track !== videoTrack) {
+          void videoSender.replaceTrack(videoTrack);
+        }
+      }
+    }
+  }
+
   private async initiateOffer(peerId: string, displayName: string): Promise<void> {
     if (!this.currentChannelId) return;
     this.peerDisplayNames.set(peerId, displayName);
@@ -410,18 +444,8 @@ class WebRTCVoiceService {
       return;
     }
 
-    // Ensure local audio track is attached to PC before offer is generated
-    if (this.localStream) {
-      const audioTrack = this.localStream.getAudioTracks()[0];
-      if (audioTrack) {
-        const sender = pc.getSenders().find((s) => s.track?.kind === 'audio');
-        if (!sender) {
-          pc.addTrack(audioTrack, this.localStream);
-        } else if (sender.track !== audioTrack) {
-          void sender.replaceTrack(audioTrack);
-        }
-      }
-    }
+    // Ensure local audio and video tracks are attached before offer
+    this.syncTracks(pc);
 
     try {
       const offer = await pc.createOffer({
@@ -471,18 +495,8 @@ class WebRTCVoiceService {
       return;
     }
 
-    // Ensure local audio track is attached to PC before answer is generated
-    if (this.localStream) {
-      const audioTrack = this.localStream.getAudioTracks()[0];
-      if (audioTrack) {
-        const sender = pc.getSenders().find((s) => s.track?.kind === 'audio');
-        if (!sender) {
-          pc.addTrack(audioTrack, this.localStream);
-        } else if (sender.track !== audioTrack) {
-          void sender.replaceTrack(audioTrack);
-        }
-      }
-    }
+    // Ensure local audio and video tracks are attached before answer
+    this.syncTracks(pc);
 
     try {
       await pc.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp }));
@@ -603,22 +617,8 @@ class WebRTCVoiceService {
     this.peers.set(peerId, pc);
     this.peerDisplayNames.set(peerId, displayName);
 
-    // Add local audio track
-    if (this.localStream) {
-      this.localStream.getAudioTracks().forEach((track) => {
-        console.log(`[Echo WebRTC] Attaching local audio track (${track.id}) to peer ${peerId}. Enabled: ${track.enabled}, readyState: ${track.readyState}`);
-        pc!.addTrack(track, this.localStream!);
-      });
-    } else {
-      console.warn(`[Echo WebRTC] localStream is not ready when creating PC for peer ${peerId}`);
-    }
-
-    // Add local camera video track
-    if (this.localCameraStream) {
-      this.localCameraStream.getVideoTracks().forEach((track) => {
-        pc!.addTrack(track, this.localCameraStream!);
-      });
-    }
+    // Synchronize local tracks (audio and camera video)
+    this.syncTracks(pc);
 
     // ICE Candidate generation (only non-empty candidates)
     pc.onicecandidate = (event) => {
@@ -1435,7 +1435,7 @@ class WebRTCVoiceService {
         // Add track to each existing peer and renegotiate
         for (const [peerId, pc] of this.peers.entries()) {
           try {
-            pc.addTrack(videoTrack, this.localCameraStream);
+            this.syncTracks(pc);
             const displayName = this.peerDisplayNames.get(peerId) || 'Kullanıcı';
             await this.initiateOffer(peerId, displayName);
           } catch (e) {

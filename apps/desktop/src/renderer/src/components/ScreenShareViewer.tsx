@@ -13,9 +13,22 @@ export const ScreenShareViewer: React.FC = () => {
   const [showControls, setShowControls] = useState(true);
   const controlsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const attachVideo = (el: HTMLVideoElement | null) => {
+    videoRef.current = el;
+    if (el && viewingShare?.stream) {
+      if (el.srcObject !== viewingShare.stream) {
+        el.srcObject = viewingShare.stream;
+      }
+      el.volume = isMuted ? 0 : volume;
+      void el.play().catch((err) => console.warn('Autoplay error:', err));
+    }
+  };
+
   useEffect(() => {
     if (videoRef.current && viewingShare?.stream) {
-      videoRef.current.srcObject = viewingShare.stream;
+      if (videoRef.current.srcObject !== viewingShare.stream) {
+        videoRef.current.srcObject = viewingShare.stream;
+      }
       void videoRef.current.play().catch((err) => console.warn('Autoplay error:', err));
     }
   }, [viewingShare?.stream]);
@@ -78,7 +91,7 @@ export const ScreenShareViewer: React.FC = () => {
               </span>
             </div>
           ) : (
-            <video ref={videoRef} autoPlay playsInline className="h-full w-full object-contain" />
+            <video ref={attachVideo} autoPlay playsInline className="h-full w-full object-contain" />
           )}
         </div>
 
