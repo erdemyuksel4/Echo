@@ -516,3 +516,21 @@ Bu dosya her faz ve görev sonunda güncellenir.
 - [x] **Gelişmiş WebRTC DSP Gürültü Engelleme (Chromium Highpass & Typing Noise Detection):**
   - `webrtc.ts` içine `googHighpassFilter` (klima/fan ve dip uğultularını keser) ve `googTypingNoiseDetection` (klavye tıkırtılarını filtreler) parametreleri entegre edildi.
 
+## Gelişmiş Ses İşleme & Gürültü Engelleme Kontrol Merkezi
+
+- [x] **Kullanıcı Tarafından Ayarlanabilir 0 ms Donanımsal DSP Filtreleri:**
+  - `AudioProcessingSettings` şeması ile 5 bağımsız ses işleme filtresi tanımlandı:
+    1. **Gürültü Engelleme (Noise Suppression):** Fan, klima ve oda arka plan uğultularını temizler.
+    2. **Klavye & Tıklama Filtresi (Typing Noise Detection):** Mekanik klavye vuruşlarını ve fare tıklamalarını bastırır.
+    3. **Yankı Engelleme (Acoustic Echo Cancellation):** Hoparlörden mikrofona geri dönen yankıyı önler.
+    4. **Otomatik Kazanç Denetimi (AGC):** Mikrofon ses seviyesini dengeler, ses patlamalarını önler.
+    5. **Yüksek Geçiren Uğultu Filtresi (Highpass Filter):** Titreşimleri ve düşük frekanslı dip uğultularını keser.
+- [x] **Canlı Kısıtlama Güncellemesi (`applyConstraints`):**
+  - Kullanıcı ses kanalındayken ayarları değiştirdiğinde bağlantı kopmadan anında mikrofona uygulanır (`micTrack.applyConstraints`).
+  - Ayarlar `localStorage` (`echo_audio_processing`) üzerinde kalıcı olarak saklanır.
+- [x] **Mikrofon Testi Entegrasyonu:**
+  - Ayarlar modalındaki canlı mikrofon seviye testi, seçilen aktif gürültü engelleme filtrelerini dikkate alarak çalışır.
+- [x] **Ayarlar -> Ses & Görüntü Arayüzü:**
+  - Mikrofon ayarının hemen altına Discord tarzı modern switch'ler ve açıklayıcı etiketlerle yeni bir ses işleme paneli eklendi.
+
+

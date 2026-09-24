@@ -24,7 +24,7 @@ import {
   Radio,
 } from 'lucide-react';
 import { soundService } from '../services/sound';
-import { webrtcService } from '../services/webrtc';
+import { webrtcService, type AudioProcessingSettings } from '../services/webrtc';
 import { useVoiceStore } from '../stores/useVoiceStore';
 
 type AppInfo = Awaited<ReturnType<NonNullable<typeof window.echoApi>['getAppInfo']>>;
@@ -52,6 +52,19 @@ export const SettingsModal: React.FC<Props> = ({ isOpen, onClose, initialTab = '
       return true;
     }
   });
+
+  const [audioProcessing, setAudioProcessing] = useState<AudioProcessingSettings>(() =>
+    webrtcService.getAudioProcessingSettings(),
+  );
+
+  const handleAudioProcessingToggle = (key: keyof AudioProcessingSettings) => {
+    const updated = {
+      ...audioProcessing,
+      [key]: !audioProcessing[key],
+    };
+    setAudioProcessing(updated);
+    void webrtcService.updateAudioProcessingSettings({ [key]: updated[key] });
+  };
 
   const [inputDevices, setInputDevices] = useState<MediaDeviceInfo[]>([]);
   const [outputDevices, setOutputDevices] = useState<MediaDeviceInfo[]>([]);
@@ -158,6 +171,7 @@ export const SettingsModal: React.FC<Props> = ({ isOpen, onClose, initialTab = '
 
   useEffect(() => {
     if (isOpen) {
+      setAudioProcessing(webrtcService.getAudioProcessingSettings());
       void webrtcService.getAudioDevices().then(({ inputs, outputs }) => {
         setInputDevices(inputs);
         setOutputDevices(outputs);
@@ -429,6 +443,145 @@ export const SettingsModal: React.FC<Props> = ({ isOpen, onClose, initialTab = '
                         Mikrofona konuşun: Yeşil bar sesinizi algıladıkça sağa doğru yükselecektir.
                       </p>
                     )}
+                  </div>
+                </div>
+
+                {/* Advanced Audio Processing & Noise Suppression */}
+                <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4 space-y-4">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-600/20 text-emerald-400">
+                      <Sparkles className="h-5 w-5" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-sm font-semibold text-white">
+                          Gelişmiş Ses İşleme &amp; Gürültü Engelleme
+                        </h3>
+                        <span className="inline-flex items-center rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-400 border border-emerald-500/20">
+                          0 ms Gecikme
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-400">
+                        Chromium WebRTC DSP donanımsal filtreleriyle kristal netliğinde ses iletimi
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3 pt-1">
+                    {/* Noise Suppression */}
+                    <div className="flex items-center justify-between rounded-lg bg-slate-900/60 border border-slate-800/80 p-3">
+                      <div className="pr-4">
+                        <div className="text-xs font-semibold text-white">Gürültü Engelleme</div>
+                        <div className="text-[11px] text-slate-400">
+                          Fan, klima ve oda arka plan uğultularını filtreler
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleAudioProcessingToggle('noiseSuppression')}
+                        className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${
+                          audioProcessing.noiseSuppression ? 'bg-indigo-600' : 'bg-slate-700'
+                        }`}
+                      >
+                        <span
+                          className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                            audioProcessing.noiseSuppression ? 'translate-x-6' : 'translate-x-1'
+                          }`}
+                        />
+                      </button>
+                    </div>
+
+                    {/* Typing Suppression */}
+                    <div className="flex items-center justify-between rounded-lg bg-slate-900/60 border border-slate-800/80 p-3">
+                      <div className="pr-4">
+                        <div className="text-xs font-semibold text-white">Klavye &amp; Tıklama Filtresi</div>
+                        <div className="text-[11px] text-slate-400">
+                          Mekanik klavye tuş vuruşlarını ve fare tıklamalarını bastırır
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleAudioProcessingToggle('typingSuppression')}
+                        className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${
+                          audioProcessing.typingSuppression ? 'bg-indigo-600' : 'bg-slate-700'
+                        }`}
+                      >
+                        <span
+                          className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                            audioProcessing.typingSuppression ? 'translate-x-6' : 'translate-x-1'
+                          }`}
+                        />
+                      </button>
+                    </div>
+
+                    {/* Echo Cancellation */}
+                    <div className="flex items-center justify-between rounded-lg bg-slate-900/60 border border-slate-800/80 p-3">
+                      <div className="pr-4">
+                        <div className="text-xs font-semibold text-white">Yankı Engelleme (Echo Cancellation)</div>
+                        <div className="text-[11px] text-slate-400">
+                          Hoparlörden çıkan sesin mikrofona geri sekip yankı yapmasını önler
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleAudioProcessingToggle('echoCancellation')}
+                        className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${
+                          audioProcessing.echoCancellation ? 'bg-indigo-600' : 'bg-slate-700'
+                        }`}
+                      >
+                        <span
+                          className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                            audioProcessing.echoCancellation ? 'translate-x-6' : 'translate-x-1'
+                          }`}
+                        />
+                      </button>
+                    </div>
+
+                    {/* Auto Gain Control */}
+                    <div className="flex items-center justify-between rounded-lg bg-slate-900/60 border border-slate-800/80 p-3">
+                      <div className="pr-4">
+                        <div className="text-xs font-semibold text-white">Otomatik Kazanç Denetimi (AGC)</div>
+                        <div className="text-[11px] text-slate-400">
+                          Mikrofon ses seviyenizi dengeler, ani bağırma ve patlamaları yumuşatır
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleAudioProcessingToggle('autoGainControl')}
+                        className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${
+                          audioProcessing.autoGainControl ? 'bg-indigo-600' : 'bg-slate-700'
+                        }`}
+                      >
+                        <span
+                          className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                            audioProcessing.autoGainControl ? 'translate-x-6' : 'translate-x-1'
+                          }`}
+                        />
+                      </button>
+                    </div>
+
+                    {/* Highpass Filter */}
+                    <div className="flex items-center justify-between rounded-lg bg-slate-900/60 border border-slate-800/80 p-3">
+                      <div className="pr-4">
+                        <div className="text-xs font-semibold text-white">Yüksek Geçiren Uğultu Filtresi</div>
+                        <div className="text-[11px] text-slate-400">
+                          Masa titreşimleri, vantilatör ve düşük frekanslı dip gürültüleri keser
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleAudioProcessingToggle('highpassFilter')}
+                        className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${
+                          audioProcessing.highpassFilter ? 'bg-indigo-600' : 'bg-slate-700'
+                        }`}
+                      >
+                        <span
+                          className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                            audioProcessing.highpassFilter ? 'translate-x-6' : 'translate-x-1'
+                          }`}
+                        />
+                      </button>
+                    </div>
                   </div>
                 </div>
 

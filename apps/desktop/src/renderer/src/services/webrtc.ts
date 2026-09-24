@@ -14,6 +14,22 @@ interface PreviousPeerStats {
   timestamp: number;
 }
 
+export interface AudioProcessingSettings {
+  noiseSuppression: boolean;
+  echoCancellation: boolean;
+  autoGainControl: boolean;
+  highpassFilter: boolean;
+  typingSuppression: boolean;
+}
+
+const DEFAULT_AUDIO_PROCESSING_SETTINGS: AudioProcessingSettings = {
+  noiseSuppression: true,
+  echoCancellation: true,
+  autoGainControl: true,
+  highpassFilter: true,
+  typingSuppression: true,
+};
+
 class WebRTCVoiceService {
   private localStream: MediaStream | null = null;
   private audioContext: AudioContext | null = null;
@@ -33,6 +49,18 @@ class WebRTCVoiceService {
   private currentChannelId: string | null = null;
   private lastSpeakingState = false;
   private speakingSilenceTimer: ReturnType<typeof setTimeout> | null = null;
+
+  private audioProcessing: AudioProcessingSettings = (() => {
+    try {
+      const saved = localStorage.getItem('echo_audio_processing');
+      if (saved) {
+        return { ...DEFAULT_AUDIO_PROCESSING_SETTINGS, ...JSON.parse(saved) };
+      }
+    } catch {
+      // Ignore
+    }
+    return { ...DEFAULT_AUDIO_PROCESSING_SETTINGS };
+  })();
 
   private selectedInputDeviceId: string | null = (() => {
     try {
@@ -95,23 +123,8 @@ class WebRTCVoiceService {
     }
 
     try {
-      // 1. Get microphone stream with Echo cancellation & Noise suppression
-      const audioConstraints: MediaTrackConstraints = {
-        echoCancellation: true,
-        noiseSuppression: true,
-        autoGainControl: true,
-      };
-      // Enhanced Chromium DSP audio processing: Highpass filter (cuts low AC/fan rumbles) and typing suppression
-      Object.assign(audioConstraints, {
-        googEchoCancellation: true,
-        googAutoGainControl: true,
-        googNoiseSuppression: true,
-        googHighpassFilter: true,
-        googTypingNoiseDetection: true,
-      });
-      if (this.selectedInputDeviceId && this.selectedInputDeviceId !== 'default') {
-        audioConstraints.deviceId = { exact: this.selectedInputDeviceId };
-      }
+      // 1. Get microphone stream with configured Audio Processing
+      const audioConstraints = this.getAudioConstraints();
 
       try {
         this.localStream = await navigator.mediaDevices.getUserMedia({
@@ -123,11 +136,7 @@ class WebRTCVoiceService {
         this.selectedInputDeviceId = null;
         try {
           this.localStream = await navigator.mediaDevices.getUserMedia({
-            audio: {
-              echoCancellation: true,
-              noiseSuppression: true,
-              autoGainControl: true,
-            },
+            audio: this.getAudioConstraints(null),
             video: false,
           });
         } catch {
@@ -1096,17 +1105,60 @@ class WebRTCVoiceService {
     }
   }
 
+  getAudioProcessingSettings(): AudioProcessingSettings {
+    return { ...this.audioProcessing };
+  }
+
+  getAudioConstraints(deviceId?: string | null): MediaTrackConstraints {
+    const devId = deviceId !== undefined ? deviceId : this.selectedInputDeviceId;
+    const constraints: MediaTrackConstraints = {
+      echoCancellation: this.audioProcessing.echoCancellation,
+      noiseSuppression: this.audioProcessing.noiseSuppression,
+      autoGainControl: this.audioProcessing.autoGainControl,
+    };
+
+    // Chromium DSP proprietary constraints
+    Object.assign(constraints, {
+      googEchoCancellation: this.audioProcessing.echoCancellation,
+      googAutoGainControl: this.audioProcessing.autoGainControl,
+      googNoiseSuppression: this.audioProcessing.noiseSuppression,
+      googHighpassFilter: this.audioProcessing.highpassFilter,
+      googTypingNoiseDetection: this.audioProcessing.typingSuppression,
+    });
+
+    if (devId && devId !== 'default') {
+      constraints.deviceId = { exact: devId };
+    }
+    return constraints;
+  }
+
+  async updateAudioProcessingSettings(newSettings: Partial<AudioProcessingSettings>): Promise<void> {
+    this.audioProcessing = { ...this.audioProcessing, ...newSettings };
+    try {
+      localStorage.setItem('echo_audio_processing', JSON.stringify(this.audioProcessing));
+    } catch {
+      // Ignore
+    }
+
+    // Apply live if localStream is active
+    if (this.localStream) {
+      const track = this.localStream.getAudioTracks()[0];
+      if (track) {
+        try {
+          await track.applyConstraints(this.getAudioConstraints());
+          console.log('[Echo WebRTC] Applied audio processing constraints live:', this.audioProcessing);
+        } catch (err) {
+          console.warn('[Echo WebRTC] Failed to apply audio constraints dynamically, will re-acquire:', err);
+          void this.reacquireLocalAudio();
+        }
+      }
+    }
+  }
+
   private async reacquireLocalAudio(): Promise<void> {
     if (!this.currentChannelId) return;
     try {
-      const audioConstraints: MediaTrackConstraints = {
-        echoCancellation: true,
-        noiseSuppression: true,
-        autoGainControl: true,
-      };
-      if (this.selectedInputDeviceId && this.selectedInputDeviceId !== 'default') {
-        audioConstraints.deviceId = { exact: this.selectedInputDeviceId };
-      }
+      const audioConstraints = this.getAudioConstraints();
 
       let newStream: MediaStream;
       try {
@@ -1117,11 +1169,7 @@ class WebRTCVoiceService {
       } catch {
         this.selectedInputDeviceId = null;
         newStream = await navigator.mediaDevices.getUserMedia({
-          audio: {
-            echoCancellation: true,
-            noiseSuppression: true,
-            autoGainControl: true,
-          },
+          audio: this.getAudioConstraints(null),
           video: false,
         });
       }
@@ -1175,14 +1223,7 @@ class WebRTCVoiceService {
 
     if (this.localStream && this.currentChannelId) {
       try {
-        const audioConstraints: MediaTrackConstraints = {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-        };
-        if (deviceId && deviceId !== 'default') {
-          audioConstraints.deviceId = { exact: deviceId };
-        }
+        const audioConstraints = this.getAudioConstraints(deviceId);
 
         const newStream = await navigator.mediaDevices.getUserMedia({
           audio: audioConstraints,
@@ -1275,9 +1316,7 @@ class WebRTCVoiceService {
     void (async () => {
       try {
         const constraints: MediaStreamConstraints = {
-          audio: this.selectedInputDeviceId
-            ? { deviceId: { exact: this.selectedInputDeviceId } }
-            : true,
+          audio: this.getAudioConstraints(),
           video: false,
         };
         stream = await navigator.mediaDevices.getUserMedia(constraints);
