@@ -20,7 +20,7 @@ export const ScreenShareViewer: React.FC = () => {
   const [showControls, setShowControls] = useState(true);
   const controlsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const { isDucked } = useScreenShareViewerDucking({
+  const { isDucked, effectiveVolume } = useScreenShareViewerDucking({
     videoRef,
     userVolume: viewerVolume,
     isMuted: isViewerMuted,
@@ -33,8 +33,8 @@ export const ScreenShareViewer: React.FC = () => {
       if (el.srcObject !== viewingShare.stream) {
         el.srcObject = viewingShare.stream;
       }
-      el.muted = isViewerMuted;
-      el.volume = isViewerMuted ? 0 : viewerVolume;
+      el.muted = isViewerMuted || effectiveVolume === 0;
+      el.volume = isViewerMuted ? 0 : effectiveVolume;
       void el.play().catch((err) => console.warn('Autoplay error:', err));
     }
   };
@@ -44,11 +44,11 @@ export const ScreenShareViewer: React.FC = () => {
       if (videoRef.current.srcObject !== viewingShare.stream) {
         videoRef.current.srcObject = viewingShare.stream;
       }
-      videoRef.current.muted = isViewerMuted;
-      videoRef.current.volume = isViewerMuted ? 0 : viewerVolume;
+      videoRef.current.muted = isViewerMuted || effectiveVolume === 0;
+      videoRef.current.volume = isViewerMuted ? 0 : effectiveVolume;
       void videoRef.current.play().catch((err) => console.warn('Autoplay error:', err));
     }
-  }, [viewingShare?.stream, isViewerMuted, viewerVolume]);
+  }, [viewingShare?.stream, isViewerMuted, effectiveVolume]);
 
   useEffect(() => {
     const handleFullscreenChange = () => {

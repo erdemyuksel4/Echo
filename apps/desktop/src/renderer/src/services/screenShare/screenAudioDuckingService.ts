@@ -86,13 +86,13 @@ export class ScreenAudioDuckingService {
 
         if (!this.isDucked) {
           this.isDucked = true;
-          // Smoothly ramp gain down to 15% in 40ms to suppress loopback voice leak
+          // Instantly ramp gain down to 0 (complete silence of loopback leak) in 10ms
           const now = this.audioContext.currentTime;
           this.duckingGainNode.gain.cancelScheduledValues(now);
-          this.duckingGainNode.gain.setTargetAtTime(0.15, now, 0.04);
+          this.duckingGainNode.gain.setTargetAtTime(0.0, now, 0.01);
         }
       } else if (this.isDucked && !this.restoreTimeout) {
-        // Hold ducking for 350ms to ensure the echo tail (WebRTC RTT + buffer) has passed
+        // Hold ducking for 450ms to ensure the echo tail (WebRTC RTT + buffer) has passed
         this.restoreTimeout = setTimeout(() => {
           if (!this.audioContext || !this.duckingGainNode) return;
           this.isDucked = false;
@@ -102,7 +102,7 @@ export class ScreenAudioDuckingService {
           const now = this.audioContext.currentTime;
           this.duckingGainNode.gain.cancelScheduledValues(now);
           this.duckingGainNode.gain.setTargetAtTime(1.0, now, 0.15);
-        }, 350);
+        }, 450);
       }
     });
   }

@@ -51,12 +51,12 @@ export function useScreenShareViewerDucking({
       }
       setIsDucked(true);
     } else {
-      // User stopped speaking: wait 400ms (echo tail hold) before restoring normal volume
+      // User stopped speaking: wait 500ms (echo tail hold) before restoring normal volume
       if (isDucked && !restoreTimeoutRef.current) {
         restoreTimeoutRef.current = setTimeout(() => {
           setIsDucked(false);
           restoreTimeoutRef.current = null;
-        }, 400);
+        }, 500);
       }
     }
 
@@ -70,8 +70,8 @@ export function useScreenShareViewerDucking({
 
   // Calculate and apply effective volume to the HTMLVideoElement
   const baseVolume = isMuted ? 0 : userVolume;
-  // During ducking, reduce volume to 5% (near silence) to block 200ms delayed self-voice echo
-  const effectiveVolume = isDucked ? baseVolume * 0.05 : baseVolume;
+  // During ducking, reduce volume to 0 (complete silence) to block 200ms delayed self-voice echo
+  const effectiveVolume = isDucked ? 0 : baseVolume;
 
   useEffect(() => {
     if (isLocal) return;

@@ -189,7 +189,7 @@ const ScreenShareTile: React.FC<ScreenShareTileProps> = ({ share, isLocal, chann
   const stream = isLocal ? localStream : viewingShare?.stream;
   const isLoading = !isLocal && viewingShare?.userId === share.userId && viewingShare.isLoading;
 
-  const { isDucked } = useScreenShareViewerDucking({
+  const { isDucked, effectiveVolume } = useScreenShareViewerDucking({
     videoRef,
     userVolume: viewerVolume,
     isMuted: isViewerMuted,
@@ -202,9 +202,9 @@ const ScreenShareTile: React.FC<ScreenShareTileProps> = ({ share, isLocal, chann
       if (el.srcObject !== stream) {
         el.srcObject = stream;
       }
-      el.muted = isLocal || isViewerMuted;
+      el.muted = isLocal || isViewerMuted || effectiveVolume === 0;
       if (!isLocal) {
-        el.volume = isViewerMuted ? 0 : viewerVolume;
+        el.volume = isViewerMuted ? 0 : effectiveVolume;
       }
       void el.play().catch((e) => console.warn('Tile video play error:', e));
     }
@@ -215,13 +215,13 @@ const ScreenShareTile: React.FC<ScreenShareTileProps> = ({ share, isLocal, chann
       if (videoRef.current.srcObject !== stream) {
         videoRef.current.srcObject = stream;
       }
-      videoRef.current.muted = isLocal || isViewerMuted;
+      videoRef.current.muted = isLocal || isViewerMuted || effectiveVolume === 0;
       if (!isLocal) {
-        videoRef.current.volume = isViewerMuted ? 0 : viewerVolume;
+        videoRef.current.volume = isViewerMuted ? 0 : effectiveVolume;
       }
       void videoRef.current.play().catch((e) => console.warn('Tile video play error:', e));
     }
-  }, [stream, isLocal, isViewerMuted, viewerVolume]);
+  }, [stream, isLocal, isViewerMuted, effectiveVolume]);
 
   const toggleTileFullscreen = () => {
     if (!containerRef.current) return;

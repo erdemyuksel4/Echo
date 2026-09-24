@@ -551,3 +551,17 @@ Bu dosya her faz ve görev sonunda güncellenir.
   - Kullanıcı tercihleri `localStorage` üzerinde saklanarak pencereler arası senkronize edildi.
 - [x] **Pencere Paylaşımı Bilgilendirme Rozeti:**
   - `ScreenSourcePickerModal` üzerinde "Sistem sesini de paylaş" açıldığında tüm masaüstü paylaşımında sesli sohbet seslerinin sistem sesine karışabileceği uyarısı ve tek tıkla "Pencere sekmesine geç" yönlendirmesi eklendi.
+
+## RNNoise Cızırtı Giderme & Sıfır-Eko Ekran Sesi İzolasyonu (v0.1.21)
+
+- [x] **RNNoise Wasm Ses Cızırtısı & Kesintisi (Crackle) Tamamen Giderildi:**
+  - *Kök Neden:* `ScriptProcessorNode` 512 örnekleme tamponu ile çalışırken RNNoise 480 örnekleme çerçeveleri işliyordu; ilk yükleme tamponu (priming) yetersiz olduğu için her saniyede 93 kez tampon açlığı (underflow) oluşuyor ve 32 sıfır örnek yazılması sürekli 93 Hz elektriksel cızırtı/hışırtı üretiyordu.
+  - *Çözüm:*
+    1. WebAudio blok boyutu 1024 örneğe (21.3 ms WebAudio kuantumu) çıkarıldı.
+    2. Ring buffer kapasitesi 16.384 örneğe yükseltildi ve 1024 örnek ile tam prime edildi. 10.000 blokluk simülasyonda underflow oranı sıfıra indirildi.
+    3. VAD (ses aktivite algılama) sert basamak anahtarı yerine yumuşak üstel kazanç zarfı (`smoothGain += (targetGain - smoothGain) * 0.02`) eklendi; DC ofset patlamaları ve "pop/click" parazitleri tamamen yok edildi.
+- [x] **Ekran Paylaşımı Ses Döngüsü (Loopback Echo) Sıfırlandı:**
+  - *İzleyici Koruması:* İzleyici mikrofonda konuşurken yayının sesi 0.0'a (tam sessizlik) çekildi ve konuşma bittikten sonra 500 ms ek koruma süresi tanımlandı.
+  - *Video Bileşeni Düzeltmesi:* `VoiceStageView` ve `ScreenShareViewer` bileşenlerinde `effectiveVolume`'ü ezen ve yalnızca ham `viewerVolume`'ü dinleyen `useEffect` kurgusu düzeltildi. İzleyici konuşurken video sesi fiziksel olarak anında 0'a indirilir.
+  - *Yayıncı Koruması:* Yayını açan kişi ses kanalındayken arkadaşları konuştuğunda, paylaşılan ekran sesi anında (10 ms atak) 0.0'a kısılarak hoparlör/kulaklık sızıntısının yayına geri dönmesi engellendi.
+

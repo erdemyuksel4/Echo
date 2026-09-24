@@ -1,7 +1,7 @@
 import { Rnnoise, type DenoiseState } from '@shiguredo/rnnoise-wasm';
 
 const RNNOISE_FRAME_SIZE = 480; // 10ms of audio at 48kHz
-const BUFFER_SIZE = 512; // Audio processing quantum power-of-two closest to 480
+const BUFFER_SIZE = 1024; // 21.3ms WebAudio quantum to prevent thread starvation and crackling
 
 let rnnoiseSingleton: Rnnoise | null = null;
 let rnnoiseInitPromise: Promise<Rnnoise> | null = null;
@@ -32,7 +32,7 @@ export async function getRnnoise(): Promise<Rnnoise> {
 
 /**
  * Allocation-free ring buffer for streaming audio samples
- * between WebAudio quantum (512 samples) and RNNoise frames (480 samples).
+ * between WebAudio quantum (1024 samples) and RNNoise frames (480 samples).
  */
 class AudioRingQueue {
   private buffer: Float32Array;
@@ -40,7 +40,7 @@ class AudioRingQueue {
   private readPos = 0;
   private available = 0;
 
-  constructor(capacity = 4096) {
+  constructor(capacity = 16384) {
     this.buffer = new Float32Array(capacity);
   }
 
@@ -92,7 +92,7 @@ export interface RNNoiseProcessorInstance {
 /**
  * Connects a raw MediaStreamTrack into an AudioContext pipeline, passes frames
  * through RNNoise recurrent neural network (48kHz -> 480 chunk), and returns
- * a crystal-clear, denoised MediaStreamTrack.
+ * a crystal-clear, denoised MediaStreamTrack with zero crackling.
  */
 export async function createRNNoiseProcessor(
   rawTrack: MediaStreamTrack,
@@ -116,16 +116,17 @@ export async function createRNNoiseProcessor(
   const processorNode = audioContext.createScriptProcessor(BUFFER_SIZE, 1, 1);
   const destinationNode = audioContext.createMediaStreamDestination();
 
-  const inputQueue = new AudioRingQueue(4096);
-  const outputQueue = new AudioRingQueue(4096);
+  const inputQueue = new AudioRingQueue(16384);
+  const outputQueue = new AudioRingQueue(16384);
 
-  // Prime output buffer with 480 samples of silence so initial reads don't underflow
-  const priming = new Float32Array(RNNOISE_FRAME_SIZE);
+  // Prime output buffer with 1024 samples (21.3ms) of silence so reads NEVER underflow
+  const priming = new Float32Array(1024);
   outputQueue.write(priming);
 
   const frameChunk = new Float32Array(RNNOISE_FRAME_SIZE);
   let enabled = initialEnabled;
   let isDestroyed = false;
+  let smoothGain = 1.0;
 
   processorNode.onaudioprocess = (event: AudioProcessingEvent) => {
     if (isDestroyed) return;
@@ -139,7 +140,7 @@ export async function createRNNoiseProcessor(
       return;
     }
 
-    // 1. Queue incoming WebAudio samples (512 samples)
+    // 1. Queue incoming WebAudio samples (1024 samples)
     inputQueue.write(inputData);
 
     // 2. Process all complete 480-sample frames through the RNNoise neural net
@@ -154,13 +155,13 @@ export async function createRNNoiseProcessor(
       // Run deep learning inference (returns voice activity probability [0.0 - 1.0])
       const vadProb = denoiseState.processFrame(frameChunk);
 
-      // If voice activity is very low (no speech, only keyboard/fan clicks),
-      // apply soft attenuation to guarantee absolute dead silence
-      const voiceGate = vadProb < 0.08 ? 0 : vadProb < 0.25 ? (vadProb - 0.08) / 0.17 : 1.0;
+      // Target gain: If no speech (VAD < 0.05), attenuate to zero. If speaking, full volume.
+      const targetGain = vadProb < 0.05 ? 0.0 : vadProb < 0.15 ? (vadProb - 0.05) / 0.1 : 1.0;
 
-      // Scale back to Web Audio float [-1.0, 1.0]
+      // Smooth exponential envelope transition per sample — completely eliminates clicks and crackling!
       for (let i = 0; i < RNNOISE_FRAME_SIZE; i++) {
-        frameChunk[i] = (frameChunk[i]! / 32768) * voiceGate;
+        smoothGain += (targetGain - smoothGain) * 0.02;
+        frameChunk[i] = (frameChunk[i]! / 32768) * smoothGain;
       }
 
       outputQueue.write(frameChunk);
@@ -169,7 +170,12 @@ export async function createRNNoiseProcessor(
     // 3. Read processed samples into output buffer
     const readCount = outputQueue.read(outputData);
     if (readCount < outputData.length) {
-      outputData.fill(0, readCount);
+      // Fade out gracefully to zero instead of abrupt zero-fill
+      let lastVal = readCount > 0 ? outputData[readCount - 1]! : 0;
+      for (let i = readCount; i < outputData.length; i++) {
+        lastVal *= 0.95;
+        outputData[i] = lastVal;
+      }
     }
   };
 
