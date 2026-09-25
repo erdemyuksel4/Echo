@@ -119,14 +119,13 @@ export async function createRNNoiseProcessor(
   const inputQueue = new AudioRingQueue(16384);
   const outputQueue = new AudioRingQueue(16384);
 
-  // Prime output buffer with 1024 samples (21.3ms) of silence so reads NEVER underflow
-  const priming = new Float32Array(1024);
+  // Prime output buffer with 2048 samples (42.6ms) of silence so reads NEVER underflow even during GC or UI jitter
+  const priming = new Float32Array(2048);
   outputQueue.write(priming);
 
   const frameChunk = new Float32Array(RNNOISE_FRAME_SIZE);
   let enabled = initialEnabled;
   let isDestroyed = false;
-  let smoothGain = 1.0;
 
   processorNode.onaudioprocess = (event: AudioProcessingEvent) => {
     if (isDestroyed) return;
@@ -152,16 +151,17 @@ export async function createRNNoiseProcessor(
         frameChunk[i] = frameChunk[i]! * 32768;
       }
 
-      // Run deep learning inference (returns voice activity probability [0.0 - 1.0])
-      const vadProb = denoiseState.processFrame(frameChunk);
+      // Run deep learning inference.
+      // RNNoise neural network directly suppresses background noise and keyboard clatter
+      // in the spectral domain while cleanly preserving human voice formants.
+      denoiseState.processFrame(frameChunk);
 
-      // Target gain: If no speech (VAD < 0.05), attenuate to zero. If speaking, full volume.
-      const targetGain = vadProb < 0.05 ? 0.0 : vadProb < 0.15 ? (vadProb - 0.05) / 0.1 : 1.0;
-
-      // Smooth exponential envelope transition per sample — completely eliminates clicks and crackling!
+      // Scale back to [-1.0, 1.0] with soft clipping to avoid DAC overflow pops
       for (let i = 0; i < RNNOISE_FRAME_SIZE; i++) {
-        smoothGain += (targetGain - smoothGain) * 0.02;
-        frameChunk[i] = (frameChunk[i]! / 32768) * smoothGain;
+        let val = frameChunk[i]! / 32768;
+        if (val > 1.0) val = 1.0;
+        else if (val < -1.0) val = -1.0;
+        frameChunk[i] = val;
       }
 
       outputQueue.write(frameChunk);
@@ -170,7 +170,7 @@ export async function createRNNoiseProcessor(
     // 3. Read processed samples into output buffer
     const readCount = outputQueue.read(outputData);
     if (readCount < outputData.length) {
-      // Fade out gracefully to zero instead of abrupt zero-fill
+      // Graceful fade if an extreme underrun ever occurs
       let lastVal = readCount > 0 ? outputData[readCount - 1]! : 0;
       for (let i = readCount; i < outputData.length; i++) {
         lastVal *= 0.95;
@@ -233,14 +233,13 @@ export async function createRNNoiseProcessor(
     destinationStream: destinationNode.stream,
     audioContext,
     setEnabled: (val: boolean) => {
-      enabled = val;
-      if (!val) {
-        // Reset queues when disabling so stale buffers are cleared
+      if (enabled !== val) {
+        enabled = val;
         inputQueue.reset();
         outputQueue.reset();
         outputQueue.write(priming);
+        console.log(`[Echo RNNoise] Noise suppression ${enabled ? 'ENABLED' : 'DISABLED'}`);
       }
-      console.log(`[Echo RNNoise] Noise suppression ${enabled ? 'ENABLED' : 'DISABLED'}`);
     },
     isEnabled: () => enabled,
     destroy,

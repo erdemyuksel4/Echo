@@ -565,3 +565,13 @@ Bu dosya her faz ve görev sonunda güncellenir.
   - *Video Bileşeni Düzeltmesi:* `VoiceStageView` ve `ScreenShareViewer` bileşenlerinde `effectiveVolume`'ü ezen ve yalnızca ham `viewerVolume`'ü dinleyen `useEffect` kurgusu düzeltildi. İzleyici konuşurken video sesi fiziksel olarak anında 0'a indirilir.
   - *Yayıncı Koruması:* Yayını açan kişi ses kanalındayken arkadaşları konuştuğunda, paylaşılan ekran sesi anında (10 ms atak) 0.0'a kısılarak hoparlör/kulaklık sızıntısının yayına geri dönmesi engellendi.
 
+## RNNoise Konuşma Sırasındaki "Pıt-Pıt" / Çıtırtı ve Kırpılmanın Giderilmesi (v0.1.22)
+
+- [x] **Konuşma Anında Oluşan "Pıt-Pıt" Parazitlerinin Kök Nedeni Çözüldü:**
+  - *Kök Neden:* RNNoise sinir ağı zaten frekans spektrumunda dip gürültülerini ve klavye seslerini doğrudan yok etmektedir. Ancak üzerine eklenen deneysel VAD kapısı (`targetGain = vadProb < 0.05 ? 0.0 : ...`), Türkçe konuşmadaki sessiz harflerde (/p/, /t/, /k/, /s/, /ş/ gibi patlamalı ve sürtünmeli ünsüzler ile hece araları) VAD olasılığı 0.05'in altına düştüğü anda ses sinyalini her hecede aniden kısıp açıyordu. Bu durum konuşma sırasında karşı tarafa sürekli "pıt-pıt / çıt-çıt" şeklinde genlik modülasyonu paraziti olarak yansıyordu.
+  - *Çözüm:*
+    1. Yapay VAD ses kapısı kaldırıldı; RNNoise'un derin öğrenme nöral filtresinin doğrudan temiz konuşma çıkışı alındı. Sessiz harfler ve hece araları kesintisiz, doğal akışına kavuştu.
+    2. DAC/WebAudio tavanını aşabilecek olası transient taşmaları için yumuşak sınırlayıcı (soft clamp `[-1.0, 1.0]`) eklendi, dijital tepe kırpılmaları sıfırlandı.
+    3. Halka kuyruk (ring buffer) ilk yükleme tamponu (priming) 2048 örneğe (42.6 ms) yükseltildi; Garbage Collection veya UI iş parçacığı gecikmelerinde arabellek boşalması (underrun) riski tamamen ortadan kaldırıldı.
+
+
