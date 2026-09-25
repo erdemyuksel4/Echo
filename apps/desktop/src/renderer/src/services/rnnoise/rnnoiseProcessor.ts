@@ -1,4 +1,11 @@
-import { RnnoiseWorkletNode, loadRnnoise } from '@sapphi-red/web-noise-suppressor';
+import {
+  GtcrnWorkletNode,
+  loadGtcrn,
+  RnnoiseWorkletNode,
+  loadRnnoise,
+} from '@sapphi-red/web-noise-suppressor';
+import gtcrnWorkletSource from '@sapphi-red/web-noise-suppressor/gtcrnWorklet.js?raw';
+import gtcrnWasmUrl from '@sapphi-red/web-noise-suppressor/gtcrn.wasm?url';
 import rnnoiseWorkletSource from '@sapphi-red/web-noise-suppressor/rnnoiseWorklet.js?raw';
 import rnnoiseWasmUrl from '@sapphi-red/web-noise-suppressor/rnnoise.wasm?url';
 import rnnoiseSimdWasmUrl from '@sapphi-red/web-noise-suppressor/rnnoise_simd.wasm?url';
@@ -13,56 +20,78 @@ export interface RNNoiseProcessorInstance {
   destroy: () => void;
 }
 
-let cachedWasmBinary: ArrayBuffer | null = null;
+let cachedGtcrnWasm: ArrayBuffer | null = null;
+let cachedRnnoiseWasm: ArrayBuffer | null = null;
 const cachedWorkletLoadedContexts = new WeakSet<AudioContext>();
 
-/**
- * Loads the WebAssembly binary (with SIMD acceleration support) once
- * and caches it in memory across processor instances.
- */
-async function getWasmBinary(): Promise<ArrayBuffer> {
-  if (cachedWasmBinary) {
-    return cachedWasmBinary;
+async function getGtcrnWasmBinary(): Promise<ArrayBuffer> {
+  if (cachedGtcrnWasm) {
+    return cachedGtcrnWasm;
   }
-  cachedWasmBinary = await loadRnnoise({
+  cachedGtcrnWasm = await loadGtcrn({ url: gtcrnWasmUrl });
+  console.log('[Echo AI Denoise] Loaded 2024 GTCRN neural network WASM binary.');
+  return cachedGtcrnWasm;
+}
+
+async function getRnnoiseWasmBinary(): Promise<ArrayBuffer> {
+  if (cachedRnnoiseWasm) {
+    return cachedRnnoiseWasm;
+  }
+  cachedRnnoiseWasm = await loadRnnoise({
     url: rnnoiseWasmUrl,
     simdUrl: rnnoiseSimdWasmUrl,
   });
-  console.log('[Echo RNNoise] Loaded SIMD neural network WASM binary.');
-  return cachedWasmBinary;
+  console.log('[Echo AI Denoise] Loaded SIMD RNNoise neural network WASM binary.');
+  return cachedRnnoiseWasm;
 }
 
 /**
- * Preloads the RNNoise WASM binary in the background for instant availability.
+ * Preloads the AI model WASM binary in the background for instant availability.
  */
 export async function getRnnoise(): Promise<ArrayBuffer> {
-  return getWasmBinary();
+  try {
+    return await getGtcrnWasmBinary();
+  } catch {
+    return await getRnnoiseWasmBinary();
+  }
 }
 
 /**
- * Inlines the AudioWorkletProcessor script into an in-memory Blob URL
- * to avoid any Electron file:// cross-origin or path resolution restrictions.
+ * Registers both GTCRN (2024) and RNNoise worklet processors into the AudioContext
+ * using in-memory Blob URLs to avoid Electron file:// cross-origin issues.
  */
 async function ensureWorkletModule(ctx: AudioContext): Promise<void> {
   if (cachedWorkletLoadedContexts.has(ctx)) {
     return;
   }
 
-  const blob = new Blob([rnnoiseWorkletSource], { type: 'text/javascript' });
-  const blobUrl = URL.createObjectURL(blob);
+  const gtcrnBlob = new Blob([gtcrnWorkletSource], { type: 'text/javascript' });
+  const gtcrnBlobUrl = URL.createObjectURL(gtcrnBlob);
+
+  const rnnoiseBlob = new Blob([rnnoiseWorkletSource], { type: 'text/javascript' });
+  const rnnoiseBlobUrl = URL.createObjectURL(rnnoiseBlob);
+
   try {
-    await ctx.audioWorklet.addModule(blobUrl);
+    await Promise.all([
+      ctx.audioWorklet.addModule(gtcrnBlobUrl).catch((err: unknown) => {
+        console.warn('[Echo AI Denoise] GTCRN worklet load warning:', err);
+      }),
+      ctx.audioWorklet.addModule(rnnoiseBlobUrl).catch((err: unknown) => {
+        console.warn('[Echo AI Denoise] RNNoise worklet load warning:', err);
+      }),
+    ]);
     cachedWorkletLoadedContexts.add(ctx);
-    console.log('[Echo RNNoise] AudioWorklet module loaded into audio context.');
+    console.log('[Echo AI Denoise] AudioWorklet modules registered.');
   } finally {
-    URL.revokeObjectURL(blobUrl);
+    URL.revokeObjectURL(gtcrnBlobUrl);
+    URL.revokeObjectURL(rnnoiseBlobUrl);
   }
 }
 
 /**
  * Connects a raw MediaStreamTrack into an AudioWorklet pipeline running
- * on the dedicated real-time audio thread (isolated from UI / React thread).
- * Completely eliminates clicks, pops, and "pıt-pıt" dropouts.
+ * on the dedicated real-time audio thread with GTCRN 2024 Deep Learning model.
+ * Aggressively removes background noise, keyboard clatter, and fans with zero stutter.
  */
 export async function createRNNoiseProcessor(
   rawTrack: MediaStreamTrack,
@@ -72,48 +101,57 @@ export async function createRNNoiseProcessor(
     window.AudioContext ||
     (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
 
-  // Force 48000 Hz sample rate as required by the RNNoise neural network model
+  // Force 48000 Hz sample rate as required by the neural network models
   const audioContext = new AudioCtx({ sampleRate: 48000 });
   if (audioContext.state === 'suspended') {
     void audioContext.resume();
   }
 
-  // Load WASM and register AudioWorklet module
-  const [wasmBinary] = await Promise.all([
-    getWasmBinary(),
-    ensureWorkletModule(audioContext),
-  ]);
+  await ensureWorkletModule(audioContext);
 
   const inputStream = new MediaStream([rawTrack]);
   const sourceNode = audioContext.createMediaStreamSource(inputStream);
   const destinationNode = audioContext.createMediaStreamDestination();
 
-  // Create real-time AudioWorklet processor node
-  const rnnoiseNode = new RnnoiseWorkletNode(audioContext, {
-    wasmBinary,
-    maxChannels: 1,
-  });
+  // Prefer 2024 GTCRN Deep Learning model for superior noise suppression;
+  // gracefully fall back to SIMD RNNoise if GTCRN cannot instantiate.
+  let denoiseNode: AudioNode;
+  try {
+    const wasmBinary = await getGtcrnWasmBinary();
+    denoiseNode = new GtcrnWorkletNode(audioContext, {
+      wasmBinary,
+      maxChannels: 1,
+    });
+    console.log('[Echo AI Denoise] Using 2024 GTCRN Deep Learning speech enhancement.');
+  } catch (gtcrnErr) {
+    console.warn('[Echo AI Denoise] GTCRN initialization failed, falling back to RNNoise SIMD:', gtcrnErr);
+    const wasmBinary = await getRnnoiseWasmBinary();
+    denoiseNode = new RnnoiseWorkletNode(audioContext, {
+      wasmBinary,
+      maxChannels: 1,
+    });
+  }
 
   // Cross-fade gain nodes for smooth, click-free live bypass toggling
-  const rnnoiseGain = audioContext.createGain();
+  const denoiseGain = audioContext.createGain();
   const bypassGain = audioContext.createGain();
 
-  rnnoiseGain.gain.setValueAtTime(initialEnabled ? 1.0 : 0.0, audioContext.currentTime);
+  denoiseGain.gain.setValueAtTime(initialEnabled ? 1.0 : 0.0, audioContext.currentTime);
   bypassGain.gain.setValueAtTime(initialEnabled ? 0.0 : 1.0, audioContext.currentTime);
 
   // Audio Graph:
-  // Denoised branch: sourceNode -> rnnoiseNode -> rnnoiseGain -> destinationNode
+  // Denoised branch: sourceNode -> denoiseNode -> denoiseGain -> destinationNode
   // Bypassed branch: sourceNode -> bypassGain -> destinationNode
-  sourceNode.connect(rnnoiseNode);
-  rnnoiseNode.connect(rnnoiseGain);
-  rnnoiseGain.connect(destinationNode);
+  sourceNode.connect(denoiseNode);
+  denoiseNode.connect(denoiseGain);
+  denoiseGain.connect(destinationNode);
 
   sourceNode.connect(bypassGain);
   bypassGain.connect(destinationNode);
 
   const destinationTrack = destinationNode.stream.getAudioTracks()[0];
   if (!destinationTrack) {
-    throw new Error('[Echo RNNoise] Failed to extract audio track from MediaStreamDestinationNode');
+    throw new Error('[Echo AI Denoise] Failed to extract audio track from MediaStreamDestinationNode');
   }
 
   destinationTrack.enabled = rawTrack.enabled;
@@ -126,11 +164,13 @@ export async function createRNNoiseProcessor(
 
     try {
       sourceNode.disconnect();
-      rnnoiseNode.disconnect();
-      rnnoiseGain.disconnect();
+      denoiseNode.disconnect();
+      denoiseGain.disconnect();
       bypassGain.disconnect();
       destinationNode.disconnect();
-      rnnoiseNode.destroy();
+      if ('destroy' in denoiseNode && typeof (denoiseNode as { destroy: () => void }).destroy === 'function') {
+        (denoiseNode as { destroy: () => void }).destroy();
+      }
     } catch {
       // Ignore
     }
@@ -141,7 +181,7 @@ export async function createRNNoiseProcessor(
       // Ignore
     }
 
-    console.log('[Echo RNNoise] AudioWorklet noise suppression pipeline destroyed.');
+    console.log('[Echo AI Denoise] AudioWorklet noise suppression pipeline destroyed.');
   };
 
   return {
@@ -154,15 +194,15 @@ export async function createRNNoiseProcessor(
       enabled = val;
       const now = audioContext.currentTime;
       if (val) {
-        // Smooth 15ms crossfade to RNNoise
+        // Smooth 15ms crossfade to AI denoise
         bypassGain.gain.setTargetAtTime(0.0, now, 0.015);
-        rnnoiseGain.gain.setTargetAtTime(1.0, now, 0.015);
+        denoiseGain.gain.setTargetAtTime(1.0, now, 0.015);
       } else {
         // Smooth 15ms crossfade to bypass
-        rnnoiseGain.gain.setTargetAtTime(0.0, now, 0.015);
+        denoiseGain.gain.setTargetAtTime(0.0, now, 0.015);
         bypassGain.gain.setTargetAtTime(1.0, now, 0.015);
       }
-      console.log(`[Echo RNNoise] Noise suppression ${enabled ? 'ENABLED' : 'DISABLED'}`);
+      console.log(`[Echo AI Denoise] Noise suppression ${enabled ? 'ENABLED' : 'DISABLED'}`);
     },
     isEnabled: () => enabled,
     destroy,

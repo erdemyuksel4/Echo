@@ -582,5 +582,15 @@ Bu dosya her faz ve görev sonunda güncellenir.
     4. Canlı açma/kapama için çift `GainNode` üzerinden 15 ms üstel yumuşak geçiş (crossfade) uygulanarak filtre değişimlerinde oluşabilecek klikler önlendi.
     5. Content-Security-Policy (CSP) güncellenerek `blob:` script kaynaklarına tam yetki verildi.
 
+## GTCRN 2024 Derin Öğrenme Konuşma İyileştirme Motoruna Geçiş (v0.1.24)
+
+- [x] **2017 RNNoise Yerine 2024 GTCRN (Grouped Temporal Convolutional Recurrent Network) Entegre Edildi:**
+  - *Geliştirme:* RNNoise modelinin hafif kalan 15-20 dB'lik gürültü zayıflatması yerine, Microsoft DNS Challenge veri kümesinde eğitilmiş en son teknoloji **GTCRN 2024** (`gtcrn.wasm`) derin öğrenme mimarisi devreye alındı.
+  - *Mekanizma:*
+    1. GTCRN, frekans-zaman karmaşık kısa zamanlı Fourier dönüşümü (STFT + GRU + Convolution) kullanarak arka plan fan, klima, mekanik klavye ve oda gürültülerini çok daha agresif ve temiz şekilde yok ederken insan konuşma formantsal özelliklerini berrak tutar.
+    2. Doğrudan `AudioWorklet` üzerinde sıfır gecikmeyle (128 kuantum) çalışmaya devam eder.
+    3. Olası bir platform uyumsuzluğunda otomatik olarak SIMD RNNoise'a geri dönecek (fallback) dayanıklı mimari korundu.
+
+
 
 
