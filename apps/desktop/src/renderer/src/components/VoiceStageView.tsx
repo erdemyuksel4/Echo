@@ -428,6 +428,7 @@ export const VoiceStageView: React.FC<Props> = ({ channel }) => {
     cameraStreams,
     pingMs,
     setDiagnosticsOpen,
+    isSelfLoopbackActive,
   } = useVoiceStore();
 
   const { isSharing, stopSharing, activeShares } = useScreenShareStore();
@@ -550,6 +551,29 @@ export const VoiceStageView: React.FC<Props> = ({ channel }) => {
             </button>
           )}
 
+          {/* Self Loopback Test Button */}
+          {isCurrentChannel && (
+            <button
+              type="button"
+              onClick={() => webrtcService.toggleSelfLoopback()}
+              className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition border ${
+                isSelfLoopbackActive
+                  ? 'bg-amber-500/20 text-amber-400 border-amber-500/40 hover:bg-amber-500/30'
+                  : 'text-slate-300 hover:bg-slate-800 hover:text-amber-400 border-slate-800'
+              }`}
+              title={
+                isSelfLoopbackActive
+                  ? 'Ağ & Ses Test Modu AÇIK (Sesinizi dinliyorsunuz)'
+                  : 'Ağ & Ses Test Modu (Kendi sesinizi Opus kodeki ve filtreyle test edin)'
+              }
+            >
+              <Radio className={`h-4 w-4 ${isSelfLoopbackActive ? 'animate-pulse text-amber-400' : ''}`} />
+              <span className="hidden sm:inline">
+                {isSelfLoopbackActive ? 'Test Açık' : 'Ses Testi'}
+              </span>
+            </button>
+          )}
+
           {/* Fullscreen Button */}
           <button
             type="button"
@@ -585,7 +609,36 @@ export const VoiceStageView: React.FC<Props> = ({ channel }) => {
             </button>
           </div>
         ) : (
-          <div className={`grid w-full gap-3.5 my-auto ${gridLayoutClass}`}>
+          <>
+            {isCurrentChannel && participants.length <= 1 && (
+              <div className="w-full max-w-xl mx-auto mb-3 px-3.5 py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between text-xs text-amber-200 shadow-sm shrink-0">
+                <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                  <Radio className={`h-4 w-4 shrink-0 ${isSelfLoopbackActive ? 'text-amber-400 animate-pulse' : 'text-amber-500'}`} />
+                  <div className="text-[11px] leading-snug">
+                    <span className="font-bold text-amber-300">
+                      {isSelfLoopbackActive ? 'Ağ & Ses Test Modu Aktif: ' : 'Kanalda Yalnızsınız: '}
+                    </span>
+                    <span>
+                      {isSelfLoopbackActive
+                        ? 'Mikrofona konuşarak derin öğrenme gürültü engellemeyi (GTCRN) ve Opus ses kalitesini kulaklığınızda canlı dinleyebilirsiniz.'
+                        : 'Arkadaşınızı beklemeden sesinizi ve gürültü engellemeyi test etmek için Ağ Test Modunu açabilirsiniz.'}
+                    </span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => webrtcService.toggleSelfLoopback()}
+                  className={`shrink-0 px-3 py-1 rounded-lg text-xs font-bold transition shadow cursor-pointer ${
+                    isSelfLoopbackActive
+                      ? 'bg-amber-500 text-slate-950 hover:bg-amber-400'
+                      : 'bg-amber-500/20 text-amber-300 border border-amber-500/40 hover:bg-amber-500/30'
+                  }`}
+                >
+                  {isSelfLoopbackActive ? 'Testi Kapat' : 'Test Modunu Aç'}
+                </button>
+              </div>
+            )}
+            <div className={`grid w-full gap-3.5 my-auto ${gridLayoutClass}`}>
             {/* Screen share tiles in stage center */}
             {effectiveShares.map((s) => (
               <ScreenShareTile
@@ -622,6 +675,7 @@ export const VoiceStageView: React.FC<Props> = ({ channel }) => {
               );
             })}
           </div>
+        </>
         )}
       </div>
 
@@ -693,6 +747,27 @@ export const VoiceStageView: React.FC<Props> = ({ channel }) => {
                   <Headphones className="h-4 w-4 text-indigo-400" />
                 )}
                 <span className="hidden sm:inline">{isDeafened ? 'Sağır' : 'Kulaklık'}</span>
+              </button>
+
+              {/* Loopback Test Mode Button */}
+              <button
+                type="button"
+                onClick={() => webrtcService.toggleSelfLoopback()}
+                className={`flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs font-semibold transition border ${
+                  isSelfLoopbackActive
+                    ? 'bg-amber-500 text-slate-950 border-amber-400 hover:bg-amber-400 shadow-sm shadow-amber-500/30 font-bold'
+                    : 'bg-slate-900 text-slate-300 border-slate-800 hover:bg-slate-800 hover:text-white'
+                }`}
+                title={
+                  isSelfLoopbackActive
+                    ? 'Ağ & Ses Test Modu AÇIK (Kendi sesinizi Opus + Gürültü Engelleme ile duyuyorsunuz)'
+                    : 'Ağ & Ses Test Modu (Kanalda sesinizi ve gürültü engellemeyi tek başınıza test edin)'
+                }
+              >
+                <Radio className={`h-4 w-4 ${isSelfLoopbackActive ? 'animate-pulse text-slate-950' : 'text-amber-400'}`} />
+                <span className="hidden sm:inline">
+                  {isSelfLoopbackActive ? 'Ağ Testi Açık' : 'Ses Testi'}
+                </span>
               </button>
 
               <div className="h-6 w-px bg-slate-800 mx-1" />

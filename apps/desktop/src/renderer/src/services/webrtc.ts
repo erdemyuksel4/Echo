@@ -93,6 +93,11 @@ class WebRTCVoiceService {
   private testMicStream: MediaStream | null = null;
   private testMicAudioEl: HTMLAudioElement | null = null;
 
+  // Real WebRTC Network Loopback Test (Self-Voice Echo)
+  private loopbackSenderPc: RTCPeerConnection | null = null;
+  private loopbackReceiverPc: RTCPeerConnection | null = null;
+  private loopbackAudioEl: HTMLAudioElement | null = null;
+
   async init(): Promise<void> {
     await iceServersService.fetchIceServers();
     this.iceServers = iceServersService.getIceServers();
@@ -208,6 +213,11 @@ class WebRTCVoiceService {
 
       // Connection safety gate: only mark connected if alone or once peer connection is up
       this.updateConnectionStatusGate();
+
+      // If self loopback test mode is active, start real WebRTC loopback immediately
+      if (useVoiceStore.getState().isSelfLoopbackActive) {
+        void this.startLoopbackTest();
+      }
     } catch (err) {
       console.error('Failed to get user media or join voice channel:', err);
       this.leave();
@@ -256,6 +266,9 @@ class WebRTCVoiceService {
       clearInterval(this.diagnosticsInterval);
       this.diagnosticsInterval = null;
     }
+
+    // Stop WebRTC loopback test if running
+    this.stopLoopbackTest();
 
     // Stop local stream tracks
     if (this.localStream) {
@@ -1291,6 +1304,10 @@ class WebRTCVoiceService {
       this.updateAudioTrackState();
       this.setupVAD(this.localStream);
 
+      if (useVoiceStore.getState().isSelfLoopbackActive) {
+        void this.restartLoopbackTest();
+      }
+
       rawTrack.onended = () => {
         if (this.currentChannelId) {
           void this.reacquireLocalAudio();
@@ -1393,6 +1410,17 @@ class WebRTCVoiceService {
         console.warn('Failed to setSinkId on test mic audio element:', err);
       }
     }
+
+    if (
+      this.loopbackAudioEl &&
+      typeof (this.loopbackAudioEl as unknown as { setSinkId?: (id: string) => Promise<void> }).setSinkId === 'function'
+    ) {
+      try {
+        await (this.loopbackAudioEl as unknown as { setSinkId: (id: string) => Promise<void> }).setSinkId(sinkId);
+      } catch (err) {
+        console.warn('Failed to setSinkId on loopback test audio element:', err);
+      }
+    }
   }
 
   setOutputVolume(volume: number): void {
@@ -1402,6 +1430,9 @@ class WebRTCVoiceService {
     });
     if (this.testMicAudioEl) {
       this.testMicAudioEl.volume = this.outputVolume;
+    }
+    if (this.loopbackAudioEl) {
+      this.loopbackAudioEl.volume = this.outputVolume;
     }
   }
 
@@ -1415,6 +1446,121 @@ class WebRTCVoiceService {
 
   getOutputDeviceId(): string | null {
     return this.selectedOutputDeviceId;
+  }
+
+  async startLoopbackTest(): Promise<void> {
+    if (this.loopbackSenderPc) return;
+    if (!this.localStream) return;
+
+    const audioTrack = this.localStream.getAudioTracks()[0];
+    if (!audioTrack) return;
+
+    try {
+      const pc1 = new RTCPeerConnection({ iceServers: [] });
+      const pc2 = new RTCPeerConnection({ iceServers: [] });
+
+      pc1.onicecandidate = (e) => {
+        if (e.candidate) {
+          void pc2.addIceCandidate(e.candidate).catch(() => {});
+        }
+      };
+      pc2.onicecandidate = (e) => {
+        if (e.candidate) {
+          void pc1.addIceCandidate(e.candidate).catch(() => {});
+        }
+      };
+
+      pc2.ontrack = (event) => {
+        let audio = this.loopbackAudioEl;
+        if (!audio) {
+          audio = new Audio();
+          audio.setAttribute('data-echo-loopback-test', 'true');
+          audio.autoplay = true;
+          audio.style.display = 'none';
+          document.body.appendChild(audio);
+          this.loopbackAudioEl = audio;
+        }
+        audio.srcObject = event.streams[0] ?? new MediaStream([event.track]);
+        audio.volume = this.outputVolume;
+
+        if (
+          this.selectedOutputDeviceId &&
+          typeof (audio as unknown as { setSinkId?: (id: string) => Promise<void> }).setSinkId === 'function'
+        ) {
+          const sinkId = this.selectedOutputDeviceId === 'default' ? '' : this.selectedOutputDeviceId;
+          void (audio as unknown as { setSinkId: (id: string) => Promise<void> })
+            .setSinkId(sinkId)
+            .catch(() => {});
+        }
+
+        void audio.play().catch((e) => console.warn('[Echo WebRTC] Loopback audio play prevented:', e));
+      };
+
+      pc1.addTrack(audioTrack, this.localStream);
+
+      const offer = await pc1.createOffer();
+      await pc1.setLocalDescription(offer);
+      await pc2.setRemoteDescription(offer);
+
+      const answer = await pc2.createAnswer();
+      await pc2.setLocalDescription(answer);
+      await pc1.setRemoteDescription(answer);
+
+      this.loopbackSenderPc = pc1;
+      this.loopbackReceiverPc = pc2;
+      console.log('[Echo WebRTC] Real WebRTC network loopback test started.');
+    } catch (err) {
+      console.warn('[Echo WebRTC] Failed to start WebRTC loopback test:', err);
+      this.stopLoopbackTest();
+    }
+  }
+
+  stopLoopbackTest(): void {
+    if (this.loopbackAudioEl) {
+      this.loopbackAudioEl.srcObject = null;
+      this.loopbackAudioEl.remove();
+      this.loopbackAudioEl = null;
+    }
+    if (this.loopbackSenderPc) {
+      try {
+        this.loopbackSenderPc.close();
+      } catch {
+        // Ignore
+      }
+      this.loopbackSenderPc = null;
+    }
+    if (this.loopbackReceiverPc) {
+      try {
+        this.loopbackReceiverPc.close();
+      } catch {
+        // Ignore
+      }
+      this.loopbackReceiverPc = null;
+    }
+    console.log('[Echo WebRTC] Real WebRTC network loopback test stopped.');
+  }
+
+  async restartLoopbackTest(): Promise<void> {
+    this.stopLoopbackTest();
+    if (useVoiceStore.getState().isSelfLoopbackActive && this.localStream) {
+      await this.startLoopbackTest();
+    }
+  }
+
+  setSelfLoopbackActive(active: boolean): void {
+    useVoiceStore.getState().setSelfLoopbackActive(active);
+    if (active) {
+      if (this.currentChannelId && this.localStream) {
+        void this.startLoopbackTest();
+      }
+    } else {
+      this.stopLoopbackTest();
+    }
+  }
+
+  toggleSelfLoopback(): void {
+    const isNowActive = !useVoiceStore.getState().isSelfLoopbackActive;
+    this.setSelfLoopbackActive(isNowActive);
   }
 
   testMicrophone(

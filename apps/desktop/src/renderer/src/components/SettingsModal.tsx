@@ -89,8 +89,14 @@ export const SettingsModal: React.FC<Props> = ({ isOpen, onClose, initialTab = '
   const [isTestingCamera, setIsTestingCamera] = useState(false);
   const testVideoRef = useRef<HTMLVideoElement | null>(null);
 
-  const { inputMode, pttKeyDisplay, pttReleaseDelay, setInputMode, setPttReleaseDelay } =
-    useVoiceStore();
+  const {
+    inputMode,
+    pttKeyDisplay,
+    pttReleaseDelay,
+    setInputMode,
+    setPttReleaseDelay,
+    isSelfLoopbackActive,
+  } = useVoiceStore();
 
   const [isRecordingPttKey, setIsRecordingPttKey] = useState(false);
   const [autoStartEnabled, setAutoStartEnabled] = useState(false);
@@ -475,6 +481,39 @@ export const SettingsModal: React.FC<Props> = ({ isOpen, onClose, initialTab = '
                         <span
                           className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
                             loopbackEnabled ? 'translate-x-6' : 'translate-x-1'
+                          }`}
+                        />
+                      </button>
+                    </div>
+
+                    {/* In-Channel WebRTC Loopback Test Mode Toggle */}
+                    <div className="flex items-center justify-between rounded-lg bg-amber-950/20 border border-amber-500/30 p-3">
+                      <div className="flex items-center gap-2.5 pr-2">
+                        <Radio className={`h-4 w-4 shrink-0 ${isSelfLoopbackActive ? 'text-amber-400 animate-pulse' : 'text-amber-500'}`} />
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-semibold text-white">Kanal İçi Ses &amp; Ağ Test Modu</span>
+                            {isSelfLoopbackActive && (
+                              <span className="rounded bg-amber-500/20 px-1.5 py-0.2 text-[9px] font-bold text-amber-300 border border-amber-500/30">
+                                AÇIK
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[11px] text-slate-400 mt-0.5">
+                            Kanala katıldığınızda sesinizi gerçek WebRTC ağı ve Opus kodekinden geçirerek size yansıtır. Arkadaşınıza ihtiyaç duymadan gürültü filtresini test edebilirsiniz.
+                          </div>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => webrtcService.toggleSelfLoopback()}
+                        className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${
+                          isSelfLoopbackActive ? 'bg-amber-500 shadow-sm shadow-amber-500/50' : 'bg-slate-700'
+                        }`}
+                      >
+                        <span
+                          className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                            isSelfLoopbackActive ? 'translate-x-6' : 'translate-x-1'
                           }`}
                         />
                       </button>

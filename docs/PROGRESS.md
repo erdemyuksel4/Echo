@@ -591,6 +591,20 @@ Bu dosya her faz ve görev sonunda güncellenir.
     2. Doğrudan `AudioWorklet` üzerinde sıfır gecikmeyle (128 kuantum) çalışmaya devam eder.
     3. Olası bir platform uyumsuzluğunda otomatik olarak SIMD RNNoise'a geri dönecek (fallback) dayanıklı mimari korundu.
 
+## WebRTC Ağ & Ses Test Modu (Kanal İçi Yalnız Test Desteği) (v0.1.25)
+
+- [x] **Ses Kanalı İçi Gerçek WebRTC Ağ Loopback Test Sistemi:**
+  - *Gereksinim:* Kullanıcının mikrofon kalitesini, Opus kodek sıkıştırmasını ve GTCRN derin öğrenme gürültü engellemesini test etmek için ikinci bir kullanıcıya ihtiyaç duymadan, kanalda yalnızken gerçekçi ağ ortamında sesini anlık duyabilmesi.
+  - *Mimari:*
+    1. İki bağımsız `RTCPeerConnection` (`loopbackSenderPc` -> `loopbackReceiverPc`) ile yerel ICE yönlendirmesi kuruldu.
+    2. Mikrofon sinyali `getUserMedia` -> AudioWorklet (GTCRN / RNNoise) -> WebRTC Opus Encoder -> RTP Paketleme -> Ağ İletimi -> WebRTC Opus Decoder -> Çıkış Ses Kartı zincirinden geçirilir.
+    3. Kullanıcı, Discord veya karşı taraftaki herhangi bir dinleyicinin duyduğu sesin %100 birebir kopyasını 20-30 ms gerçekçi gecikmeyle kendi kulaklığında dinleyebilir.
+- [x] **Kullanıcı Deneyimi & UI Entegrasyonu:**
+  - `VoicePanel`: Ses paneline ve durum satırına animasyonlu "Ağ Test Modu" butonu ve rozeti eklendi.
+  - `VoiceStageView`: Kanal sahnesinin üst çubuğuna, alt yüzen araç çubuğuna ve kanalda kimse yokken tek tıkla testi başlatan bilgilendirme banner'ı eklendi.
+  - `SettingsModal`: Ayarlar -> Ses & Donanım sekmesine "Kanal İçi Ses & Ağ Test Modu" kontrol anahtarı eklendi.
+  - Tercihler `localStorage` üzerinde saklanarak kanal geçişlerinde ve oturumlarda korunur.
+
 
 
 

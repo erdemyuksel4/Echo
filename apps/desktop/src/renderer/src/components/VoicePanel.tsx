@@ -10,6 +10,7 @@ import {
   MonitorOff,
   Video,
   VideoOff,
+  Radio,
 } from 'lucide-react';
 import { UserAudioState } from '@echo/shared';
 import { useChatStore } from '../stores/useChatStore';
@@ -32,6 +33,7 @@ export const VoicePanel: React.FC = () => {
     localAudioLevel,
     isMicUnavailable,
     setDiagnosticsOpen,
+    isSelfLoopbackActive,
   } = useVoiceStore();
 
   const { isSharing, viewerCount, stopSharing } = useScreenShareStore();
@@ -105,6 +107,11 @@ export const VoicePanel: React.FC = () => {
                     {pingMs}ms
                   </span>
                 )}
+                {isSelfLoopbackActive && (
+                  <span className="rounded bg-amber-500/20 px-1.5 py-0.2 text-[9px] font-bold text-amber-300 border border-amber-500/30 animate-pulse">
+                    AĞ TESTİ
+                  </span>
+                )}
               </div>
               <div
                 className="truncate text-[11px] text-slate-400 font-medium"
@@ -133,6 +140,23 @@ export const VoicePanel: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-1">
+            {/* Self Loopback Test Mode button */}
+            <button
+              onClick={() => webrtcService.toggleSelfLoopback()}
+              className={`rounded p-1.5 transition ${
+                isSelfLoopbackActive
+                  ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40 hover:bg-amber-500/30'
+                  : 'text-slate-400 hover:bg-slate-800 hover:text-amber-400'
+              }`}
+              title={
+                isSelfLoopbackActive
+                  ? 'Ağ & Ses Test Modu AÇIK (Kendi sesinizi Opus kodeki ve yapay zeka filtresiyle duyuyorsunuz)'
+                  : 'Ağ & Ses Test Modu (Kanalda tek başınıza sesinizi ve gürültü engellemeyi test edin)'
+              }
+            >
+              <Radio className={`h-4 w-4 ${isSelfLoopbackActive ? 'animate-pulse text-amber-400' : ''}`} />
+            </button>
+
             {/* Diagnostics modal button */}
             <button
               onClick={() => setDiagnosticsOpen(true)}
