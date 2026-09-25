@@ -571,7 +571,16 @@ Bu dosya her faz ve görev sonunda güncellenir.
   - *Kök Neden:* RNNoise sinir ağı zaten frekans spektrumunda dip gürültülerini ve klavye seslerini doğrudan yok etmektedir. Ancak üzerine eklenen deneysel VAD kapısı (`targetGain = vadProb < 0.05 ? 0.0 : ...`), Türkçe konuşmadaki sessiz harflerde (/p/, /t/, /k/, /s/, /ş/ gibi patlamalı ve sürtünmeli ünsüzler ile hece araları) VAD olasılığı 0.05'in altına düştüğü anda ses sinyalini her hecede aniden kısıp açıyordu. Bu durum konuşma sırasında karşı tarafa sürekli "pıt-pıt / çıt-çıt" şeklinde genlik modülasyonu paraziti olarak yansıyordu.
   - *Çözüm:*
     1. Yapay VAD ses kapısı kaldırıldı; RNNoise'un derin öğrenme nöral filtresinin doğrudan temiz konuşma çıkışı alındı. Sessiz harfler ve hece araları kesintisiz, doğal akışına kavuştu.
-    2. DAC/WebAudio tavanını aşabilecek olası transient taşmaları için yumuşak sınırlayıcı (soft clamp `[-1.0, 1.0]`) eklendi, dijital tepe kırpılmaları sıfırlandı.
-    3. Halka kuyruk (ring buffer) ilk yükleme tamponu (priming) 2048 örneğe (42.6 ms) yükseltildi; Garbage Collection veya UI iş parçacığı gecikmelerinde arabellek boşalması (underrun) riski tamamen ortadan kaldırıldı.
+## RNNoise Gerçek Zamanlı AudioWorklet Mimarisine Geçiş (v0.1.23)
+
+- [x] **ScriptProcessorNode Yerine Native SIMD AudioWorklet Entegrasyonu Yapıldı:**
+  - *Kök Neden:* Eski `ScriptProcessorNode` yapısı tarayıcının ana UI iş parçacığında çalıştığı için kullanıcı konuştuğu anda devreye giren React avatar konuşma halkaları, ses seviye animasyonları ve WebRTC tanılama sorguları (10-25 ms) ana iş parçacığını anlık meşgul ediyor, `MediaStreamDestination` tamponu gecikip arabellek boşalması (underrun) yaşayarak karşı tarafa ritmik "pıt-pıt" klikleri üretiyordu.
+  - *Çözüm:*
+    1. RNNoise sinir ağı doğrudan işletim sisteminin yüksek öncelikli **gerçek zamanlı ses iş parçacığına (AudioWorklet)** taşındı.
+    2. `@sapphi-red/web-noise-suppressor` kütüphanesinin `RnnoiseWorkletNode` motoru ve SIMD donanım hızlandırmalı `rnnoise_simd.wasm` modülü devreye alındı.
+    3. UI iş yükleri veya React render döngülerinden %100 izole edildi; ses işleme 128 örnek (2.66 ms) kuantum ile sıfır takılmayla kesintisiz akmaya başladı.
+    4. Canlı açma/kapama için çift `GainNode` üzerinden 15 ms üstel yumuşak geçiş (crossfade) uygulanarak filtre değişimlerinde oluşabilecek klikler önlendi.
+    5. Content-Security-Policy (CSP) güncellenerek `blob:` script kaynaklarına tam yetki verildi.
+
 
 

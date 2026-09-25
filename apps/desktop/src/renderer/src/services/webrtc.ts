@@ -98,7 +98,7 @@ class WebRTCVoiceService {
     this.iceServers = iceServersService.getIceServers();
 
     // Pre-load RNNoise AI neural network WASM in the background
-    void getRnnoise().catch((err) => {
+    void getRnnoise().catch((err: unknown) => {
       console.warn('[Echo WebRTC] RNNoise preloading warning:', err);
     });
 
