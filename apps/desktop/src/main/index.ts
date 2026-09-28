@@ -201,6 +201,23 @@ if (!gotTheLock) {
       );
     });
 
+    // Ensure YouTube requests always include valid Referer and Origin headers in Electron (Fixes Error 153)
+    session.defaultSession.webRequest.onBeforeSendHeaders(
+      {
+        urls: [
+          '*://*.youtube.com/*',
+          '*://*.youtube-nocookie.com/*',
+          '*://*.googlevideo.com/*',
+          '*://*.ytimg.com/*',
+        ],
+      },
+      (details, callback) => {
+        details.requestHeaders['Referer'] = 'https://www.youtube.com/';
+        details.requestHeaders['Origin'] = 'https://www.youtube.com';
+        callback({ cancel: false, requestHeaders: details.requestHeaders });
+      },
+    );
+
     app.on('browser-window-created', (_, window) => {
       optimizer.watchWindowShortcuts(window);
     });

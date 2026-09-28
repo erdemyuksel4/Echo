@@ -11,6 +11,7 @@ declare global {
         elementId: string | HTMLElement,
         options: {
           videoId?: string;
+          host?: string;
           playerVars?: Record<string, unknown>;
           events?: {
             onReady?: (event: { target: YTPlayerInstance }) => void;
@@ -142,12 +143,9 @@ export const MusicPlayerWidget: React.FC = () => {
 
         lastLoadedTrackIdRef.current = trackId;
 
-        const origin = window.location.protocol.startsWith('http')
-          ? window.location.origin
-          : 'https://www.youtube.com';
-
         playerRef.current = new window.YT.Player(playerDiv, {
           videoId: trackId,
+          host: 'https://www.youtube-nocookie.com',
           playerVars: {
             autoplay: 1,
             controls: 1,
@@ -157,7 +155,8 @@ export const MusicPlayerWidget: React.FC = () => {
             rel: 0,
             enablejsapi: 1,
             playsinline: 1,
-            origin: origin,
+            origin: 'https://www.youtube.com',
+            widget_referrer: 'https://www.youtube.com',
           },
           events: {
             onReady: (event) => {
@@ -199,6 +198,14 @@ export const MusicPlayerWidget: React.FC = () => {
             },
           },
         });
+
+        setTimeout(() => {
+          const iframe = containerRef.current?.querySelector('iframe');
+          if (iframe) {
+            iframe.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin');
+            iframe.setAttribute('allow', 'autoplay; encrypted-media; picture-in-picture');
+          }
+        }, 50);
       } catch (e) {
         console.error('Failed to create YT.Player instance:', e);
         isCreatingRef.current = false;
