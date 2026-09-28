@@ -244,17 +244,27 @@ export const MusicModal: React.FC = () => {
               {currentTrack ? (
                 <div className="w-full flex flex-col items-center">
                   {/* Thumbnail / Art */}
-                  <div className="relative group w-48 h-28 md:w-64 md:h-36 rounded-xl overflow-hidden shadow-2xl border border-slate-700 bg-black mb-4">
+                  <div className="relative group w-48 h-28 md:w-64 md:h-36 rounded-xl overflow-hidden shadow-2xl border border-slate-700 bg-black mb-4 cursor-pointer">
                     <img
                       src={currentTrack.thumbnailUrl}
                       alt={currentTrack.title}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                     />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent flex items-end p-2.5">
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent flex items-end p-2.5 pointer-events-none">
                       <span className="text-[10px] text-indigo-300 font-mono">
                         Ekleyen: {currentTrack.addedByName}
                       </span>
                     </div>
+                    <button
+                      type="button"
+                      onClick={() => setExpandedStage(!isExpandedStage)}
+                      className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity"
+                    >
+                      <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-xs font-semibold shadow-lg">
+                        <Maximize2 className="h-3.5 w-3.5" />
+                        {isExpandedStage ? 'Videoyu Gizle' : 'Videoyu Aç (PiP)'}
+                      </span>
+                    </button>
                   </div>
 
                   {/* Title & Author */}

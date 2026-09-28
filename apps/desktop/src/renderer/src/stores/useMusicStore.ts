@@ -23,15 +23,22 @@ export const useMusicStore = create<MusicStoreState>((set, get) => ({
   volume: isNaN(SAVED_VOLUME) ? 75 : Math.max(0, Math.min(100, SAVED_VOLUME)),
   isMuted: false,
   isPanelOpen: false,
-  isExpandedStage: false,
+  isExpandedStage: true,
 
   setPlaybackState: (state) =>
-    set((prev) => ({
-      playbackStates: {
-        ...prev.playbackStates,
-        [state.channelId]: state,
-      },
-    })),
+    set((prev) => {
+      const prevTrack = prev.playbackStates[state.channelId]?.currentTrack;
+      const isNewSong = state.currentTrack && state.currentTrack.id !== prevTrack?.id;
+      const shouldExpand = isNewSong && state.status === 'playing' ? true : prev.isExpandedStage;
+
+      return {
+        isExpandedStage: shouldExpand,
+        playbackStates: {
+          ...prev.playbackStates,
+          [state.channelId]: state,
+        },
+      };
+    }),
 
   setVolume: (volume) => {
     const clamped = Math.max(0, Math.min(100, volume));

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { Music, Minimize2, ExternalLink } from 'lucide-react';
+import { Music, Minimize2, Maximize2, ExternalLink, Play, Pause, SkipForward } from 'lucide-react';
 import { useMusicStore } from '../../stores/useMusicStore';
 import { useVoiceStore } from '../../stores/useVoiceStore';
 import { wsService } from '../../services/websocket';
@@ -40,6 +40,9 @@ interface YTPlayerInstance {
   cueVideoById: (options: string | { videoId: string; startSeconds?: number }) => void;
   setVolume: (volume: number) => void;
   getVolume: () => number;
+  unMute: () => void;
+  mute: () => void;
+  isMuted: () => boolean;
   getCurrentTime: () => number;
   getPlayerState: () => number;
   destroy: () => void;
@@ -50,6 +53,7 @@ export const MusicPlayerWidget: React.FC = () => {
   const playerRef = useRef<YTPlayerInstance | null>(null);
   const isReadyRef = useRef(false);
   const lastLoadedTrackIdRef = useRef<string | null>(null);
+  const isCreatingRef = useRef(false);
 
   const { currentChannelId } = useVoiceStore();
   const playbackState = useMusicStore((state) =>
@@ -70,96 +74,139 @@ export const MusicPlayerWidget: React.FC = () => {
   // 1. Load YouTube IFrame API script once
   useEffect(() => {
     if (!window.YT) {
-      const tag = document.createElement('script');
-      tag.src = 'https://www.youtube.com/iframe_api';
-      const firstScriptTag = document.getElementsByTagName('script')[0];
-      firstScriptTag?.parentNode?.insertBefore(tag, firstScriptTag);
+      const existingScript = document.querySelector('script[src*="youtube.com/iframe_api"]');
+      if (!existingScript) {
+        const tag = document.createElement('script');
+        tag.src = 'https://www.youtube.com/iframe_api';
+        const firstScriptTag = document.getElementsByTagName('script')[0];
+        firstScriptTag?.parentNode?.insertBefore(tag, firstScriptTag);
+      }
     }
   }, []);
 
-  // 2. Initialize Player instance when YT is ready
+  // 2. Initialize or Update Player whenever trackId changes
   useEffect(() => {
-    let checkInterval: ReturnType<typeof setInterval> | null = null;
+    if (!trackId || !currentChannelId) {
+      if (playerRef.current && isReadyRef.current) {
+        try {
+          playerRef.current.pauseVideo();
+        } catch {
+          // ignore
+        }
+      }
+      return;
+    }
 
-    const initPlayer = () => {
-      if (!window.YT?.Player || !containerRef.current || playerRef.current) return;
+    // Helper to compute start seconds
+    const elapsed = status === 'playing' ? (Date.now() - lastUpdatedTimestamp) / 1000 : 0;
+    const startSec = Math.max(0, positionSeconds + elapsed);
 
-      const playerId = `yt-player-${Math.random().toString(36).substring(2, 9)}`;
-      const playerDiv = document.createElement('div');
-      playerDiv.id = playerId;
-      containerRef.current.innerHTML = '';
-      containerRef.current.appendChild(playerDiv);
+    // If player already exists and is ready
+    if (playerRef.current && isReadyRef.current) {
+      if (trackId !== lastLoadedTrackIdRef.current) {
+        lastLoadedTrackIdRef.current = trackId;
+        try {
+          playerRef.current.loadVideoById({
+            videoId: trackId,
+            startSeconds: Math.floor(startSec),
+          });
+          playerRef.current.unMute();
+          playerRef.current.setVolume(isMuted ? 0 : volume);
+          if (status === 'playing') {
+            playerRef.current.playVideo();
+          } else {
+            playerRef.current.pauseVideo();
+          }
+        } catch (err) {
+          console.warn('loadVideoById failed:', err);
+        }
+      }
+      return;
+    }
 
-      playerRef.current = new window.YT.Player(playerDiv, {
-        videoId: trackId || '',
-        playerVars: {
-          autoplay: 1,
-          controls: 1,
-          disablekb: 0,
-          fs: 1,
-          modestbranding: 1,
-          rel: 0,
-          origin: window.location.origin,
-        },
-        events: {
-          onReady: (event) => {
-            isReadyRef.current = true;
-            event.target.setVolume(isMuted ? 0 : volume);
-            if (status === 'playing') {
-              const elapsed = (Date.now() - lastUpdatedTimestamp) / 1000;
-              event.target.seekTo(Math.max(0, positionSeconds + elapsed), true);
-              event.target.playVideo();
-            }
+    // Otherwise, create the player once window.YT is ready
+    if (isCreatingRef.current) return;
+    isCreatingRef.current = true;
+
+    const setupPlayer = () => {
+      if (!window.YT?.Player || !containerRef.current) {
+        setTimeout(setupPlayer, 150);
+        return;
+      }
+
+      try {
+        containerRef.current.innerHTML = '';
+        const playerDiv = document.createElement('div');
+        playerDiv.id = `yt-player-inst-${Date.now()}`;
+        containerRef.current.appendChild(playerDiv);
+
+        lastLoadedTrackIdRef.current = trackId;
+
+        const origin = window.location.protocol.startsWith('http')
+          ? window.location.origin
+          : 'https://www.youtube.com';
+
+        playerRef.current = new window.YT.Player(playerDiv, {
+          videoId: trackId,
+          playerVars: {
+            autoplay: 1,
+            controls: 1,
+            disablekb: 0,
+            fs: 1,
+            modestbranding: 1,
+            rel: 0,
+            enablejsapi: 1,
+            playsinline: 1,
+            origin: origin,
           },
-          onStateChange: (event) => {
-            // Track ended: Auto skip to next in queue
-            if (event.data === window.YT?.PlayerState.ENDED) {
+          events: {
+            onReady: (event) => {
+              isReadyRef.current = true;
+              isCreatingRef.current = false;
+              try {
+                event.target.unMute();
+                event.target.setVolume(isMuted ? 0 : volume);
+                const currentElapsed =
+                  status === 'playing' ? (Date.now() - lastUpdatedTimestamp) / 1000 : 0;
+                event.target.seekTo(Math.max(0, positionSeconds + currentElapsed), true);
+                if (status === 'playing') {
+                  event.target.playVideo();
+                } else {
+                  event.target.pauseVideo();
+                }
+              } catch (err) {
+                console.warn('Player onReady event error:', err);
+              }
+            },
+            onStateChange: (event) => {
+              if (event.data === window.YT?.PlayerState.ENDED) {
+                if (currentChannelId) {
+                  wsService.sendMusicAction({
+                    action: 'skip',
+                    channelId: currentChannelId,
+                  });
+                }
+              }
+            },
+            onError: (err) => {
+              console.warn('YouTube player error:', err);
               if (currentChannelId) {
                 wsService.sendMusicAction({
                   action: 'skip',
                   channelId: currentChannelId,
                 });
               }
-            }
+            },
           },
-          onError: (err) => {
-            console.warn('YouTube player error:', err);
-            // Skip unplayable video
-            if (currentChannelId) {
-              wsService.sendMusicAction({
-                action: 'skip',
-                channelId: currentChannelId,
-              });
-            }
-          },
-        },
-      });
-    };
-
-    if (window.YT?.Player) {
-      initPlayer();
-    } else {
-      checkInterval = setInterval(() => {
-        if (window.YT?.Player) {
-          if (checkInterval) clearInterval(checkInterval);
-          initPlayer();
-        }
-      }, 100);
-    }
-
-    return () => {
-      if (checkInterval) clearInterval(checkInterval);
-      if (playerRef.current) {
-        try {
-          playerRef.current.destroy();
-        } catch {
-          // ignore
-        }
-        playerRef.current = null;
-        isReadyRef.current = false;
+        });
+      } catch (e) {
+        console.error('Failed to create YT.Player instance:', e);
+        isCreatingRef.current = false;
       }
     };
-  }, []);
+
+    setupPlayer();
+  }, [trackId, currentChannelId]);
 
   // 3. Pause when leaving voice channel
   useEffect(() => {
@@ -172,41 +219,22 @@ export const MusicPlayerWidget: React.FC = () => {
     }
   }, [currentChannelId]);
 
-  // 4. Sync Track ID
-  useEffect(() => {
-    if (!playerRef.current || !isReadyRef.current) return;
-
-    if (trackId && trackId !== lastLoadedTrackIdRef.current) {
-      lastLoadedTrackIdRef.current = trackId;
-      const elapsed = status === 'playing' ? (Date.now() - lastUpdatedTimestamp) / 1000 : 0;
-      const startSec = Math.max(0, positionSeconds + elapsed);
-      try {
-        playerRef.current.loadVideoById({
-          videoId: trackId,
-          startSeconds: Math.floor(startSec),
-        });
-        if (status === 'playing') {
-          playerRef.current.playVideo();
-        } else {
-          playerRef.current.pauseVideo();
-        }
-      } catch (e) {
-        console.warn('Failed to load video by id:', e);
-      }
-    }
-  }, [trackId]);
-
-  // 5. Sync Playback Status & Position
+  // 4. Sync Playback Status & Position
   useEffect(() => {
     if (!playerRef.current || !isReadyRef.current || !trackId) return;
 
     try {
       if (status === 'playing') {
-        const expectedPos = Math.max(0, positionSeconds + (Date.now() - lastUpdatedTimestamp) / 1000);
+        const expectedPos = Math.max(
+          0,
+          positionSeconds + (Date.now() - lastUpdatedTimestamp) / 1000,
+        );
         const currentPos = playerRef.current.getCurrentTime();
         if (Math.abs(currentPos - expectedPos) > 3) {
           playerRef.current.seekTo(expectedPos, true);
         }
+        playerRef.current.unMute();
+        playerRef.current.setVolume(isMuted ? 0 : volume);
         playerRef.current.playVideo();
       } else if (status === 'paused') {
         playerRef.current.pauseVideo();
@@ -219,56 +247,138 @@ export const MusicPlayerWidget: React.FC = () => {
     } catch (e) {
       console.warn('Playback sync error:', e);
     }
-  }, [status, positionSeconds, lastUpdatedTimestamp, trackId]);
+  }, [status, positionSeconds, lastUpdatedTimestamp, trackId, isMuted, volume]);
 
-  // 6. Volume & Mute Sync
+  // 5. Volume & Mute Sync
   useEffect(() => {
     if (!playerRef.current || !isReadyRef.current) return;
     try {
-      playerRef.current.setVolume(isMuted ? 0 : volume);
+      if (isMuted) {
+        playerRef.current.mute();
+      } else {
+        playerRef.current.unMute();
+        playerRef.current.setVolume(volume);
+      }
     } catch {
       // ignore
     }
   }, [volume, isMuted]);
 
-  const showFloatingPip = isExpandedStage && Boolean(currentTrack) && Boolean(currentChannelId);
+  // Clean up on unmount
+  useEffect(() => {
+    return () => {
+      if (playerRef.current) {
+        try {
+          playerRef.current.destroy();
+        } catch {
+          // ignore
+        }
+        playerRef.current = null;
+        isReadyRef.current = false;
+        isCreatingRef.current = false;
+      }
+    };
+  }, []);
+
+  const hasActiveMusic = Boolean(currentTrack) && Boolean(currentChannelId);
+  const showFloatingPip = isExpandedStage && hasActiveMusic;
 
   return (
-    <div
-      className={
-        showFloatingPip
-          ? 'fixed bottom-4 right-4 z-40 w-80 md:w-96 rounded-2xl overflow-hidden bg-slate-950 border border-indigo-500/40 shadow-2xl shadow-indigo-950/50 flex flex-col transition-all duration-300 animate-in fade-in slide-in-from-bottom-4'
-          : 'fixed -top-[9999px] -left-[9999px] w-1 h-1 opacity-0 pointer-events-none'
-      }
-    >
-      {showFloatingPip && (
-        <div className="flex items-center justify-between px-3 py-2 bg-slate-900/90 border-b border-slate-800 text-xs text-white">
-          <div className="flex items-center gap-2 min-w-0">
-            <Music className="h-3.5 w-3.5 text-indigo-400 shrink-0 animate-pulse" />
-            <span className="font-semibold truncate">{currentTrack?.title}</span>
+    <>
+      {/* Minimized Quick Audio Bar when user collapses PiP */}
+      {!isExpandedStage && hasActiveMusic && (
+        <div className="fixed bottom-4 right-4 z-40 flex items-center gap-2.5 px-4 py-2.5 rounded-2xl bg-slate-950/95 border border-indigo-500/40 shadow-2xl backdrop-blur-md text-xs text-white animate-in fade-in slide-in-from-bottom-2 select-none">
+          <Music
+            className={`h-4 w-4 ${status === 'playing' ? 'text-indigo-400 animate-pulse' : 'text-slate-400'}`}
+          />
+          <div className="flex flex-col min-w-0 max-w-[160px] md:max-w-[220px]">
+            <span className="font-bold truncate text-[11px] leading-tight text-white">
+              {currentTrack?.title}
+            </span>
+            <span className="text-[10px] text-slate-400 truncate leading-tight">
+              {currentTrack?.author}
+            </span>
           </div>
-          <div className="flex items-center gap-1 shrink-0 ml-2">
+          <div className="flex items-center gap-1 ml-1 border-l border-slate-800 pl-2">
             <button
-              onClick={() => setPanelOpen(true)}
-              className="p-1 rounded text-slate-400 hover:text-white hover:bg-slate-800"
-              title="Müzik Panelini Aç"
+              onClick={() => {
+                if (currentChannelId) {
+                  wsService.sendMusicAction({
+                    action: status === 'playing' ? 'pause' : 'resume',
+                    channelId: currentChannelId,
+                  });
+                }
+              }}
+              className="p-1 rounded-lg hover:bg-slate-800 text-slate-300 hover:text-white transition"
+              title={status === 'playing' ? 'Duraklat' : 'Oynat'}
             >
-              <ExternalLink className="h-3.5 w-3.5" />
+              {status === 'playing' ? (
+                <Pause className="h-3.5 w-3.5" />
+              ) : (
+                <Play className="h-3.5 w-3.5" />
+              )}
             </button>
             <button
-              onClick={() => setExpandedStage(false)}
-              className="p-1 rounded text-slate-400 hover:text-white hover:bg-slate-800"
-              title="Videoyu Gizle (Arka planda çalmaya devam eder)"
+              onClick={() => {
+                if (currentChannelId) {
+                  wsService.sendMusicAction({ action: 'skip', channelId: currentChannelId });
+                }
+              }}
+              className="p-1 rounded-lg hover:bg-slate-800 text-slate-300 hover:text-white transition"
+              title="Sonraki Şarkı"
             >
-              <Minimize2 className="h-3.5 w-3.5" />
+              <SkipForward className="h-3.5 w-3.5" />
+            </button>
+            <button
+              onClick={() => setExpandedStage(true)}
+              className="p-1 rounded-lg hover:bg-slate-800 text-indigo-400 hover:text-indigo-300 transition"
+              title="Videoyu Aç"
+            >
+              <Maximize2 className="h-3.5 w-3.5" />
             </button>
           </div>
         </div>
       )}
 
-      <div className={showFloatingPip ? 'w-full aspect-video bg-black' : 'w-full h-full'}>
-        <div ref={containerRef} className="w-full h-full" />
+      {/* Main YouTube Container */}
+      <div
+        className={
+          showFloatingPip
+            ? 'fixed bottom-4 right-4 z-40 w-80 md:w-96 rounded-2xl overflow-hidden bg-slate-950 border border-indigo-500/40 shadow-2xl shadow-indigo-950/50 flex flex-col transition-all duration-300 animate-in fade-in slide-in-from-bottom-4'
+            : hasActiveMusic
+              ? 'fixed bottom-24 right-4 w-72 h-44 opacity-0 pointer-events-none -z-10'
+              : 'fixed -top-[9999px] -left-[9999px] w-1 h-1 opacity-0 pointer-events-none'
+        }
+      >
+        {showFloatingPip && (
+          <div className="flex items-center justify-between px-3 py-2 bg-slate-900/90 border-b border-slate-800 text-xs text-white">
+            <div className="flex items-center gap-2 min-w-0">
+              <Music className="h-3.5 w-3.5 text-indigo-400 shrink-0 animate-pulse" />
+              <span className="font-semibold truncate">{currentTrack?.title}</span>
+            </div>
+            <div className="flex items-center gap-1 shrink-0 ml-2">
+              <button
+                onClick={() => setPanelOpen(true)}
+                className="p-1 rounded text-slate-400 hover:text-white hover:bg-slate-800"
+                title="Müzik Panelini Aç"
+              >
+                <ExternalLink className="h-3.5 w-3.5" />
+              </button>
+              <button
+                onClick={() => setExpandedStage(false)}
+                className="p-1 rounded text-slate-400 hover:text-white hover:bg-slate-800"
+                title="Videoyu Gizle (Arka planda ses çalmaya devam eder)"
+              >
+                <Minimize2 className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </div>
+        )}
+
+        <div className={showFloatingPip ? 'w-full aspect-video bg-black' : 'w-full h-full'}>
+          <div ref={containerRef} className="w-full h-full" />
+        </div>
       </div>
-    </div>
+    </>
   );
 };

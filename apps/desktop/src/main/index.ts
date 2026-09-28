@@ -22,6 +22,9 @@ import { initAutoUpdater } from './updater';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
+// Allow autoplay with sound without requiring a direct user gesture inside iframes
+app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
+
 // Custom profile support for multi-user simulation (e.g. --profile=user2 or ECHO_PROFILE=user2)
 const profileArg = process.argv.find((a) => a.startsWith('--profile='));
 const profileName = process.env.ECHO_PROFILE || (profileArg ? profileArg.split('=')[1] : undefined);
