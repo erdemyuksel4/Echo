@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   CornerUpLeft,
   Pencil,
@@ -16,6 +16,7 @@ import {
   type Attachment,
   parseMarkdownTokens,
   type MarkdownToken,
+  extractMediaUrls,
 } from '@echo/shared';
 import { useAuthStore } from '../stores/useAuthStore';
 import { useChatStore } from '../stores/useChatStore';
@@ -172,6 +173,14 @@ export const ChatMessageItem: React.FC<Props> = ({
 
   const isAuthor = identity?.userId === message.authorId;
   const canDelete = isAuthor || currentUserRole === 'owner' || currentUserRole === 'admin';
+
+  const mediaEmbeds = useMemo(() => {
+    return extractMediaUrls(message.content);
+  }, [message.content]);
+
+  const isOnlyMediaLink = useMemo(() => {
+    return mediaEmbeds.length === 1 && Boolean(mediaEmbeds[0]) && message.content.trim() === mediaEmbeds[0]?.originalUrl;
+  }, [mediaEmbeds, message.content]);
 
   const avatarColor = member?.pubkey ? '#' + member.pubkey.substring(0, 6) : '#6366f1';
 
@@ -524,9 +533,41 @@ export const ChatMessageItem: React.FC<Props> = ({
             </div>
           </div>
         ) : (
-          <div className="mt-0.5 text-xs text-slate-200 break-words leading-relaxed select-text">
-            {message.content && renderContentTokens(message.content)}
-          </div>
+          <>
+            {!isOnlyMediaLink && message.content && (
+              <div className="mt-0.5 text-xs text-slate-200 break-words leading-relaxed select-text">
+                {renderContentTokens(message.content)}
+              </div>
+            )}
+
+            {/* Media Link Embeds (GIPHY / Tenor / Images) */}
+            {mediaEmbeds.length > 0 && (
+              <div className="mt-2 flex flex-col gap-2">
+                {mediaEmbeds.map((embed, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    className="relative max-w-sm overflow-hidden rounded-xl border border-slate-700/60 bg-slate-950/60 hover:border-indigo-500/50 transition cursor-zoom-in shadow group text-left"
+                    onClick={() => setViewerImage({ url: embed.embedUrl, name: 'GIF' })}
+                    title="Büyütmek için tıkla"
+                  >
+                    {embed.isGif && (
+                      <span className="absolute top-1.5 left-1.5 z-10 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-bold text-white uppercase tracking-wider">
+                        GIF
+                      </span>
+                    )}
+                    <img
+                      src={embed.embedUrl}
+                      alt="GIF"
+                      loading="lazy"
+                      className="max-h-72 w-auto object-contain rounded-xl group-hover:opacity-95 transition"
+                      style={{ maxWidth: '100%' }}
+                    />
+                  </button>
+                ))}
+              </div>
+            )}
+          </>
         )}
 
         {/* Attachments Section */}

@@ -159,3 +159,85 @@ export function renderSafeHtml(rawText: string): string {
     })
     .join('');
 }
+
+export interface MediaEmbed {
+  originalUrl: string;
+  embedUrl: string;
+  isGif: boolean;
+  title?: string;
+}
+
+/**
+ * Detects standalone image/GIF links (Giphy, Tenor, direct images) in message text
+ * to render Discord-style inline media embeds below the text.
+ */
+export function extractMediaUrls(rawText: string): MediaEmbed[] {
+  if (!rawText) return [];
+  const urlRegex = /(https?:\/\/[^\s]+)/gi;
+  const matches = rawText.match(urlRegex);
+  if (!matches) return [];
+
+  const results: MediaEmbed[] = [];
+  const seen = new Set<string>();
+
+  for (const rawUrl of matches) {
+    const cleanUrl = rawUrl.replace(/[.,;!?)]+$/, ''); // Strip trailing punctuation
+    if (seen.has(cleanUrl)) continue;
+
+    // 1. Direct media URLs (.gif, .png, .jpg, .jpeg, .webp)
+    const directMatch = cleanUrl.match(/\.(gif|png|jpe?g|webp)(\?[^\s]*)?$/i);
+    if (directMatch) {
+      seen.add(cleanUrl);
+      const isGif = directMatch[1]?.toLowerCase() === 'gif';
+      results.push({
+        originalUrl: cleanUrl,
+        embedUrl: cleanUrl,
+        isGif,
+      });
+      continue;
+    }
+
+    // 2. Giphy direct media URLs (e.g. https://media*.giphy.com/media/.../giphy.gif)
+    if (
+      /^https?:\/\/(media\d*\.giphy\.com|i\.giphy\.com)\/media\/[a-zA-Z0-9_-]+\/(giphy\.(gif|webp)|source\.gif)/i.test(
+        cleanUrl,
+      )
+    ) {
+      seen.add(cleanUrl);
+      results.push({
+        originalUrl: cleanUrl,
+        embedUrl: cleanUrl,
+        isGif: true,
+      });
+      continue;
+    }
+
+    // 3. Giphy web page URLs (e.g. https://giphy.com/gifs/funny-cat-3oEjI6SIIHBdRxXI40 or https://giphy.com/gifs/3oEjI6SIIHBdRxXI40)
+    const giphyWebMatch = cleanUrl.match(
+      /^https?:\/\/giphy\.com\/gifs\/(?:[a-zA-Z0-9_-]+-)?([a-zA-Z0-9]+)/i,
+    );
+    if (giphyWebMatch && giphyWebMatch[1]) {
+      seen.add(cleanUrl);
+      const gifId = giphyWebMatch[1];
+      results.push({
+        originalUrl: cleanUrl,
+        embedUrl: `https://media.giphy.com/media/${gifId}/giphy.gif`,
+        isGif: true,
+      });
+      continue;
+    }
+
+    // 4. Tenor media URLs (e.g. https://media.tenor.com/.../tenor.gif or c.tenor.com)
+    if (/^https?:\/\/(media|c)\.tenor\.com\/[^\s]+(\.gif|\.png|\.webp)?/i.test(cleanUrl)) {
+      seen.add(cleanUrl);
+      results.push({
+        originalUrl: cleanUrl,
+        embedUrl: cleanUrl,
+        isGif: true,
+      });
+      continue;
+    }
+  }
+
+  return results;
+}

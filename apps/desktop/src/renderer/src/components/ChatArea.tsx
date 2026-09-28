@@ -276,26 +276,19 @@ export const ChatArea: React.FC = () => {
 
   const handleGifSelect = (gif: GiphyItem) => {
     if (!activeChannelId) return;
-    const gifAttachment: Attachment = {
-      id: `gif-${gif.id}`,
-      name: gif.title || 'GIF',
-      size: 0,
-      mimeType: 'image/gif',
-      url: gif.url,
-      type: 'gif',
-      width: gif.width,
-      height: gif.height,
-    };
-
     setShowGiphyPicker(false);
+    const gifUrl = gif.url;
 
-    // Discord-like UX: If input text is empty, send GIF immediately; otherwise stage it with the text
+    // Discord-like UX:
+    // If input text has content, append the GIF link
+    // If input text is empty, send the GIF link immediately!
     if (inputContent.trim()) {
-      setStagedAttachments((prev) => [...prev, gifAttachment]);
+      setInputContent((prev) => `${prev.trim()} ${gifUrl}`);
+      inputRef.current?.focus();
     } else {
       const replyId = replyingTo?.id;
       setReplyingTo(null);
-      wsService.sendMessage(activeChannelId, '', replyId, [gifAttachment]);
+      wsService.sendMessage(activeChannelId, gifUrl, replyId, []);
     }
   };
 

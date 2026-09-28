@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseMarkdownTokens, renderSafeHtml, sanitizeUrl } from '../markdown';
+import { parseMarkdownTokens, renderSafeHtml, sanitizeUrl, extractMediaUrls } from '../markdown';
 
 describe('Markdown Sanitizer and Parser', () => {
   it('prevents XSS with raw script tags', () => {
@@ -79,5 +79,24 @@ describe('Markdown Sanitizer and Parser', () => {
     expect(mentions[0]).toEqual({ type: 'mention', target: 'şükrü' });
     expect(mentions[1]).toEqual({ type: 'mention', target: 'çağlar' });
     expect(mentions[2]).toEqual({ type: 'mention', target: 'herkes' });
+  });
+
+  it('extracts media URLs for Discord-like embeds', () => {
+    const text =
+      'Buna bak https://media4.giphy.com/media/7tFmVu8WDpy9vp6ENC/giphy.gif ve https://example.com/cat.png ve https://giphy.com/gifs/funny-cat-3oEjI6SIIHBdRxXI40!';
+    const embeds = extractMediaUrls(text);
+    expect(embeds.length).toBe(3);
+    const [first, second, third] = embeds;
+    expect(first).toBeDefined();
+    expect(second).toBeDefined();
+    expect(third).toBeDefined();
+    if (first && second && third) {
+      expect(first.embedUrl).toBe('https://media4.giphy.com/media/7tFmVu8WDpy9vp6ENC/giphy.gif');
+      expect(first.isGif).toBe(true);
+      expect(second.embedUrl).toBe('https://example.com/cat.png');
+      expect(second.isGif).toBe(false);
+      expect(third.embedUrl).toBe('https://media.giphy.com/media/3oEjI6SIIHBdRxXI40/giphy.gif');
+      expect(third.isGif).toBe(true);
+    }
   });
 });
