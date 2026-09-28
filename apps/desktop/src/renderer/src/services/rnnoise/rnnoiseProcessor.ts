@@ -207,21 +207,28 @@ export async function createRNNoiseProcessor(
     });
   }
 
-  // 3. Transient Dampener (8000 Hz Low-Pass): Rolls off piercing high-frequency glass/ceramic chime
-  const transientDampener = audioContext.createBiquadFilter();
-  transientDampener.type = 'lowpass';
-  transientDampener.frequency.setValueAtTime(8000, audioContext.currentTime);
-  transientDampener.Q.setValueAtTime(0.707, audioContext.currentTime);
+  // 3. Studio Vocal Clarity & Presence EQ (+2.5 dB @ 3.2 kHz): Enhances speech intelligibility & crispness
+  const clarityEq = audioContext.createBiquadFilter();
+  clarityEq.type = 'peaking';
+  clarityEq.frequency.setValueAtTime(3200, audioContext.currentTime);
+  clarityEq.gain.setValueAtTime(2.5, audioContext.currentTime);
+  clarityEq.Q.setValueAtTime(0.9, audioContext.currentTime);
 
-  // 4. Fast-Attack Transient Limiter / Compressor: Clamps sudden cup clinks & loud keystrokes instantly
-  const transientLimiter = audioContext.createDynamicsCompressor();
-  transientLimiter.threshold.setValueAtTime(-18, audioContext.currentTime);
-  transientLimiter.knee.setValueAtTime(6, audioContext.currentTime);
-  transientLimiter.ratio.setValueAtTime(14, audioContext.currentTime);
-  transientLimiter.attack.setValueAtTime(0.002, audioContext.currentTime); // 2ms fast attack
-  transientLimiter.release.setValueAtTime(0.08, audioContext.currentTime); // 80ms release
+  // 4. Vocal Air High-Shelf EQ (+1.5 dB @ 9 kHz): Restores natural acoustic sheen, completely removing muffling
+  const airEq = audioContext.createBiquadFilter();
+  airEq.type = 'highshelf';
+  airEq.frequency.setValueAtTime(9000, audioContext.currentTime);
+  airEq.gain.setValueAtTime(1.5, audioContext.currentTime);
 
-  // 5. Intelligent Speech Gate: Completely cuts output to 0.0 in pauses between words/sentences
+  // 5. Transparent Peak Limiter: Only catches extreme spikes (>-6 dB) without squashing vocal dynamics
+  const peakLimiter = audioContext.createDynamicsCompressor();
+  peakLimiter.threshold.setValueAtTime(-6, audioContext.currentTime);
+  peakLimiter.knee.setValueAtTime(6, audioContext.currentTime);
+  peakLimiter.ratio.setValueAtTime(8, audioContext.currentTime);
+  peakLimiter.attack.setValueAtTime(0.003, audioContext.currentTime); // 3ms transparent attack
+  peakLimiter.release.setValueAtTime(0.05, audioContext.currentTime); // 50ms fast recovery
+
+  // 6. Intelligent Speech Gate: Completely cuts output to 0.0 in pauses between words/sentences
   const speechGateNode = new AudioWorkletNode(audioContext, 'echo-speech-gate');
 
   // Cross-fade gain nodes for smooth, click-free live bypass toggling
@@ -232,13 +239,14 @@ export async function createRNNoiseProcessor(
   bypassGain.gain.setValueAtTime(initialEnabled ? 0.0 : 1.0, audioContext.currentTime);
 
   // Audio Graph:
-  // Denoised branch: sourceNode -> highpass -> denoiseNode -> transientDampener -> transientLimiter -> speechGateNode -> denoiseGain -> destinationNode
+  // Denoised branch: sourceNode -> highpass -> denoiseNode -> clarityEq -> airEq -> peakLimiter -> speechGateNode -> denoiseGain -> destinationNode
   // Bypassed branch: sourceNode -> bypassGain -> destinationNode
   sourceNode.connect(highpass);
   highpass.connect(denoiseNode);
-  denoiseNode.connect(transientDampener);
-  transientDampener.connect(transientLimiter);
-  transientLimiter.connect(speechGateNode);
+  denoiseNode.connect(clarityEq);
+  clarityEq.connect(airEq);
+  airEq.connect(peakLimiter);
+  peakLimiter.connect(speechGateNode);
   speechGateNode.connect(denoiseGain);
   denoiseGain.connect(destinationNode);
 
@@ -262,8 +270,9 @@ export async function createRNNoiseProcessor(
       sourceNode.disconnect();
       highpass.disconnect();
       denoiseNode.disconnect();
-      transientDampener.disconnect();
-      transientLimiter.disconnect();
+      clarityEq.disconnect();
+      airEq.disconnect();
+      peakLimiter.disconnect();
       speechGateNode.disconnect();
       denoiseGain.disconnect();
       bypassGain.disconnect();

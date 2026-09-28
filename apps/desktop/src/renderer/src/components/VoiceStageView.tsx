@@ -33,6 +33,7 @@ import { useScreenShareStore } from '../stores/useScreenShareStore';
 import { webrtcService } from '../services/webrtc';
 import { VoiceDiagnosticsModal } from './VoiceDiagnosticsModal';
 import { useScreenShareViewerDucking } from '../hooks/useScreenShareViewerDucking';
+import { UserContextMenu, type ContextMenuUser } from './UserContextMenu';
 
 interface Props {
   channel: Channel;
@@ -45,6 +46,9 @@ interface ParticipantTileProps {
   isSpeaking: boolean;
   isMuted: boolean;
   isDeafened: boolean;
+  peerVolume?: number;
+  isPeerMuted?: boolean;
+  onContextMenu?: (e: React.MouseEvent) => void;
 }
 
 const ParticipantTile: React.FC<ParticipantTileProps> = ({
@@ -54,6 +58,9 @@ const ParticipantTile: React.FC<ParticipantTileProps> = ({
   isSpeaking,
   isMuted,
   isDeafened,
+  peerVolume,
+  isPeerMuted,
+  onContextMenu,
 }) => {
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
@@ -80,11 +87,13 @@ const ParticipantTile: React.FC<ParticipantTileProps> = ({
 
   return (
     <div
-      className={`group relative flex flex-col items-center justify-center rounded-2xl bg-slate-950/80 border overflow-hidden aspect-video shadow-lg transition-all duration-200 ${
+      onContextMenu={onContextMenu}
+      className={`group relative flex flex-col items-center justify-center rounded-2xl bg-slate-950/80 border overflow-hidden aspect-video shadow-lg transition-all duration-200 cursor-pointer ${
         isSpeaking
           ? 'border-emerald-500/80 ring-2 ring-emerald-500/50 shadow-emerald-500/10'
           : 'border-slate-800/80 hover:border-slate-700'
       }`}
+      title={isLocal ? 'Senin kartın' : `${participant.displayName} (Sağ tıklayarak ses ayarla)`}
     >
       {hasVideo ? (
         <video
@@ -135,6 +144,16 @@ const ParticipantTile: React.FC<ParticipantTileProps> = ({
           {isLocal && (
             <span className="shrink-0 rounded bg-indigo-500/20 px-1.5 py-0.2 text-[10px] font-medium text-indigo-300 border border-indigo-500/30">
               Sen
+            </span>
+          )}
+          {!isLocal && isPeerMuted && (
+            <span className="shrink-0 rounded bg-rose-500/20 px-1.5 py-0.2 text-[9px] font-bold text-rose-300 border border-rose-500/30">
+              Susturdun
+            </span>
+          )}
+          {!isLocal && !isPeerMuted && peerVolume !== undefined && peerVolume !== 1.0 && (
+            <span className="shrink-0 rounded bg-indigo-500/20 px-1.5 py-0.2 text-[9px] font-mono font-bold text-indigo-300 border border-indigo-500/30" title={`Özel Ses Seviyesi: %${Math.round(peerVolume * 100)}`}>
+              %{Math.round(peerVolume * 100)}
             </span>
           )}
         </div>
@@ -429,7 +448,14 @@ export const VoiceStageView: React.FC<Props> = ({ channel }) => {
     pingMs,
     setDiagnosticsOpen,
     isSelfLoopbackActive,
+    peerVolumes,
+    peerMuted,
   } = useVoiceStore();
+
+  const [contextMenu, setContextMenu] = useState<{
+    user: ContextMenuUser;
+    position: { x: number; y: number };
+  } | null>(null);
 
   const { isSharing, stopSharing, activeShares } = useScreenShareStore();
 
@@ -671,6 +697,18 @@ export const VoiceStageView: React.FC<Props> = ({ channel }) => {
                   isSpeaking={speaking}
                   isMuted={muted}
                   isDeafened={deafened}
+                  peerVolume={peerVolumes[p.userId]}
+                  isPeerMuted={peerMuted[p.userId]}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    setContextMenu({
+                      user: {
+                        userId: p.userId,
+                        displayName: p.displayName,
+                      },
+                      position: { x: e.clientX, y: e.clientY },
+                    });
+                  }}
                 />
               );
             })}
@@ -787,6 +825,13 @@ export const VoiceStageView: React.FC<Props> = ({ channel }) => {
         );
       })()}
       <VoiceDiagnosticsModal />
+      {contextMenu && (
+        <UserContextMenu
+          user={contextMenu.user}
+          position={contextMenu.position}
+          onClose={() => setContextMenu(null)}
+        />
+      )}
     </div>
   );
 };

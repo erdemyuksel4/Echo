@@ -618,6 +618,31 @@ Bu dosya her faz ve görev sonunda güncellenir.
   - *8 kHz Cam Rezonans Filtresi:* İnsan sesinde bulunmayan, cam/porselen şıngırtısına ait 8-16 kHz arası tiz parazitleri yumuşatır.
   - *Hızlı Ataklı Darbe Kompresörü (DynamicsCompressor):* 2 ms atak ve 14:1 sıkıştırma oranıyla konuşurken bile bardağın çarpması veya klavye vuruşlarının oluşturduğu ani genlik patlamalarını 14-16 dB anında aşağı bastırır.
 
+## Vokal Parlaklığı & Discord Tarzı Kullanıcı Sağ Tık Ses Menüsü (v0.1.27)
+
+- [x] **İnsan Sesindeki Boğukluğun Çözülmesi & Stüdyo Vokal Netliği (`rnnoiseProcessor.ts`):**
+  - *Kök Neden:* Önceki aşamada eklenen 8 kHz dik alçak geçiren filtre ve sert kompresör eşiği insan sesindeki üst hava frekanslarını (harmonics) ve dinamikleri baskılayarak sesin boğuk ve kapalı gelmesine yol açıyordu.
+  - *Stüdyo Vokal Varlık EQ (Peaking Filter):* 3.2 kHz merkez frekansında +2.5 dB kazanç ve Q: 0.9 parametreleriyle insan sesinin ünsüz harf netliği ve berraklığı öne çıkarıldı.
+  - *Vokal Havası Raf Filtresi (High-Shelf Filter):* 9 kHz üzerinde +1.5 dB yumuşak parlatma uygulanarak insan sesinin kutu/kabin içine sıkışmış hissi tamamen giderildi, doğal mikrofon tınısı korundu.
+  - *Şeffaf Tepe Sınırlayıcı (Peak Limiter):* Eşik değeri -6 dB'e çekilip atak 3 ms yapılarak konuşma dinamiklerine dokunulmadan sadece aşırı patlamalar yakalandı.
+  - *Akıllı Konuşma Kapısı (`EchoSpeechGateProcessor`):* Cümle ve kelime aralarındaki sessizliklerde pıtpıt/tıslama yapmadan pürüzsüz geçiş sağlandı.
+- [x] **Discord Tarzı Kullanıcı Sağ Tık Bağlam Menüsü (`UserContextMenu.tsx`):**
+  - Uygulamanın her yerinde (Büyük sahne kartları `VoiceStageView`, sol kanal katılımcı listesi `ChannelList`, sağ üye paneli `MemberList` ve sohbet alanı mesaj/avatarları `ChatMessageItem`) herhangi bir kullanıcıya sağ tıklandığında modern, Discord tarzı bir menü açılır.
+  - Ekran kenarlarından taşmayı önleyen dinamik koordinat ayarlaması ve dışarı tıklandığında/Escape basıldığında kapanma desteği.
+  - Menü özellikleri:
+    1. Kullanıcı Profili (Avatar, Ad, ID Kopyalama).
+    2. Bağımsız Ses Seviyesi Ayarı: %0 ile %200 arasında kaydırıcı (slider) ile sesi kısma veya 2 katına kadar yükseltme.
+    3. Hızlı Sıfırlama (%100) butonu.
+    4. Kullanıcıyı Sustur / Aç tek tuş anahtarı.
+    5. Hızlı Direkt Mesaj Gönder ve Sohbette Bahset (@) kısayolları.
+- [x] **0% - 200% WebAudio Kazanç Zinciri & Kalıcı Hafıza (`webrtc.ts`, `useVoiceStore.ts`):**
+  - Standart HTMLAudioElement'in 1.0 tavan sınırını aşmak için gelen WebRTC peer akışları WebAudio `GainNode` üzerinden geçirildi (0.0x - 2.0x gerçek güçlendirme).
+  - Her kullanıcının ses tercihi ve susturma durumu `localStorage` üzerinde saklanarak uygulama kapatılıp açılsa bile korunur.
+- [x] **Kullanıcı Kartı ve Sahne Arayüz İyileştirmeleri:**
+  - `VoiceStageView` üzerinde özel ses ayarı yapılan kullanıcıların kartlarına `%150` veya `Susturdun` şeklinde şık rozetler eklendi.
+  - Tüm katılımcı kartlarına, sol kanal listesine ve mesajlara sağ tık ve imleç geri bildirimleri entegre edildi.
+
+
 
 
 

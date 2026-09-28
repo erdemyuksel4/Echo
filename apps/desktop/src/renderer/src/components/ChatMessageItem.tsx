@@ -23,6 +23,7 @@ import { wsService } from '../services/websocket';
 import { p2pFileTransferService, type P2PTransferProgress } from '../services/p2pFileTransfer';
 import { ImageViewerModal } from './ImageViewerModal';
 import { SERVER_HTTP_URL } from '../config';
+import { UserContextMenu, type ContextMenuUser } from './UserContextMenu';
 
 function formatBytes(bytes: number, decimals = 1): string {
   if (bytes === 0) return '0 B';
@@ -164,11 +165,30 @@ export const ChatMessageItem: React.FC<Props> = ({
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [revealedSpoilers, setRevealedSpoilers] = useState<Record<number, boolean>>({});
   const [viewerImage, setViewerImage] = useState<{ url: string; name: string } | null>(null);
+  const [contextMenu, setContextMenu] = useState<{
+    user: ContextMenuUser;
+    position: { x: number; y: number };
+  } | null>(null);
 
   const isAuthor = identity?.userId === message.authorId;
   const canDelete = isAuthor || currentUserRole === 'owner' || currentUserRole === 'admin';
 
   const avatarColor = member?.pubkey ? '#' + member.pubkey.substring(0, 6) : '#6366f1';
+
+  const handleOpenUserContextMenu = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setContextMenu({
+      user: {
+        userId: message.authorId,
+        displayName: message.authorName,
+        avatarColor,
+        role: member?.role,
+        isLocal: isAuthor,
+      },
+      position: { x: e.clientX, y: e.clientY },
+    });
+  };
 
   const formatTime = (timestamp: number) => {
     const d = new Date(timestamp);
@@ -429,7 +449,9 @@ export const ChatMessageItem: React.FC<Props> = ({
 
       {/* Author Avatar */}
       <div
-        className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full text-xs font-bold text-white shadow select-none"
+        onClick={handleOpenUserContextMenu}
+        onContextMenu={handleOpenUserContextMenu}
+        className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full text-xs font-bold text-white shadow select-none cursor-pointer hover:opacity-90 transition-opacity"
         style={{ backgroundColor: avatarColor }}
       >
         {message.authorName.charAt(0).toUpperCase()}
@@ -450,7 +472,13 @@ export const ChatMessageItem: React.FC<Props> = ({
 
         {/* Header (Author, Time, Edited tag) */}
         <div className="flex items-baseline gap-2">
-          <span className="text-xs font-bold text-white select-none">{message.authorName}</span>
+          <span
+            onClick={handleOpenUserContextMenu}
+            onContextMenu={handleOpenUserContextMenu}
+            className="text-xs font-bold text-white select-none cursor-pointer hover:underline"
+          >
+            {message.authorName}
+          </span>
           <span className="text-[10px] text-slate-500 select-none">
             {formatTime(message.createdAt)}
           </span>
@@ -576,6 +604,15 @@ export const ChatMessageItem: React.FC<Props> = ({
           imageUrl={viewerImage.url}
           imageName={viewerImage.name}
           onClose={() => setViewerImage(null)}
+        />
+      )}
+
+      {/* User Context Menu */}
+      {contextMenu && (
+        <UserContextMenu
+          user={contextMenu.user}
+          position={contextMenu.position}
+          onClose={() => setContextMenu(null)}
         />
       )}
     </div>

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Crown, Shield, MessageSquare } from 'lucide-react';
 import { UserAudioState, computeAudioState } from '@echo/shared';
 import { useChatStore } from '../stores/useChatStore';
@@ -6,11 +6,16 @@ import { useAuthStore } from '../stores/useAuthStore';
 import { useVoiceStore } from '../stores/useVoiceStore';
 import { useDmStore } from '../stores/useDmStore';
 import { wsService } from '../services/websocket';
+import { UserContextMenu, type ContextMenuUser } from './UserContextMenu';
 
 export const MemberList: React.FC = () => {
   const { members, activeGroupId } = useChatStore();
   const { identity } = useAuthStore();
   const { channelParticipants, audioState } = useVoiceStore();
+  const [contextMenu, setContextMenu] = useState<{
+    user: ContextMenuUser;
+    position: { x: number; y: number };
+  } | null>(null);
 
   if (!activeGroupId) return null;
 
@@ -33,7 +38,20 @@ export const MemberList: React.FC = () => {
     return (
       <div
         key={member.userId}
-        className="flex items-center gap-2.5 rounded-md px-2 py-1.5 transition hover:bg-slate-800/40"
+        onContextMenu={(e) => {
+          e.preventDefault();
+          setContextMenu({
+            user: {
+              userId: member.userId,
+              displayName: member.displayName,
+              avatarColor,
+              role: member.role,
+              isLocal,
+            },
+            position: { x: e.clientX, y: e.clientY },
+          });
+        }}
+        className="flex items-center gap-2.5 rounded-md px-2 py-1.5 transition hover:bg-slate-800/40 cursor-pointer"
       >
         <div className="relative">
           <div
@@ -120,6 +138,14 @@ export const MemberList: React.FC = () => {
           </div>
           <div className="space-y-0.5">{offlineMembers.map(renderMember)}</div>
         </div>
+      )}
+
+      {contextMenu && (
+        <UserContextMenu
+          user={contextMenu.user}
+          position={contextMenu.position}
+          onClose={() => setContextMenu(null)}
+        />
       )}
     </div>
   );

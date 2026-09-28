@@ -50,6 +50,8 @@ class WebRTCVoiceService {
 
   private peers: Map<string, RTCPeerConnection> = new Map();
   private peerAudioElements: Map<string, HTMLAudioElement> = new Map();
+  private peerGainNodes: Map<string, GainNode> = new Map();
+  private peerAudioContext: AudioContext | null = null;
   private peerDisplayNames: Map<string, string> = new Map();
   private pendingCandidates: Map<string, RTCIceCandidateInit[]> = new Map();
   private prevStats: Map<string, PreviousPeerStats> = new Map();
@@ -364,6 +366,24 @@ class WebRTCVoiceService {
           // Ignore
         }
       });
+    }
+
+    this.peerGainNodes.forEach((gain) => {
+      try {
+        gain.disconnect();
+      } catch {
+        // Ignore
+      }
+    });
+    this.peerGainNodes.clear();
+
+    if (this.peerAudioContext) {
+      try {
+        void this.peerAudioContext.close();
+      } catch {
+        // Ignore
+      }
+      this.peerAudioContext = null;
     }
 
     this.peerDisplayNames.clear();
@@ -719,6 +739,16 @@ class WebRTCVoiceService {
         return;
       }
 
+      if (!this.peerAudioContext || this.peerAudioContext.state === 'closed') {
+        const AudioCtx =
+          window.AudioContext ||
+          (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+        this.peerAudioContext = new AudioCtx();
+      }
+      if (this.peerAudioContext.state === 'suspended') {
+        void this.peerAudioContext.resume();
+      }
+
       let audio = this.peerAudioElements.get(peerId);
       if (!audio) {
         audio = new Audio();
@@ -729,8 +759,33 @@ class WebRTCVoiceService {
         this.peerAudioElements.set(peerId, audio);
       }
       const remoteStream = event.streams[0] ?? new MediaStream([event.track]);
-      audio.srcObject = remoteStream;
-      audio.volume = this.outputVolume;
+
+      // Route through WebAudio GainNode for per-peer volume (0% to 200%)
+      try {
+        const existingGain = this.peerGainNodes.get(peerId);
+        if (existingGain) {
+          try {
+            existingGain.disconnect();
+          } catch {
+            // Ignore
+          }
+        }
+
+        const sourceNode = this.peerAudioContext.createMediaStreamSource(remoteStream);
+        const gainNode = this.peerAudioContext.createGain();
+        const destNode = this.peerAudioContext.createMediaStreamDestination();
+        sourceNode.connect(gainNode);
+        gainNode.connect(destNode);
+
+        this.peerGainNodes.set(peerId, gainNode);
+        this.applyPeerGain(peerId);
+        audio.srcObject = destNode.stream;
+      } catch (gainErr) {
+        console.warn('[Echo WebRTC] Failed to route peer through GainNode, fallback to raw stream:', gainErr);
+        audio.srcObject = remoteStream;
+      }
+
+      audio.volume = 1.0;
 
       // Apply output device if set
       if (
@@ -908,6 +963,9 @@ class WebRTCVoiceService {
     const shouldMutePeers = nextAudioState === UserAudioState.DEAFENED;
     this.peerAudioElements.forEach((audio) => {
       audio.muted = shouldMutePeers;
+    });
+    this.peerGainNodes.forEach((_, peerId) => {
+      this.applyPeerGain(peerId);
     });
 
     if (this.currentChannelId) {
@@ -1427,10 +1485,36 @@ class WebRTCVoiceService {
     }
   }
 
+  applyPeerGain(peerId: string): void {
+    const gainNode = this.peerGainNodes.get(peerId);
+    if (!gainNode || !this.peerAudioContext) return;
+
+    const store = useVoiceStore.getState();
+    const isDeafened = store.isDeafened;
+    const isPeerMuted = Boolean(store.peerMuted[peerId]);
+    const userVolumeMultiplier = store.peerVolumes[peerId] ?? 1.0; // 0.0 to 2.0 (0% to 200%)
+
+    const effectiveGain = (isDeafened || isPeerMuted) ? 0.0 : (userVolumeMultiplier * this.outputVolume);
+    gainNode.gain.setValueAtTime(effectiveGain, this.peerAudioContext.currentTime);
+  }
+
+  setPeerVolume(userId: string, volume: number): void {
+    useVoiceStore.getState().setPeerVolume(userId, volume);
+    this.applyPeerGain(userId);
+  }
+
+  setPeerMuted(userId: string, muted: boolean): void {
+    useVoiceStore.getState().setPeerMuted(userId, muted);
+    this.applyPeerGain(userId);
+  }
+
   setOutputVolume(volume: number): void {
     this.outputVolume = Math.max(0, Math.min(1, volume));
     this.peerAudioElements.forEach((audio) => {
       audio.volume = this.outputVolume;
+    });
+    this.peerGainNodes.forEach((_, peerId) => {
+      this.applyPeerGain(peerId);
     });
     if (this.testMicAudioEl) {
       this.testMicAudioEl.volume = this.outputVolume;

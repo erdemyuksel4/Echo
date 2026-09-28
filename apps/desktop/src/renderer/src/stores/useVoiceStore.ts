@@ -40,7 +40,13 @@ export interface VoiceState {
   isMicUnavailable: boolean;
   isSelfLoopbackActive: boolean;
 
+  // Individual peer volume control (0.0 to 2.0 -> 0% to 200%) & local mute
+  peerVolumes: Record<string, number>;
+  peerMuted: Record<string, boolean>;
+
   // Actions
+  setPeerVolume: (userId: string, volume: number) => void;
+  setPeerMuted: (userId: string, muted: boolean) => void;
   setSelfLoopbackActive: (active: boolean) => void;
   toggleSelfLoopback: () => void;
   setConnecting: (
@@ -122,6 +128,24 @@ const getInitialSelfLoopback = (): boolean => {
   }
 };
 
+const getInitialPeerVolumes = (): Record<string, number> => {
+  try {
+    const val = localStorage.getItem('echo_peer_volumes');
+    return val ? JSON.parse(val) : {};
+  } catch {
+    return {};
+  }
+};
+
+const getInitialPeerMuted = (): Record<string, boolean> => {
+  try {
+    const val = localStorage.getItem('echo_peer_muted');
+    return val ? JSON.parse(val) : {};
+  } catch {
+    return {};
+  }
+};
+
 export const useVoiceStore = create<VoiceState>((set, get) => ({
   currentGroupId: null,
   currentGroupName: null,
@@ -149,6 +173,29 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
   localAudioLevel: 0,
   isMicUnavailable: false,
   isSelfLoopbackActive: getInitialSelfLoopback(),
+  peerVolumes: getInitialPeerVolumes(),
+  peerMuted: getInitialPeerMuted(),
+
+  setPeerVolume: (userId: string, volume: number) => {
+    const clamped = Math.max(0, Math.min(2.0, volume));
+    const next = { ...get().peerVolumes, [userId]: clamped };
+    try {
+      localStorage.setItem('echo_peer_volumes', JSON.stringify(next));
+    } catch {
+      // Ignore
+    }
+    set({ peerVolumes: next });
+  },
+
+  setPeerMuted: (userId: string, muted: boolean) => {
+    const next = { ...get().peerMuted, [userId]: muted };
+    try {
+      localStorage.setItem('echo_peer_muted', JSON.stringify(next));
+    } catch {
+      // Ignore
+    }
+    set({ peerMuted: next });
+  },
 
   setSelfLoopbackActive: (active: boolean) => {
     try {

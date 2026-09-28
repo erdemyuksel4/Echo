@@ -28,6 +28,7 @@ import { SettingsModal } from './SettingsModal';
 import { VoicePanel } from './VoicePanel';
 import { DeleteGroupModal } from './DeleteGroupModal';
 import { SERVER_HTTP_URL } from '../config';
+import { UserContextMenu, type ContextMenuUser } from './UserContextMenu';
 
 export const ChannelList: React.FC = () => {
   const { identity } = useAuthStore();
@@ -43,6 +44,11 @@ export const ChannelList: React.FC = () => {
 
   const { currentChannelId, channelParticipants, audioState } =
     useVoiceStore();
+
+  const [userContextMenu, setUserContextMenu] = useState<{
+    user: ContextMenuUser;
+    position: { x: number; y: number };
+  } | null>(null);
 
   const [copied, setCopied] = useState(false);
   const [showAddChannel, setShowAddChannel] = useState(false);
@@ -563,7 +569,20 @@ export const ChannelList: React.FC = () => {
                         return (
                           <div
                             key={p.userId}
-                            className="flex items-center gap-2 rounded px-2 py-1 text-xs text-slate-300 hover:bg-slate-800/40 transition"
+                            onContextMenu={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setUserContextMenu({
+                                user: {
+                                  userId: p.userId,
+                                  displayName: p.displayName,
+                                  avatarColor: '#4f46e5',
+                                  isLocal,
+                                },
+                                position: { x: e.clientX, y: e.clientY },
+                              });
+                            }}
+                            className="flex items-center gap-2 rounded px-2 py-1 text-xs text-slate-300 hover:bg-slate-800/40 transition cursor-pointer"
                           >
                             <div className="relative flex items-center justify-center">
                               <div
@@ -683,6 +702,14 @@ export const ChannelList: React.FC = () => {
           groupId={activeGroupMeta.id}
           groupName={activeGroupMeta.name}
           isOwner={isOwner}
+        />
+      )}
+
+      {userContextMenu && (
+        <UserContextMenu
+          user={userContextMenu.user}
+          position={userContextMenu.position}
+          onClose={() => setUserContextMenu(null)}
         />
       )}
     </div>

@@ -56,3 +56,9 @@ export interface EchoApi {
         version: string;
     }) => void) => () => void;
 }
+
+declare global {
+    interface Window {
+        echoApi: EchoApi;
+    }
+}
