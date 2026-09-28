@@ -1,5 +1,4 @@
 import type { Attachment } from '@echo/shared';
-import { SERVER_HTTP_URL } from '../config';
 
 const MAX_IMAGE_DIMENSION = 1920;
 const CHUNK_SIZE_BYTES = 180 * 1024; // ~180KB binary -> ~240KB Base64 (well under SQLite 256KB row limit)
@@ -129,22 +128,100 @@ export async function processImageForUpload(file: File): Promise<CompressedImage
   });
 }
 
-export async function uploadImageAttachment(groupId: string, file: File): Promise<Attachment> {
-  const payload = await processImageForUpload(file);
-
-  const res = await fetch(`${SERVER_HTTP_URL}/api/groups/${groupId}/attachments`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(payload),
-  });
-
-  if (!res.ok) {
-    const errorData = (await res.json().catch(() => ({}))) as { error?: string };
-    throw new Error(errorData.error || 'Görsel yüklenemedi.');
+export async function createImageAttachment(file: File): Promise<Attachment> {
+  if (file.size > 15 * 1024 * 1024) {
+    throw new Error('Görsel boyutu 15 MB sınırını aşıyor.');
   }
 
-  const data = (await res.json()) as { success: boolean; attachment: Attachment };
-  return data.attachment;
+  const isGif = file.type === 'image/gif' || file.name.toLowerCase().endsWith('.gif');
+
+  // Preserve animated GIFs using direct Data URL if under 2.5MB
+  if (isGif) {
+    if (file.size > 3 * 1024 * 1024) {
+      throw new Error('GIF boyutu 3 MB sınırını aşıyor.');
+    }
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = () => reject(new Error('GIF okunamadı.'));
+      reader.readAsDataURL(file);
+    });
+
+    return {
+      id: `gif-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`,
+      name: file.name,
+      size: file.size,
+      mimeType: 'image/gif',
+      url: dataUrl,
+      type: 'gif',
+    };
+  }
+
+  // Optimize and scale other images (JPEG, PNG, WebP) to WebP Base64 Data URL
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const objectUrl = URL.createObjectURL(file);
+
+    img.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+
+      const maxDim = 1280;
+      let targetWidth = img.naturalWidth || img.width;
+      let targetHeight = img.naturalHeight || img.height;
+
+      if (targetWidth > maxDim || targetHeight > maxDim) {
+        if (targetWidth > targetHeight) {
+          targetHeight = Math.round((targetHeight * maxDim) / targetWidth);
+          targetWidth = maxDim;
+        } else {
+          targetWidth = Math.round((targetWidth * maxDim) / targetHeight);
+          targetHeight = maxDim;
+        }
+      }
+
+      const canvas = document.createElement('canvas');
+      canvas.width = targetWidth;
+      canvas.height = targetHeight;
+
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        reject(new Error('Canvas oluşturulamadı.'));
+        return;
+      }
+
+      ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
+
+      // Export as high quality compact WebP Data URL
+      let dataUrl = canvas.toDataURL('image/webp', 0.82);
+      // Fallback if browser doesn't support WebP export
+      if (!dataUrl.startsWith('data:image/webp')) {
+        dataUrl = canvas.toDataURL('image/jpeg', 0.82);
+      }
+
+      const approxBytes = Math.round((dataUrl.length * 3) / 4);
+
+      resolve({
+        id: `img-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`,
+        name: file.name.replace(/\.[^/.]+$/, '') + '.webp',
+        size: approxBytes,
+        mimeType: 'image/webp',
+        url: dataUrl,
+        type: 'image',
+        width: targetWidth,
+        height: targetHeight,
+      });
+    };
+
+    img.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error('Görsel dosyası açılamadı.'));
+    };
+
+    img.src = objectUrl;
+  });
+}
+
+export async function uploadImageAttachment(_groupId: string, file: File): Promise<Attachment> {
+  // Use instant client-side WebP Data URL: no server upload delay, zero storage quotas, zero 404s
+  return createImageAttachment(file);
 }

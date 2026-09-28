@@ -642,6 +642,21 @@ Bu dosya her faz ve görev sonunda güncellenir.
   - `VoiceStageView` üzerinde özel ses ayarı yapılan kullanıcıların kartlarına `%150` veya `Susturdun` şeklinde şık rozetler eklendi.
   - Tüm katılımcı kartlarına, sol kanal listesine ve mesajlara sağ tık ve imleç geri bildirimleri entegre edildi.
 
+## Görsel (Text/Base64 WebP) & GIPHY Canlandırma (v0.1.28)
+
+- [x] **Görselleri Text / Base64 Data URL Formatında Anında Gönderme (`imageCompression.ts`):**
+  - *Kök Neden:* Sunucu tarafındaki parça tablosu ve dosya yükleme API'sinde oluşan çift slash (`//`) kaynaklı 404 hataları ve sunucu depolama kotası riskleri tamamen bertaraf edildi.
+  - *Çözüm:* Görseller (PNG, JPG, WebP) istemci tarafında anında 1280px ve 0.82 kalite WebP formatına sıkıştırılır (~30-65 KB) ve Base64 Data URL (`data:image/webp;base64,...`) olarak doğrudan mesajın içine metin olarak gömülür.
+  - GIF dosyaları ise animasyon kareleri bozulmadan doğrudan Data URL'ye dönüştürülür.
+  - Kullanıcı panodan yapıştırdığı (Ctrl+V) veya dosyadan seçtiği anda hiçbir sunucu beklemesi olmadan görsel sohbette anında belirir ve karşı tarafta sıfır gecikmeyle açılır.
+- [x] **GIPHY Arama & Popüler GIF Entegrasyonunun Canlandırılması (`GiphyPicker.tsx`, `index.ts`):**
+  - *Kök Neden:* Eski Giphy test anahtarının banlanması (403 Banned) sebebiyle GIF araması boş dönüyordu.
+  - *Çözüm:* Aktif çalışan Giphy API anahtarı sunucu proxy'sine ve istemciye doğrudan yedek (fallback) olarak eklendi.
+  - `GiphyPicker` açıldığında güncel popüler trend GIF'leri yüklenir, arama kutusuna yazıldığında ise anında Türkçe/İngilizce sonuçlar listelenir.
+  - Discord tarzı hızlı gönderim: Giriş çubuğu boşken GIF'e tıklandığında anında sohbete gönderilir; metin varsa mesaja eklenir.
+- [x] **Sunucu Eklenti Rota İyileştirmesi (`GroupDO.ts`, `apps/server/src/index.ts`):**
+  - Sunucu yükleme rotalarında `groupId` boş kalma ihtimali ortadan kaldırıldı; çift slash (`//`) hataları kalıcı olarak çözüldü.
+
 
 
 

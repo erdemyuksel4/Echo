@@ -553,8 +553,10 @@ export class GroupDO extends DurableObject<Env> {
         );
       }
 
+      const queryGroupId = url.searchParams.get('groupId');
       const metaRows = [...this.sql.exec(`SELECT id FROM group_meta LIMIT 1`)];
-      const groupId = (metaRows[0] as { id: string } | undefined)?.id ?? '';
+      const dbGroupId = (metaRows[0] as { id: string } | undefined)?.id;
+      const groupId = queryGroupId || dbGroupId || 'default';
 
       const attachmentType: 'image' | 'gif' = body.mimeType === 'image/gif' ? 'gif' : 'image';
       const attachment: Attachment = {

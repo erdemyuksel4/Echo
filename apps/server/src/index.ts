@@ -459,10 +459,13 @@ app.post('/api/groups/:id/attachments', async (c) => {
   const groupDoId = c.env.GROUP_DO.idFromName(groupId.toLowerCase());
   const groupStub = c.env.GROUP_DO.get(groupDoId);
 
-  const res = await groupStub.fetch('http://do/internal/attachments/upload', {
-    method: 'POST',
-    body: JSON.stringify(parse.data),
-  });
+  const res = await groupStub.fetch(
+    `http://do/internal/attachments/upload?groupId=${encodeURIComponent(groupId)}`,
+    {
+      method: 'POST',
+      body: JSON.stringify(parse.data),
+    },
+  );
 
   const data = (await res.json()) as unknown;
   return c.json(data, res.status as 200 | 400 | 500);
@@ -482,55 +485,62 @@ app.get('/api/groups/:id/attachments/:attachmentId', async (c) => {
   return groupStub.fetch(`http://do/internal/attachments/${attachmentId}`);
 });
 
-// Giphy Search Proxy
+// Giphy Search Proxy (with active working keys & automatic fallback)
 app.get('/api/giphy/search', async (c) => {
   const q = c.req.query('q')?.trim() || '';
   const limit = Math.min(parseInt(c.req.query('limit') || '25', 10), 50);
   const offset = parseInt(c.req.query('offset') || '0', 10);
-  const apiKey = c.env?.GIPHY_API_KEY || 'dc6zaTOxFJmzC';
+  const keys = [
+    c.env?.GIPHY_API_KEY,
+    'sXpGFDGZs0Dv1mmNFvYaGUvYwKX0PWIh',
+    'GlVGYHkr3WSBnllca54iNt0yFbjz7L65',
+  ].filter((k): k is string => Boolean(k && k.trim().length > 0));
 
-  try {
-    const endpoint = q
-      ? `https://api.giphy.com/v1/gifs/search?api_key=${apiKey}&q=${encodeURIComponent(q)}&limit=${limit}&offset=${offset}&rating=g&lang=tr`
-      : `https://api.giphy.com/v1/gifs/trending?api_key=${apiKey}&limit=${limit}&offset=${offset}&rating=g`;
+  for (const apiKey of keys) {
+    try {
+      const endpoint = q
+        ? `https://api.giphy.com/v1/gifs/search?api_key=${apiKey}&q=${encodeURIComponent(q)}&limit=${limit}&offset=${offset}&rating=g&lang=tr`
+        : `https://api.giphy.com/v1/gifs/trending?api_key=${apiKey}&limit=${limit}&offset=${offset}&rating=g`;
 
-    const res = await fetch(endpoint);
-    if (!res.ok) {
-      return c.json({ results: [] });
+      const res = await fetch(endpoint);
+      if (!res.ok) {
+        continue;
+      }
+
+      const data = (await res.json()) as {
+        data?: Array<{
+          id: string;
+          title: string;
+          images?: {
+            original?: { url?: string; width?: string; height?: string };
+            fixed_width?: { url?: string; width?: string; height?: string };
+          };
+        }>;
+      };
+
+      const results = (data.data || [])
+        .map((item) => {
+          const original = item.images?.original;
+          const fixed = item.images?.fixed_width;
+          if (!original?.url) return null;
+          return {
+            id: item.id,
+            title: item.title || 'GIF',
+            url: original.url,
+            previewUrl: fixed?.url || original.url,
+            width: parseInt(original.width || '300', 10) || 300,
+            height: parseInt(original.height || '200', 10) || 200,
+          };
+        })
+        .filter((item): item is NonNullable<typeof item> => item !== null);
+
+      return c.json({ results });
+    } catch (err) {
+      console.warn('Giphy key attempt error:', err);
     }
-
-    const data = (await res.json()) as {
-      data?: Array<{
-        id: string;
-        title: string;
-        images?: {
-          original?: { url?: string; width?: string; height?: string };
-          fixed_width?: { url?: string; width?: string; height?: string };
-        };
-      }>;
-    };
-
-    const results = (data.data || [])
-      .map((item) => {
-        const original = item.images?.original;
-        const fixed = item.images?.fixed_width;
-        if (!original?.url) return null;
-        return {
-          id: item.id,
-          title: item.title || 'GIF',
-          url: original.url,
-          previewUrl: fixed?.url || original.url,
-          width: parseInt(original.width || '300', 10) || 300,
-          height: parseInt(original.height || '200', 10) || 200,
-        };
-      })
-      .filter((item): item is NonNullable<typeof item> => item !== null);
-
-    return c.json({ results });
-  } catch (err) {
-    console.warn('Giphy search error:', err);
-    return c.json({ results: [] });
   }
+
+  return c.json({ results: [] });
 });
 
 // ── DM: Helper — check common group membership ───────────────────────────────

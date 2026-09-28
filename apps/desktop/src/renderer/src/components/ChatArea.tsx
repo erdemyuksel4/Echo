@@ -275,6 +275,7 @@ export const ChatArea: React.FC = () => {
   };
 
   const handleGifSelect = (gif: GiphyItem) => {
+    if (!activeChannelId) return;
     const gifAttachment: Attachment = {
       id: `gif-${gif.id}`,
       name: gif.title || 'GIF',
@@ -285,8 +286,17 @@ export const ChatArea: React.FC = () => {
       width: gif.width,
       height: gif.height,
     };
-    setStagedAttachments((prev) => [...prev, gifAttachment]);
+
     setShowGiphyPicker(false);
+
+    // Discord-like UX: If input text is empty, send GIF immediately; otherwise stage it with the text
+    if (inputContent.trim()) {
+      setStagedAttachments((prev) => [...prev, gifAttachment]);
+    } else {
+      const replyId = replyingTo?.id;
+      setReplyingTo(null);
+      wsService.sendMessage(activeChannelId, '', replyId, [gifAttachment]);
+    }
   };
 
   const removeStagedAttachment = (id: string) => {
