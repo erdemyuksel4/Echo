@@ -135,15 +135,15 @@ export async function createImageAttachment(file: File): Promise<Attachment> {
 
   const isGif = file.type === 'image/gif' || file.name.toLowerCase().endsWith('.gif');
 
-  // Preserve animated GIFs using direct Data URL if under 2.5MB
+  // Handle GIF files
   if (isGif) {
-    if (file.size > 3 * 1024 * 1024) {
-      throw new Error('GIF boyutu 3 MB sınırını aşıyor.');
+    if (file.size > 1.5 * 1024 * 1024) {
+      throw new Error('Animasyonlu GIF boyutu 1.5 MB sınırını aşıyor.');
     }
     const dataUrl = await new Promise<string>((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = () => resolve(reader.result as string);
-      reader.onerror = () => reject(new Error('GIF okunamadı.'));
+      reader.onerror = () => reject(new Error('GIF dosyası okunamadı.'));
       reader.readAsDataURL(file);
     });
 
@@ -157,17 +157,43 @@ export async function createImageAttachment(file: File): Promise<Attachment> {
     };
   }
 
-  // Optimize and scale other images (JPEG, PNG, WebP) to WebP Base64 Data URL
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    const objectUrl = URL.createObjectURL(file);
+  // Modern and CSP-safe: Decode via createImageBitmap (no DOM Image, no URL.createObjectURL)
+  try {
+    let sourceWidth = 0;
+    let sourceHeight = 0;
+    let drawSource: CanvasImageSource;
+    let closeBitmap: (() => void) | null = null;
 
-    img.onload = () => {
-      URL.revokeObjectURL(objectUrl);
+    if (typeof createImageBitmap === 'function') {
+      const bitmap = await createImageBitmap(file);
+      sourceWidth = bitmap.width;
+      sourceHeight = bitmap.height;
+      drawSource = bitmap;
+      closeBitmap = () => bitmap.close();
+    } else {
+      // Fallback via FileReader Data URL
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = () => reject(new Error('Görsel okunamadı'));
+        reader.readAsDataURL(file);
+      });
 
-      const maxDim = 1280;
-      let targetWidth = img.naturalWidth || img.width;
-      let targetHeight = img.naturalHeight || img.height;
+      const img = new Image();
+      await new Promise<void>((resolve, reject) => {
+        img.onload = () => resolve();
+        img.onerror = () => reject(new Error('Görsel açılamadı'));
+        img.src = dataUrl;
+      });
+      sourceWidth = img.naturalWidth || img.width;
+      sourceHeight = img.naturalHeight || img.height;
+      drawSource = img;
+    }
+
+    try {
+      const maxDim = 1080;
+      let targetWidth = sourceWidth;
+      let targetHeight = sourceHeight;
 
       if (targetWidth > maxDim || targetHeight > maxDim) {
         if (targetWidth > targetHeight) {
@@ -185,22 +211,20 @@ export async function createImageAttachment(file: File): Promise<Attachment> {
 
       const ctx = canvas.getContext('2d');
       if (!ctx) {
-        reject(new Error('Canvas oluşturulamadı.'));
-        return;
+        throw new Error('Canvas 2D bağlamı oluşturulamadı.');
       }
 
-      ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
+      ctx.drawImage(drawSource, 0, 0, targetWidth, targetHeight);
 
       // Export as high quality compact WebP Data URL
-      let dataUrl = canvas.toDataURL('image/webp', 0.82);
-      // Fallback if browser doesn't support WebP export
+      let dataUrl = canvas.toDataURL('image/webp', 0.8);
       if (!dataUrl.startsWith('data:image/webp')) {
-        dataUrl = canvas.toDataURL('image/jpeg', 0.82);
+        dataUrl = canvas.toDataURL('image/jpeg', 0.8);
       }
 
       const approxBytes = Math.round((dataUrl.length * 3) / 4);
 
-      resolve({
+      return {
         id: `img-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`,
         name: file.name.replace(/\.[^/.]+$/, '') + '.webp',
         size: approxBytes,
@@ -209,16 +233,14 @@ export async function createImageAttachment(file: File): Promise<Attachment> {
         type: 'image',
         width: targetWidth,
         height: targetHeight,
-      });
-    };
-
-    img.onerror = () => {
-      URL.revokeObjectURL(objectUrl);
-      reject(new Error('Görsel dosyası açılamadı.'));
-    };
-
-    img.src = objectUrl;
-  });
+      };
+    } finally {
+      if (closeBitmap) closeBitmap();
+    }
+  } catch (err) {
+    console.error('Image compression error:', err);
+    throw new Error(`Görsel işlenemedi: ${err instanceof Error ? err.message : 'Bilinmeyen hata'}`);
+  }
 }
 
 export async function uploadImageAttachment(_groupId: string, file: File): Promise<Attachment> {

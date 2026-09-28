@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Search, X, Loader2 } from 'lucide-react';
 import type { GiphyItem } from '@echo/shared';
 import { SERVER_HTTP_URL } from '../config';
@@ -35,81 +35,95 @@ export const GiphyPicker: React.FC<GiphyPickerProps> = ({ onSelect, onClose }) =
   }, [onClose]);
 
   // Fetch GIFs (trending if empty, search if query typed) with automatic direct fallback
-  useEffect(() => {
-    let cancelled = false;
-    const timer = setTimeout(
-      async () => {
-        setLoading(true);
-        try {
-          const endpoint = query.trim()
-            ? `${SERVER_HTTP_URL}/api/giphy/search?q=${encodeURIComponent(query.trim())}&limit=24`
-            : `${SERVER_HTTP_URL}/api/giphy/search?limit=24`;
+  const fetchGifs = useCallback(async (searchQuery: string, signal: AbortSignal) => {
+    setLoading(true);
+    try {
+      const endpoint = searchQuery.trim()
+        ? `${SERVER_HTTP_URL}/api/giphy/search?q=${encodeURIComponent(searchQuery.trim())}&limit=24`
+        : `${SERVER_HTTP_URL}/api/giphy/search?limit=24`;
 
-          let items: GiphyItem[] = [];
-          try {
-            const res = await fetch(endpoint);
-            if (res.ok) {
-              const data = (await res.json()) as { results: GiphyItem[] };
-              items = data.results || [];
-            }
-          } catch {
-            // Ignore server proxy error, will try direct fallback
-          }
-
-          // Direct client fallback to Giphy API if server proxy returns empty
-          if (items.length === 0 && !cancelled) {
-            const directKey = 'sXpGFDGZs0Dv1mmNFvYaGUvYwKX0PWIh';
-            const directUrl = query.trim()
-              ? `https://api.giphy.com/v1/gifs/search?api_key=${directKey}&q=${encodeURIComponent(query.trim())}&limit=24&rating=g&lang=tr`
-              : `https://api.giphy.com/v1/gifs/trending?api_key=${directKey}&limit=24&rating=g`;
-
-            const directRes = await fetch(directUrl);
-            if (directRes.ok) {
-              const d = (await directRes.json()) as {
-                data?: Array<{
-                  id: string;
-                  title: string;
-                  images?: {
-                    original?: { url?: string; width?: string; height?: string };
-                    fixed_width?: { url?: string; width?: string; height?: string };
-                  };
-                }>;
-              };
-              items = (d.data || [])
-                .map((item) => {
-                  const original = item.images?.original;
-                  const fixed = item.images?.fixed_width;
-                  if (!original?.url) return null;
-                  return {
-                    id: item.id,
-                    title: item.title || 'GIF',
-                    url: original.url,
-                    previewUrl: fixed?.url || original.url,
-                    width: parseInt(original.width || '300', 10) || 300,
-                    height: parseInt(original.height || '200', 10) || 200,
-                  };
-                })
-                .filter((item): item is NonNullable<typeof item> => item !== null);
-            }
-          }
-
-          if (!cancelled) {
-            setResults(items);
-          }
-        } catch (err) {
-          console.warn('Failed to load GIFs:', err);
-        } finally {
-          if (!cancelled) setLoading(false);
+      let items: GiphyItem[] = [];
+      try {
+        const res = await fetch(endpoint, { signal });
+        if (res.ok) {
+          const data = (await res.json()) as { results?: GiphyItem[] };
+          items = data.results || [];
         }
+      } catch (proxyErr) {
+        if ((proxyErr as Error)?.name === 'AbortError') return;
+        // Proxy error, fallback to direct Giphy API
+      }
+
+      // Direct client fallback to Giphy API if server proxy returns empty
+      if (items.length === 0 && !signal.aborted) {
+        const directKey = 'sXpGFDGZs0Dv1mmNFvYaGUvYwKX0PWIh';
+        const directUrl = searchQuery.trim()
+          ? `https://api.giphy.com/v1/gifs/search?api_key=${directKey}&q=${encodeURIComponent(searchQuery.trim())}&limit=24&rating=g&lang=tr`
+          : `https://api.giphy.com/v1/gifs/trending?api_key=${directKey}&limit=24&rating=g`;
+
+        try {
+          const directRes = await fetch(directUrl, { signal });
+          if (directRes.ok) {
+            const d = (await directRes.json()) as {
+              data?: Array<{
+                id: string;
+                title: string;
+                images?: {
+                  original?: { url?: string; width?: string; height?: string };
+                  fixed_width?: { url?: string; width?: string; height?: string };
+                };
+              }>;
+            };
+            items = (d.data || [])
+              .map((item) => {
+                const original = item.images?.original;
+                const fixed = item.images?.fixed_width;
+                if (!original?.url) return null;
+                return {
+                  id: item.id,
+                  title: item.title || 'GIF',
+                  url: original.url,
+                  previewUrl: fixed?.url || original.url,
+                  width: parseInt(original.width || '300', 10) || 300,
+                  height: parseInt(original.height || '200', 10) || 200,
+                };
+              })
+              .filter((item): item is NonNullable<typeof item> => item !== null);
+          }
+        } catch (directErr) {
+          if ((directErr as Error)?.name === 'AbortError') return;
+          console.warn('Direct Giphy fetch error:', directErr);
+        }
+      }
+
+      if (!signal.aborted) {
+        setResults(items);
+      }
+    } catch (err) {
+      if ((err as Error)?.name !== 'AbortError') {
+        console.warn('Failed to load GIFs:', err);
+      }
+    } finally {
+      if (!signal.aborted) {
+        setLoading(false);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const timer = setTimeout(
+      () => {
+        void fetchGifs(query, controller.signal);
       },
       query ? 350 : 0,
     );
 
     return () => {
-      cancelled = true;
+      controller.abort();
       clearTimeout(timer);
     };
-  }, [query]);
+  }, [query, fetchGifs]);
 
   return (
     <div
@@ -153,8 +167,18 @@ export const GiphyPicker: React.FC<GiphyPickerProps> = ({ onSelect, onClose }) =
             <span className="text-xs">GIF'ler yükleniyor...</span>
           </div>
         ) : results.length === 0 ? (
-          <div className="h-full flex items-center justify-center text-neutral-400 text-xs">
-            Sonuç bulunamadı.
+          <div className="h-full flex flex-col items-center justify-center text-neutral-400 text-xs gap-2 p-4 text-center">
+            <span>GIF bulunamadı veya ağ bağlantısı yanıt vermedi.</span>
+            <button
+              type="button"
+              onClick={() => {
+                const c = new AbortController();
+                void fetchGifs(query, c.signal);
+              }}
+              className="px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded text-xs transition"
+            >
+              Tekrar Dene
+            </button>
           </div>
         ) : (
           <div className="grid grid-cols-2 gap-2">
