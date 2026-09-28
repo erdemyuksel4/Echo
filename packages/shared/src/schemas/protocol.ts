@@ -46,6 +46,7 @@ export const WsClientEvents = {
   SHARE_START: 'share.start',
   SHARE_STOP: 'share.stop',
   SHARE_SIGNAL: 'share.signal',
+  MUSIC_ACTION: 'music.action',
 } as const;
 
 // Server to Client Events
@@ -82,6 +83,7 @@ export const WsServerEvents = {
   SHARE_STOPPED: 'share.stopped',
   SHARE_SIGNAL: 'share.signal',
   SHARE_ACTIVE_LIST: 'share.active_list',
+  MUSIC_STATE: 'music.state',
 } as const;
 
 // Event Payload Schemas
@@ -238,6 +240,7 @@ export const ServerDmReadPayloadSchema = z.object({
 });
 
 export * from './screenshare';
+export * from './music';
 
 export {
   AuthPayloadSchema,

@@ -37,6 +37,8 @@ import {
   type GroupMember,
   type Message,
   type Attachment,
+  MusicActionSchema,
+  type MusicPlaybackState,
 } from '@echo/shared';
 import type { Env } from '../index';
 
@@ -87,6 +89,7 @@ export class GroupDO extends DurableObject<Env> {
   private voiceRooms: Map<string, Map<string, VoiceParticipant>> = new Map(); // channelId -> (userId -> participant)
   private userVoiceChannel: Map<string, string> = new Map(); // userId -> channelId
   private screenShares: Map<string, Map<string, ScreenShareState>> = new Map(); // channelId -> (userId -> ScreenShareState)
+  private musicStates: Map<string, MusicPlaybackState> = new Map(); // channelId -> MusicPlaybackState
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -802,6 +805,9 @@ export class GroupDO extends DurableObject<Env> {
       case WsClientEvents.SHARE_SIGNAL:
         this.handleShareSignal(session, envelope);
         break;
+      case WsClientEvents.MUSIC_ACTION:
+        this.handleMusicAction(ws, session, envelope);
+        break;
       default:
         this.sendError(ws, 'UNKNOWN_EVENT', `Bilinmeyen olay: ${envelope.t}`);
         break;
@@ -1402,6 +1408,11 @@ export class GroupDO extends DurableObject<Env> {
         shares: channelShares,
       });
     }
+
+    const musicState = this.musicStates.get(channelId);
+    if (musicState && musicState.status !== 'stopped') {
+      this.send(ws, WsServerEvents.MUSIC_STATE, musicState);
+    }
   }
 
   private handleVoiceLeave(session: WsSessionAttachment, envelope: WsEnvelope): void {
@@ -1616,6 +1627,138 @@ export class GroupDO extends DurableObject<Env> {
         }
       }
     }
+  }
+
+  private handleMusicAction(
+    ws: WebSocket,
+    _session: WsSessionAttachment,
+    envelope: WsEnvelope,
+  ): void {
+    const parse = MusicActionSchema.safeParse(envelope.d);
+    if (!parse.success) {
+      this.sendError(ws, 'INVALID_PAYLOAD', 'Müzik eylemi parametreleri geçersiz');
+      return;
+    }
+
+    const action = parse.data;
+    const { channelId } = action;
+
+    let state = this.musicStates.get(channelId);
+    if (!state) {
+      state = {
+        channelId,
+        currentTrack: null,
+        status: 'stopped',
+        positionSeconds: 0,
+        lastUpdatedTimestamp: Date.now(),
+        queue: [],
+        loopMode: 'off',
+      };
+      this.musicStates.set(channelId, state);
+    }
+
+    const now = Date.now();
+
+    switch (action.action) {
+      case 'play': {
+        if (action.track) {
+          state.currentTrack = action.track;
+          state.status = 'playing';
+          state.positionSeconds = 0;
+          state.lastUpdatedTimestamp = now;
+        } else if (state.currentTrack) {
+          state.status = 'playing';
+          state.lastUpdatedTimestamp = now;
+        } else if (state.queue.length > 0) {
+          const next = state.queue.shift();
+          state.currentTrack = next || null;
+          state.status = 'playing';
+          state.positionSeconds = 0;
+          state.lastUpdatedTimestamp = now;
+        }
+        break;
+      }
+
+      case 'pause': {
+        if (state.status === 'playing') {
+          const elapsed = (now - state.lastUpdatedTimestamp) / 1000;
+          state.positionSeconds = Math.max(0, state.positionSeconds + elapsed);
+          state.status = 'paused';
+          state.lastUpdatedTimestamp = now;
+        }
+        break;
+      }
+
+      case 'resume': {
+        if (state.status === 'paused') {
+          state.status = 'playing';
+          state.lastUpdatedTimestamp = now;
+        }
+        break;
+      }
+
+      case 'seek': {
+        state.positionSeconds = Math.max(0, action.positionSeconds);
+        state.lastUpdatedTimestamp = now;
+        break;
+      }
+
+      case 'skip': {
+        if (state.loopMode === 'single' && state.currentTrack) {
+          state.positionSeconds = 0;
+          state.lastUpdatedTimestamp = now;
+        } else {
+          if (state.loopMode === 'all' && state.currentTrack) {
+            state.queue.push(state.currentTrack);
+          }
+          const next = state.queue.shift();
+          if (next) {
+            state.currentTrack = next;
+            state.status = 'playing';
+            state.positionSeconds = 0;
+            state.lastUpdatedTimestamp = now;
+          } else {
+            state.currentTrack = null;
+            state.status = 'stopped';
+            state.positionSeconds = 0;
+            state.lastUpdatedTimestamp = now;
+          }
+        }
+        break;
+      }
+
+      case 'queue_add': {
+        state.queue.push(action.track);
+        if (state.status === 'stopped' || !state.currentTrack) {
+          state.currentTrack = state.queue.shift() || null;
+          state.status = 'playing';
+          state.positionSeconds = 0;
+          state.lastUpdatedTimestamp = now;
+        }
+        break;
+      }
+
+      case 'queue_remove': {
+        state.queue = state.queue.filter((t) => t.id !== action.trackId);
+        break;
+      }
+
+      case 'stop': {
+        state.currentTrack = null;
+        state.status = 'stopped';
+        state.positionSeconds = 0;
+        state.queue = [];
+        state.lastUpdatedTimestamp = now;
+        break;
+      }
+
+      case 'loop_mode': {
+        state.loopMode = action.mode;
+        break;
+      }
+    }
+
+    this.broadcast(WsServerEvents.MUSIC_STATE, state, envelope.id);
   }
 
   private send(ws: WebSocket, type: string, data: unknown, id?: string): void {

@@ -11,11 +11,14 @@ import {
   type Attachment,
   type ScreenShareState,
   type ScreenQualityPreset,
+  type MusicPlaybackState,
+  type MusicAction,
 } from '@echo/shared';
 import { useChatStore } from '../stores/useChatStore';
 import { useAuthStore } from '../stores/useAuthStore';
 import { useVoiceStore } from '../stores/useVoiceStore';
 import { useScreenShareStore } from '../stores/useScreenShareStore';
+import { useMusicStore } from '../stores/useMusicStore';
 import { soundService } from './sound';
 import { SERVER_WS_URL } from '../config';
 import { webrtcService } from './webrtc';
@@ -488,12 +491,22 @@ class EchoWebSocketService {
         break;
       }
 
+      case WsServerEvents.MUSIC_STATE: {
+        const data = envelope.d as MusicPlaybackState;
+        useMusicStore.getState().setPlaybackState(data);
+        break;
+      }
+
       case WsServerEvents.ERROR: {
         const data = envelope.d as { code: string; message: string };
         console.error(`Server error (${groupId}):`, data.code, data.message);
         break;
       }
     }
+  }
+
+  sendMusicAction(action: MusicAction): void {
+    this.send(WsClientEvents.MUSIC_ACTION, action);
   }
 
   sendMessage(

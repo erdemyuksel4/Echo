@@ -543,6 +543,145 @@ app.get('/api/giphy/search', async (c) => {
   return c.json({ results: [] });
 });
 
+// YouTube Music / Video Search Proxy (Zero API keys needed, fast & resilient)
+app.get('/api/music/search', async (c) => {
+  const q = c.req.query('q')?.trim() || '';
+  if (!q) {
+    return c.json({ results: [] });
+  }
+
+  // 1. Direct YouTube URL check
+  const ytUrlMatch = q.match(
+    /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:watch\?v=|embed\/|v\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/i,
+  );
+  if (ytUrlMatch && ytUrlMatch[1]) {
+    const videoId = ytUrlMatch[1];
+    try {
+      const oembedRes = await fetch(
+        `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`,
+      );
+      if (oembedRes.ok) {
+        const d = (await oembedRes.json()) as {
+          title?: string;
+          author_name?: string;
+          thumbnail_url?: string;
+        };
+        return c.json({
+          results: [
+            {
+              id: videoId,
+              title: d.title || 'YouTube Video',
+              author: d.author_name || 'YouTube',
+              duration: '0:00',
+              durationSeconds: 0,
+              thumbnailUrl: d.thumbnail_url || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
+              url: `https://www.youtube.com/watch?v=${videoId}`,
+            },
+          ],
+        });
+      }
+    } catch {
+      // Fallback
+    }
+
+    return c.json({
+      results: [
+        {
+          id: videoId,
+          title: 'YouTube Video',
+          author: 'YouTube',
+          duration: '0:00',
+          durationSeconds: 0,
+          thumbnailUrl: `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
+          url: `https://www.youtube.com/watch?v=${videoId}`,
+        },
+      ],
+    });
+  }
+
+  // 2. Keyword Search on YouTube
+  try {
+    const searchUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(q)}`;
+    const res = await fetch(searchUrl, {
+      headers: {
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept-Language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7',
+      },
+    });
+
+    if (!res.ok) {
+      return c.json({ results: [] });
+    }
+
+    const html = await res.text();
+    const match = html.match(/ytInitialData\s*=\s*({.+?});<\/script>/s);
+    if (!match || !match[1]) {
+      // Regex fallback if ytInitialData parse fails
+      const idMatches = [...html.matchAll(/"videoId":"([a-zA-Z0-9_-]{11})"/g)].map((m) => m[1]);
+      const uniqueIds = [...new Set(idMatches)].slice(0, 8);
+      const results = uniqueIds.map((id) => ({
+        id,
+        title: q,
+        author: 'YouTube',
+        duration: '0:00',
+        durationSeconds: 0,
+        thumbnailUrl: `https://i.ytimg.com/vi/${id}/hqdefault.jpg`,
+        url: `https://www.youtube.com/watch?v=${id}`,
+      }));
+      return c.json({ results });
+    }
+
+    const json = JSON.parse(match[1]);
+    const contents =
+      json.contents?.twoColumnSearchResultsRenderer?.primaryContents?.sectionListRenderer
+        ?.contents?.[0]?.itemSectionRenderer?.contents || [];
+
+    const results: Array<{
+      id: string;
+      title: string;
+      author: string;
+      duration: string;
+      durationSeconds: number;
+      thumbnailUrl: string;
+      url: string;
+    }> = [];
+
+    for (const item of contents) {
+      const vr = item.videoRenderer;
+      if (vr && vr.videoId) {
+        const durStr = vr.lengthText?.simpleText || '0:00';
+        let durSec = 0;
+        const parts = durStr.split(':').map(Number);
+        if (parts.length === 2 && !parts.some(isNaN)) {
+          durSec = (parts[0] ?? 0) * 60 + (parts[1] ?? 0);
+        } else if (parts.length === 3 && !parts.some(isNaN)) {
+          durSec = (parts[0] ?? 0) * 3600 + (parts[1] ?? 0) * 60 + (parts[2] ?? 0);
+        }
+
+        results.push({
+          id: vr.videoId,
+          title: vr.title?.runs?.[0]?.text || q,
+          author: vr.ownerText?.runs?.[0]?.text || '',
+          duration: durStr,
+          durationSeconds: durSec,
+          thumbnailUrl:
+            vr.thumbnail?.thumbnails?.[0]?.url ||
+            `https://i.ytimg.com/vi/${vr.videoId}/hqdefault.jpg`,
+          url: `https://www.youtube.com/watch?v=${vr.videoId}`,
+        });
+
+        if (results.length >= 8) break;
+      }
+    }
+
+    return c.json({ results });
+  } catch (err) {
+    console.warn('YouTube search proxy error:', err);
+    return c.json({ results: [] });
+  }
+});
+
 // ── DM: Helper — check common group membership ───────────────────────────────
 
 async function hasCommonGroup(env: Env, userIdA: string, userIdB: string): Promise<boolean> {

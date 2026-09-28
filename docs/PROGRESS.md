@@ -657,7 +657,30 @@ Bu dosya her faz ve görev sonunda güncellenir.
 - [x] **Sunucu Eklenti Rota İyileştirmesi (`GroupDO.ts`, `apps/server/src/index.ts`):**
   - Sunucu yükleme rotalarında `groupId` boş kalma ihtimali ortadan kaldırıldı; çift slash (`//`) hataları kalıcı olarak çözüldü.
 
+## Birlikte İzle / Müzik Odası & YouTube Botu (v0.1.31)
 
-
-
-
+- [x] **YouTube Arama & Sıfır API Key Proxy (`/api/music/search`):**
+  - Cloudflare Worker üzerinden YouTube arama motoru doğrudan taranarak video ID, başlık, yazar, süre ve küçük resimler ~200-300ms içinde JSON olarak sunulur.
+  - Google API Key gerektirmez, kota ve maliyet limiti yoktur (Cloudflare Free uyumlu).
+- [x] **Gerçek Zamanlı Senkronize Oynatma Mantığı (`GroupDO.ts`, `@echo/shared`):**
+  - Ses kanalı bazında senkronize oynatma durumu (`MusicPlaybackState`: çalan şarkı, oynatma/duraklatma durumu, geçen saniye, kuyruk, döngü modu).
+  - WebRTC ses kanallarına yeni katılan kullanıcılara mevcut müzik anında tam saniyesinde senkronize edilir (`music.state`).
+  - İstemciler arası zaman kayması otomatik hesaplanır (`expectedPos = positionSeconds + elapsed`).
+- [x] **YouTube IFrame Oynatıcı & Arka Plan Kesintisiz Oynatma (`MusicPlayerWidget.tsx`):**
+  - Tekil IFrame API motoru sayesinde ses kanalı açıkken kullanıcı text kanallarını gezerken müzik kesilmez.
+  - Video izlemek istendiğinde sağ altta şık Picture-in-Picture (PiP) mini oynatıcı belirir; istenirse tek tıkla gizlenebilir.
+  - Şarkı bittiğinde sıradaki parçaya otomatik geçiş (`ended` -> `skip`).
+- [x] **Modern Müzik Yönetim Modalı (`MusicModal.tsx`):**
+  - **Çalan Parça Sekmesi:** Kapak resmi, şarkı adı, sanatçı, ilerleme çubuğu (seek bar), Oynat/Duraklat, Atla, Durdur, Döngü (Kapalı / Tekrar / Kuyruk), Ses seviyesi ve susturma.
+  - **Arama Sekmesi:** YouTube'da anında şarkı ve video arama; tek tıkla hemen çalma veya kuyruğa ekleme.
+  - **Kuyruk Sekmesi:** Sıradaki şarkı listesi, parçaları kuyruktan çıkarma ve kuyruğu temizleme.
+- [x] **Sohbet Komutları (`ChatArea.tsx`):**
+  - `!play <şarkı adı veya YouTube linki>` (veya `!p`): Şarkıyı bulur ve doğrudan çalar ya da kuyruğa ekler.
+  - `!pause`: Müziği duraklatır.
+  - `!resume`: Müziği devam ettirir.
+  - `!skip` (veya `!next`): Sonraki şarkıya geçer.
+  - `!queue` (veya `!q`): Çalan ve sıradaki şarkıları formatlı liste olarak sohbete döker.
+  - `!stop`: Müziği durdurur ve kuyruğu temizler.
+  - `!music` / `!help`: Komut rehberini gösterir.
+- [x] **Ses Sahnesi Entegrasyonu (`VoiceStageView.tsx`):**
+  - Ses kanalı üst çubuğunda ve alt yüzen araç çubuğunda 🎵 "Birlikte Dinle / Müzik" butonu ve çalan şarkı göstergesi.

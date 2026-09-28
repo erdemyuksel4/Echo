@@ -9,3 +9,4 @@ export * from './schemas/screenshare';
 export * from './crypto/identity';
 export * from './markdown';
 export * from './schemas/media';
+export * from './schemas/music';

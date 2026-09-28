@@ -13,6 +13,8 @@ import { CreateOrJoinModal } from './components/CreateOrJoinModal';
 import { ScreenShareViewer } from './components/ScreenShareViewer';
 import { VoiceStageView } from './components/VoiceStageView';
 import { UpdateNotification } from './components/UpdateNotification';
+import { MusicPlayerWidget } from './components/music/MusicPlayerWidget';
+import { MusicModal } from './components/music/MusicModal';
 import { webrtcService } from './services/webrtc';
 import { SERVER_HTTP_URL } from './config';
 
@@ -208,6 +210,8 @@ export const App: React.FC = () => {
 
         <CreateOrJoinModal isOpen={showCreateModal} onClose={() => setShowCreateModal(false)} />
         <ScreenShareViewer />
+        <MusicPlayerWidget />
+        <MusicModal />
       </div>
     </div>
   );

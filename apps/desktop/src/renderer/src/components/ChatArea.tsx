@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Hash, Send, CornerUpLeft, X, Image, Paperclip, Users } from 'lucide-react';
-import type { Attachment, GiphyItem } from '@echo/shared';
+import type { Attachment, GiphyItem, MusicTrack } from '@echo/shared';
 import { useChatStore } from '../stores/useChatStore';
 import { useAuthStore } from '../stores/useAuthStore';
+import { useVoiceStore } from '../stores/useVoiceStore';
+import { useMusicStore } from '../stores/useMusicStore';
 import { wsService } from '../services/websocket';
 import { ChatMessageItem } from './ChatMessageItem';
 import { GiphyPicker } from './GiphyPicker';
@@ -164,6 +166,161 @@ export const ChatArea: React.FC = () => {
           },
         };
       });
+    }
+
+    // Music Bot Command Handling
+    const trimmed = content.trim();
+    if (trimmed.startsWith('!')) {
+      const parts = trimmed.slice(1).split(/\s+/);
+      const cmd = parts[0]?.toLowerCase();
+      const arg = parts.slice(1).join(' ').trim();
+
+      const musicCommands = [
+        'play',
+        'p',
+        'pause',
+        'resume',
+        'skip',
+        'next',
+        'stop',
+        'queue',
+        'q',
+        'müzik',
+        'music',
+        'help',
+      ];
+
+      if (cmd && musicCommands.includes(cmd)) {
+        const currentVoiceChId = useVoiceStore.getState().currentChannelId;
+        if (!currentVoiceChId) {
+          setTimeout(() => {
+            wsService.sendMessage(
+              activeChannelId,
+              '⚠️ **Müzik Botu:** Müzik komutlarını kullanmak için lütfen önce bir ses kanalına katılın.',
+            );
+          }, 200);
+        } else {
+          void handleMusicBotCommand(cmd, arg, currentVoiceChId, activeChannelId);
+        }
+      }
+    }
+  };
+
+  const handleMusicBotCommand = async (
+    cmd: string,
+    arg: string,
+    voiceChannelId: string,
+    chatChannelId: string,
+  ) => {
+    const musicStore = useMusicStore.getState();
+    const currentPlayback = musicStore.playbackStates[voiceChannelId];
+
+    if (cmd === 'play' || cmd === 'p') {
+      if (!arg) {
+        wsService.sendMessage(
+          chatChannelId,
+          '⚠️ **Kullanım:** `!play <şarkı adı veya YouTube bağlantısı>`',
+        );
+        return;
+      }
+      try {
+        const res = await fetch(
+          `${SERVER_HTTP_URL}/api/music/search?q=${encodeURIComponent(arg)}`,
+        );
+        if (!res.ok) {
+          wsService.sendMessage(chatChannelId, `❌ Şarkı aranamadı (HTTP ${res.status}).`);
+          return;
+        }
+        const data = (await res.json()) as { results: MusicTrack[] };
+        const track = data.results?.[0];
+        if (!track) {
+          wsService.sendMessage(chatChannelId, `❌ **"${arg}"** için YouTube sonucu bulunamadı.`);
+          return;
+        }
+
+        const fullTrack: MusicTrack = {
+          ...track,
+          addedByUserId: identity?.userId ?? '',
+          addedByName: identity?.displayName ?? 'Kullanıcı',
+        };
+
+        const isCurrentlyPlaying =
+          currentPlayback?.status === 'playing' || Boolean(currentPlayback?.currentTrack);
+        if (isCurrentlyPlaying) {
+          wsService.sendMusicAction({
+            action: 'queue_add',
+            channelId: voiceChannelId,
+            track: fullTrack,
+          });
+          wsService.sendMessage(
+            chatChannelId,
+            `🎶 **Kuyruğa Eklendi:** [${fullTrack.title}](${fullTrack.url}) \`[${fullTrack.duration}]\``,
+          );
+        } else {
+          wsService.sendMusicAction({
+            action: 'play',
+            channelId: voiceChannelId,
+            track: fullTrack,
+          });
+          wsService.sendMessage(
+            chatChannelId,
+            `🎵 **Şu An Çalıyor:** [${fullTrack.title}](${fullTrack.url}) \`[${fullTrack.duration}]\``,
+          );
+        }
+      } catch (err) {
+        console.warn('Music bot search failed:', err);
+        wsService.sendMessage(chatChannelId, '❌ Şarkı aranırken bir bağlantı hatası oluştu.');
+      }
+    } else if (cmd === 'pause') {
+      wsService.sendMusicAction({ action: 'pause', channelId: voiceChannelId });
+      wsService.sendMessage(
+        chatChannelId,
+        '⏸️ **Müzik duraklatıldı.** (Devam ettirmek için `!resume`)',
+      );
+    } else if (cmd === 'resume') {
+      wsService.sendMusicAction({ action: 'resume', channelId: voiceChannelId });
+      wsService.sendMessage(chatChannelId, '▶️ **Müzik devam ettiriliyor.**');
+    } else if (cmd === 'skip' || cmd === 'next') {
+      wsService.sendMusicAction({ action: 'skip', channelId: voiceChannelId });
+      wsService.sendMessage(chatChannelId, '⏭️ **Şarkı atlandı.**');
+    } else if (cmd === 'stop') {
+      wsService.sendMusicAction({ action: 'stop', channelId: voiceChannelId });
+      wsService.sendMessage(chatChannelId, '⏹️ **Müzik durduruldu ve kuyruk temizlendi.**');
+    } else if (cmd === 'queue' || cmd === 'q') {
+      const q = currentPlayback?.queue ?? [];
+      const current = currentPlayback?.currentTrack;
+      if (!current && q.length === 0) {
+        wsService.sendMessage(chatChannelId, '📭 Şu anda çalan şarkı veya kuyrukta parça yok.');
+      } else {
+        const lines: string[] = ['📜 **Müzik Kuyruğu:**'];
+        if (current) {
+          lines.push(
+            `▶️ **Şu an:** ${current.title} (${current.author}) \`[${current.duration}]\``,
+          );
+        }
+        if (q.length > 0) {
+          lines.push('---');
+          q.slice(0, 10).forEach((t, i) => {
+            lines.push(`${i + 1}. ${t.title} \`[${t.duration}]\` *(isteyen: ${t.addedByName})*`);
+          });
+          if (q.length > 10) {
+            lines.push(`*...ve ${q.length - 10} şarkı daha.*`);
+          }
+        }
+        wsService.sendMessage(chatChannelId, lines.join('\n'));
+      }
+    } else if (cmd === 'music' || cmd === 'müzik' || cmd === 'help') {
+      wsService.sendMessage(
+        chatChannelId,
+        '🎵 **Echo Müzik & Watch Together Komutları:**\n' +
+          '• `!play <şarkı / youtube linki>` — Şarkıyı çalar veya kuyruğa ekler\n' +
+          '• `!pause` — Müziği duraklatır\n' +
+          '• `!resume` — Müziği devam ettirir\n' +
+          '• `!skip` — Sonraki şarkıya geçer\n' +
+          '• `!queue` — Çalan ve sıradaki şarkıları listeler\n' +
+          '• `!stop` — Müziği durdurur ve kuyruğu temizler\n' +
+          '*(Ayrıca ses kanalındaki 🎵 butonuna basarak arayüzden de yönetebilirsiniz!)*',
+      );
     }
   };
 

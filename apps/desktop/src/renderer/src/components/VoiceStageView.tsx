@@ -18,6 +18,7 @@ import {
   Eye,
   EyeOff,
   Loader2,
+  Music,
 } from 'lucide-react';
 import {
   type Channel,
@@ -30,6 +31,7 @@ import { useVoiceStore } from '../stores/useVoiceStore';
 import { useAuthStore } from '../stores/useAuthStore';
 import { useChatStore } from '../stores/useChatStore';
 import { useScreenShareStore } from '../stores/useScreenShareStore';
+import { useMusicStore } from '../stores/useMusicStore';
 import { webrtcService } from '../services/webrtc';
 import { VoiceDiagnosticsModal } from './VoiceDiagnosticsModal';
 import { useScreenShareViewerDucking } from '../hooks/useScreenShareViewerDucking';
@@ -462,6 +464,10 @@ export const VoiceStageView: React.FC<Props> = ({ channel }) => {
   const isCurrentChannel = currentChannelId === channel.id;
   const participants = channelParticipants[channel.id] ?? [];
 
+  // Music playback state for this channel
+  const musicPlaybackState = useMusicStore((state) => state.playbackStates[channel.id] ?? null);
+  const activeMusicTrack = musicPlaybackState?.currentTrack;
+
   // Active screen shares for this channel
   const channelShares = activeShares.filter((s) => s.channelId === channel.id);
   const isLocalSharingHere = isSharing && currentChannelId === channel.id;
@@ -609,6 +615,25 @@ export const VoiceStageView: React.FC<Props> = ({ channel }) => {
           >
             {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
           </button>
+
+          {/* Watch Together / Music Button */}
+          {isCurrentChannel && (
+            <button
+              type="button"
+              onClick={() => useMusicStore.getState().setPanelOpen(true)}
+              className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition border cursor-pointer ${
+                activeMusicTrack
+                  ? 'bg-indigo-600/30 text-indigo-300 border-indigo-500/50 hover:bg-indigo-600/40 shadow-sm'
+                  : 'text-slate-300 hover:bg-slate-800 hover:text-white border-slate-800'
+              }`}
+              title="Birlikte Müzik & Video (YouTube)"
+            >
+              <Music className={`h-3.5 w-3.5 ${activeMusicTrack ? 'text-indigo-400 animate-pulse' : 'text-slate-400'}`} />
+              <span className="hidden sm:inline truncate max-w-[130px]">
+                {activeMusicTrack ? activeMusicTrack.title : 'Birlikte Dinle'}
+              </span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -805,6 +830,23 @@ export const VoiceStageView: React.FC<Props> = ({ channel }) => {
                 <Radio className={`h-4 w-4 ${isSelfLoopbackActive ? 'animate-pulse text-slate-950' : 'text-amber-400'}`} />
                 <span className="hidden sm:inline">
                   {isSelfLoopbackActive ? 'Ağ Testi Açık' : 'Ses Testi'}
+                </span>
+              </button>
+
+              {/* Music / Watch Together Button */}
+              <button
+                type="button"
+                onClick={() => useMusicStore.getState().setPanelOpen(true)}
+                className={`flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs font-semibold transition border cursor-pointer ${
+                  activeMusicTrack
+                    ? 'bg-indigo-600 text-white border-indigo-500 hover:bg-indigo-500 shadow-sm shadow-indigo-500/30'
+                    : 'bg-slate-900 text-slate-300 border-slate-800 hover:bg-slate-800 hover:text-white'
+                }`}
+                title="Birlikte Dinle / YouTube Müzik & Video"
+              >
+                <Music className={`h-4 w-4 ${activeMusicTrack ? 'text-white animate-pulse' : 'text-indigo-400'}`} />
+                <span className="hidden sm:inline">
+                  {activeMusicTrack ? 'Müzik Açık' : 'Birlikte Dinle'}
                 </span>
               </button>
 
