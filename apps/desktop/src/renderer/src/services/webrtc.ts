@@ -1162,17 +1162,21 @@ class WebRTCVoiceService {
 
   getAudioConstraints(deviceId?: string | null): MediaTrackConstraints {
     const devId = deviceId !== undefined ? deviceId : this.selectedInputDeviceId;
+    const isAiActive = this.audioProcessing.rnnoise;
+
+    // When AI neural denoiser is active, DISABLE Chromium's legacy destructive NS and AGC.
+    // Legacy NS distorts phase and smears transients; AGC uncontrollably boosts room noise and cup clinks.
     const constraints: MediaTrackConstraints = {
       echoCancellation: this.audioProcessing.echoCancellation,
-      noiseSuppression: this.audioProcessing.noiseSuppression,
-      autoGainControl: this.audioProcessing.autoGainControl,
+      noiseSuppression: isAiActive ? false : this.audioProcessing.noiseSuppression,
+      autoGainControl: isAiActive ? false : this.audioProcessing.autoGainControl,
     };
 
     // Chromium DSP proprietary constraints
     Object.assign(constraints, {
       googEchoCancellation: this.audioProcessing.echoCancellation,
-      googAutoGainControl: this.audioProcessing.autoGainControl,
-      googNoiseSuppression: this.audioProcessing.noiseSuppression,
+      googAutoGainControl: isAiActive ? false : this.audioProcessing.autoGainControl,
+      googNoiseSuppression: isAiActive ? false : this.audioProcessing.noiseSuppression,
       googHighpassFilter: this.audioProcessing.highpassFilter,
       googTypingNoiseDetection: this.audioProcessing.typingSuppression,
     });

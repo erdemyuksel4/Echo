@@ -605,6 +605,19 @@ Bu dosya her faz ve görev sonunda güncellenir.
   - `SettingsModal`: Ayarlar -> Ses & Donanım sekmesine "Kanal İçi Ses & Ağ Test Modu" kontrol anahtarı eklendi.
   - Tercihler `localStorage` üzerinde saklanarak kanal geçişlerinde ve oturumlarda korunur.
 
+## Konuşma Esnasındaki Arka Plan ve Darbe Seslerinin İzolasyonu (v0.1.26)
+
+- [x] **Chromium AGC & Eski Gürültü Filtresi Parazitleri Kaldırıldı (`webrtc.ts`):**
+  - *Kök Neden:* `getUserMedia` üzerindeki `autoGainControl: true` konuşma anında mikrofon kazancını +15 dB artırarak arka plandaki bardak, klavye ve oda seslerini yapay olarak yükseltiyor; legacy NS ise sesin fazını bozarak derin öğrenme modelinin spektral ayrıştırma kalitesini düşürüyordu.
+  - *Çözüm:* Yapay zeka aktifken Chromium'un gürültü bozan AGC ve eski NS filtreleri devre dışı bırakıldı; GTCRN'e saf, bozulmamış mikrofon sinyali aktarıldı.
+- [x] **AudioWorklet Akıllı Konuşma Kapısı (`EchoSpeechGateProcessor` - `rnnoiseProcessor.ts`):**
+  - -42 dB açılma, -48 dB kapanma eşiği ve 130 ms konuşma kuyruğu (hold time) ile çalışan akıllı ses kapısı AudioWorklet'e eklendi.
+  - Üstel yumuşak geçiş ile hece aralarındaki nefeslerde ve duraklamalarda ses tabanı mutlak sıfıra (0.0) çekilerek arkadan gelen tüm ses sızıntıları kesildi.
+- [x] **Çok Kademeli Akustik Darbe ve Rezonans Bastırıcı:**
+  - *85 Hz High-Pass Filtresi:* Masaya bardak koyma, klavye darbesi ve hava akımı titreşimlerini yok eder.
+  - *8 kHz Cam Rezonans Filtresi:* İnsan sesinde bulunmayan, cam/porselen şıngırtısına ait 8-16 kHz arası tiz parazitleri yumuşatır.
+  - *Hızlı Ataklı Darbe Kompresörü (DynamicsCompressor):* 2 ms atak ve 14:1 sıkıştırma oranıyla konuşurken bile bardağın çarpması veya klavye vuruşlarının oluşturduğu ani genlik patlamalarını 14-16 dB anında aşağı bastırır.
+
 
 
 
