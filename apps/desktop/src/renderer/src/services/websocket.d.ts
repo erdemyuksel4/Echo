@@ -1,0 +1,41 @@
+import { type VoiceSignalData, type Attachment, type ScreenQualityPreset } from '@echo/shared';
+declare class EchoWebSocketService {
+    private activeGroupId;
+    private sockets;
+    private lastTypingSentTime;
+    connect(groupId: string): void;
+    private initSocket;
+    private handleEvent;
+    sendMessage(channelId: string, content: string, replyTo?: string, attachments?: Attachment[]): void;
+    editMessage(channelId: string, messageId: string, content: string): void;
+    deleteMessage(channelId: string, messageId: string): void;
+    addReaction(channelId: string, messageId: string, emoji: string): void;
+    removeReaction(channelId: string, messageId: string, emoji: string): void;
+    sendTyping(channelId: string): void;
+    fetchHistory(channelId: string, before?: string): void;
+    createChannel(name: string, type: 'text' | 'voice'): void;
+    deleteChannel(channelId: string): void;
+    joinVoice(groupId: string, channelId: string): void;
+    leaveVoice(channelId: string, targetGroupId?: string): void;
+    sendVoiceSignal(channelId: string, targetUserId: string, signal: VoiceSignalData): void;
+    sendVoiceState(channelId: string, state: {
+        muted: boolean;
+        deafened: boolean;
+        speaking: boolean;
+        camera?: boolean;
+    }): void;
+    sendFileSignal(targetUserId: string, signal: unknown): void;
+    sendShareStart(channelId: string, quality: ScreenQualityPreset, mode: 'motion' | 'detail', hasAudio: boolean): void;
+    sendShareStop(channelId: string): void;
+    sendShareSignal(channelId: string, targetUserId: string, signal: unknown): void;
+    private send;
+    private sendToGroup;
+    private scheduleReconnect;
+    private cleanupSocketTimers;
+    private closeSocket;
+    disconnect(): void;
+    disconnectAll(): void;
+}
+export declare const wsService: EchoWebSocketService;
+export declare const echoWebSocketService: EchoWebSocketService;
+export {};
