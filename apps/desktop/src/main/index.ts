@@ -231,6 +231,21 @@ if (!gotTheLock) {
       },
     );
 
+    session.defaultSession.webRequest.onHeadersReceived(
+      {
+        urls: [
+          '*://*.youtube.com/*',
+          '*://*.youtube-nocookie.com/*',
+        ],
+      },
+      (details, callback) => {
+        const responseHeaders = { ...details.responseHeaders };
+        delete responseHeaders['x-frame-options'];
+        delete responseHeaders['X-Frame-Options'];
+        callback({ cancel: false, responseHeaders });
+      },
+    );
+
     app.on('browser-window-created', (_, window) => {
       optimizer.watchWindowShortcuts(window);
     });
