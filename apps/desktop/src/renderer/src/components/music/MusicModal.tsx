@@ -120,10 +120,13 @@ export const MusicModal: React.FC = () => {
   const handleTogglePlayPause = () => {
     if (!currentChannelId) return;
     if (status === 'playing') {
+      void window.echoApi?.music?.pause();
       wsService.sendMusicAction({ action: 'pause', channelId: currentChannelId });
     } else if (status === 'paused') {
+      void window.echoApi?.music?.resume();
       wsService.sendMusicAction({ action: 'resume', channelId: currentChannelId });
     } else if (currentTrack) {
+      void window.echoApi?.music?.resume();
       wsService.sendMusicAction({ action: 'play', channelId: currentChannelId });
     }
   };
@@ -135,6 +138,7 @@ export const MusicModal: React.FC = () => {
 
   const handleStop = () => {
     if (!currentChannelId) return;
+    void window.echoApi?.music?.stop();
     wsService.sendMusicAction({ action: 'stop', channelId: currentChannelId });
   };
 
@@ -152,6 +156,8 @@ export const MusicModal: React.FC = () => {
   const handleSeekCommit = (newPos: number) => {
     if (!currentChannelId) return;
     setSeekTime(null);
+    setCurrentPosition(newPos);
+    void window.echoApi?.music?.seek(newPos);
     wsService.sendMusicAction({
       action: 'seek',
       channelId: currentChannelId,
@@ -488,7 +494,10 @@ export const MusicModal: React.FC = () => {
           <div className="mt-4 pt-3 border-t border-slate-800 flex items-center justify-between text-xs text-slate-400">
             <div className="flex items-center gap-2">
               <button
-                onClick={toggleMute}
+                onClick={() => {
+                  toggleMute();
+                  void window.echoApi?.music?.setVolume(volume, !isMuted);
+                }}
                 className="p-1 hover:text-white transition"
                 title={isMuted ? 'Sesi Aç' : 'Sesi Kapat'}
               >
@@ -504,8 +513,10 @@ export const MusicModal: React.FC = () => {
                 max={100}
                 value={isMuted ? 0 : volume}
                 onChange={(e) => {
+                  const val = Number(e.target.value);
                   if (isMuted) toggleMute();
-                  setVolume(Number(e.target.value));
+                  setVolume(val);
+                  void window.echoApi?.music?.setVolume(val, false);
                 }}
                 className="w-24 h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-indigo-500"
               />

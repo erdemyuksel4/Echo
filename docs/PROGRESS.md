@@ -723,5 +723,22 @@ Bu dosya her faz ve görev sonunda güncellenir.
     4. Yapılan testte parçanın 2. saniyesinde başarıyla gerçek ses akışının başladığı (`readyState: 4, paused: false, muted: false, volume: 1.0`) doğrulandı.
   - Otomatik `pnpm release` ile `v0.1.37` derlendi ve GitHub Releases'e yüklendi.
 
+## Parça Kontrolleri, Ses Ayarı & Küçük Oynatıcı İyileştirmeleri (v0.1.38)
+
+- [x] **YouTube `movie_player` API Entegrasyonu & Kesin Ses/Duraklatma Kontrolü (`musicPlayer.ts`):**
+  - *Kök Neden:* YouTube'un masaüstü sayfasında HTML5 `<video>` elemanının ses ve duraklatma durumları YouTube'un özel `movie_player` oynatıcı kontrolcüsü tarafından denetlenmektedir. `<video>.volume` veya `<video>.pause()` doğrudan çağrıldığında YouTube dahili durum makinesi sesi tekrar yükseltiyor veya duraklatmayı iptal ederek çalmaya zorluyordu. Ayrıca `did-finish-load` anındaki 20 tekrarlı kontrol döngüsü, kullanıcı parçayı durdursa bile `v.paused` gördüğünde parçayı zorla yeniden başlatıyordu.
+  - *Çözüm:*
+    1. `movie_player` API'si entegre edildi: `mp.setVolume(vol)` (0-100), `mp.mute()`, `mp.unMute()`, `mp.pauseVideo()`, `mp.playVideo()`, `mp.seekTo(seconds, true)` ve `mp.stopVideo()`.
+    2. `MusicPlayerManager` içerisine `isPaused` durumu eklendi; kullanıcı duraklatma yaptığında arka plan poll döngüsünün parçayı zorla tekrar başlatması engellendi.
+    3. Parça bittiğinde sıradakine geçiş için hem `movie_player.onStateChange` (0 = ENDED) hem de `v.onended` kancaları çift katmanlı bağlandı.
+- [x] **Küçük Oynatıcı Widget'ı Geliştirmeleri (`MusicPlayerWidget.tsx`):**
+  - Küçük oynatıcı hapına doğrudan ses kısma/açma sürgüsü (`range input`) ve hızlı sessize alma (`Volume2 / Volume1 / VolumeX`) butonu eklendi. Kullanıcı büyük paneli açmaya gerek kalmadan sağ alttan anında ses seviyesini değiştirebilir.
+  - Oynat/Duraklat ve Durdur butonlarına anlık iyimser tepki (`optimistic response`) eklendi; WebSocket sunucu cevabı beklenmeden yerel ses motoru milisaniyeler içinde durdurulur/başlatılır.
+  - Küçük oynatıcı widget'ının altına şık ve ince bir ilerleme çubuğu (`mini progress bar`) ile geçen süre / toplam süre (`1:24 / 3:45`) bilgisi eklendi.
+  - Şarkı sarma (seek) işlemi hem yerel hem de uzak istemciler için senkronize edildi.
+- [x] **Büyük Müzik Paneli İyileştirmeleri (`MusicModal.tsx`):**
+  - Zaman çubuğu sarıldığında (`handleSeekCommit`), yerel ses motoru anında `window.echoApi.music.seek` ile yeni konuma atlatılır.
+  - Ses çubuğu ve susturma butonları doğrudan `window.echoApi.music.setVolume` ile anlık senkronize çalışır.
+
 
 
