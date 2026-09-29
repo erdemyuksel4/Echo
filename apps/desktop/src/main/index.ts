@@ -201,7 +201,12 @@ if (!gotTheLock) {
       );
     });
 
-    // Ensure YouTube requests always include valid Referer and Origin headers in Electron (Fixes Error 153)
+    // Clean Electron/Echo tags from User-Agent to prevent YouTube from flagging embeds as automated bots
+    const baseUa = session.defaultSession.getUserAgent();
+    const cleanChromeUa = baseUa.replace(/Electron\/\S+\s*/g, '').replace(/Echo\/\S+\s*/g, '');
+    session.defaultSession.setUserAgent(cleanChromeUa);
+
+    // Ensure YouTube requests always include valid Referer and Origin headers in Electron (Fixes Error 152 & 153)
     session.defaultSession.webRequest.onBeforeSendHeaders(
       {
         urls: [
@@ -212,8 +217,16 @@ if (!gotTheLock) {
         ],
       },
       (details, callback) => {
-        details.requestHeaders['Referer'] = 'https://www.youtube.com/';
-        details.requestHeaders['Origin'] = 'https://www.youtube.com';
+        const appOrigin = 'https://echo-server.erdemyuksel04.workers.dev';
+        details.requestHeaders['Referer'] = `${appOrigin}/`;
+        details.requestHeaders['Origin'] = appOrigin;
+
+        if (details.requestHeaders['User-Agent']) {
+          details.requestHeaders['User-Agent'] = details.requestHeaders['User-Agent']
+            .replace(/Electron\/\S+\s*/g, '')
+            .replace(/Echo\/\S+\s*/g, '');
+        }
+
         callback({ cancel: false, requestHeaders: details.requestHeaders });
       },
     );

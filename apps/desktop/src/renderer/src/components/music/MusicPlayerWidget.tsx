@@ -145,7 +145,7 @@ export const MusicPlayerWidget: React.FC = () => {
 
         playerRef.current = new window.YT.Player(playerDiv, {
           videoId: trackId,
-          host: 'https://www.youtube-nocookie.com',
+          host: 'https://www.youtube.com',
           playerVars: {
             autoplay: 1,
             controls: 1,
@@ -155,8 +155,8 @@ export const MusicPlayerWidget: React.FC = () => {
             rel: 0,
             enablejsapi: 1,
             playsinline: 1,
-            origin: 'https://www.youtube.com',
-            widget_referrer: 'https://www.youtube.com',
+            origin: 'https://echo-server.erdemyuksel04.workers.dev',
+            widget_referrer: 'https://echo-server.erdemyuksel04.workers.dev',
           },
           events: {
             onReady: (event) => {
