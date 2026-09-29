@@ -711,4 +711,17 @@ Bu dosya her faz ve görev sonunda güncellenir.
   - `MusicModal.tsx` içindeki video büyütme/küçültme karmaşası kaldırılarak temiz, stüdyo kalitesinde albüm kapağı ve ses kontrolleri sağlandı.
   - Otomatik `pnpm release` ile `v0.1.36` derlendi ve GitHub Releases'e yüklendi.
 
+## Google Video CDN 403 Düzeltmesi & Kesintisiz Canlı Ses Çalma (v0.1.37)
+
+- [x] **Sesin Hiç Gelmemesine Neden Olan 2 Temel Kök Nedenin Tespiti ve Çözümü:**
+  - *Kök Neden 1 (Google Video 403 Forbidden):* `onBeforeSendHeaders` içinde `*.googlevideo.com/*` medya akış isteklerine sahte Referer (`https://echo-server.erdemyuksel04.workers.dev/`) enjekte ediliyordu. Google Video CDN sunucuları YouTube harici bir referer gördüğü anda ses ve görüntü paketlerini anında HTTP 403 Forbidden ile tamamen engelliyordu.
+  - *Kök Neden 2 (Chromium Occlusion / VisibilityState):* Arka plan penceresi `show: false` ile açıldığında Chromium'un `document.visibilityState` değeri `'hidden'` kalıyor ve YouTube video/ses kod çözücüsü arka plan view bot koruması nedeniyle sesi hiç başlatmıyordu.
+  - *Kesin Çözüm:*
+    1. `onBeforeSendHeaders` kuralında Google Video CDN istekleri için özgün ve geçerli başlıklar tanımlandı: `Referer: https://www.youtube.com/`, `Origin: https://www.youtube.com`. Böylece Google Video CDN tüm ses paketlerini eksiksiz ve 200 OK ile iletmeye başladı.
+    2. Arka plan ses oynatıcı penceresi kullanıcı ekranı dışına taşındı (`x: -9999, y: -9999, show: true, skipTaskbar: true, focusable: false`). Bu sayede Chromium motoru pencereyi aktif/görünür kabul ederek ses işlemcisini çalıştırır, ancak pencere kullanıcıya asla gözükmez ve odak çalmaz.
+    3. Standart YouTube izleme bağlantısı (`youtube.com/watch?v=...`) doğrudan yüklenerek gömme (embed) engelleri, Error 150/152/153 kısıtlamaları tamamen bertaraf edildi.
+    4. Yapılan testte parçanın 2. saniyesinde başarıyla gerçek ses akışının başladığı (`readyState: 4, paused: false, muted: false, volume: 1.0`) doğrulandı.
+  - Otomatik `pnpm release` ile `v0.1.37` derlendi ve GitHub Releases'e yüklendi.
+
+
 
