@@ -696,3 +696,19 @@ Bu dosya her faz ve görev sonunda güncellenir.
     4. `MusicPlayerWidget.tsx` içinde iframe için `referrerpolicy="strict-origin-when-cross-origin"` ve `allow="autoplay; encrypted-media; picture-in-picture"` ayarlandı; oynatıcıda lisanslı video veya hata durumunda otomatik sıradaki parçaya atlama (`skip`) devreye alındı.
     5. Otomatik `pnpm release` ile `v0.1.35` sürümü derlenip GitHub Releases'e yüklendi.
 
+## İframe'siz Saf Arka Plan Ses Motoru & Discord Tarzı Müzik Botu (v0.1.36)
+
+- [x] **İframe'in Tamamen Kaldırılması & Yerel Arka Plan Ses Motoru (`musicPlayer.ts`):**
+  - *Kök Neden:* Arayüze gömülen `iframe` elemanları yerel `file://` ortamında `postMessage` güvenlik engeline takılıyor, siyah kutu olarak kalıyor ve ses kod çözücüsü başlatılamıyordu. Ayrıca patronun belirttiği üzere müzik botu için ekranda yer kaplayan video iframe'ine gerek yoktu.
+  - *Çözüm:* 
+    1. Masaüstü ana sürecinde (`MusicPlayerManager`) tamamen görünmez, kullanıcı arayüzünde yer kaplamayan (`show: false`, `skipTaskbar: true`, `backgroundThrottling: false`) arka plan ses motoru oluşturuldu.
+    2. URL doğrudan üst düzey pencere olarak `https://www.youtube-nocookie.com/embed/{id}?autoplay=1` şeklinde yüklenir. İframe ve cross-origin `postMessage` katmanı olmadığı için YouTube medya motoru sesi doğrudan Windows hoparlör/kulaklık çıkışına aktarır.
+    3. `did-finish-load` anında HTML5 `<video>` oynatıcısı yakalanır, ses seviyesi ve susturma senkronize edilir, `autoplay` anında başlatılır.
+    4. Şarkı bittiğinde (`onended`) otomatik olarak `music:onEnded` IPC sinyali tetiklenir ve sıradaki parçaya (`skip`) pürüzsüz geçilir.
+- [x] **Arayüzün Sadeleştirilmesi & İframe'den Arındırılması (`MusicPlayerWidget.tsx`, `MusicModal.tsx`):**
+  - Renderer DOM'undaki tüm `iframe` ve `window.YT` API kodları kaldırıldı.
+  - Ekranda siyah video kutusu yerine sağ altta Discord tarzı modern, minimal ve şık bir müzik hapı (kapak resmi, parça adı, sanatçı, Oynat/Duraklat, Atla, Durdur, Müzik Paneli) yer alır.
+  - `MusicModal.tsx` içindeki video büyütme/küçültme karmaşası kaldırılarak temiz, stüdyo kalitesinde albüm kapağı ve ses kontrolleri sağlandı.
+  - Otomatik `pnpm release` ile `v0.1.36` derlendi ve GitHub Releases'e yüklendi.
+
+
