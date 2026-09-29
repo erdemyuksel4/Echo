@@ -76,52 +76,63 @@ class MusicPlayerManager {
     }
 
     this.playerWindow = new BrowserWindow({
-      width: 480,
-      height: 360,
-      show: false, // Completely hidden background player, no video window on screen
+      width: 600,
+      height: 400,
+      x: -9999,
+      y: -9999,
+      show: true, // Visible to Chromium engine so compositor & audio decode run, placed completely offscreen
       focusable: false,
       skipTaskbar: true,
       webPreferences: {
         backgroundThrottling: false,
         autoplayPolicy: 'no-user-gesture-required',
-        contextIsolation: false,
-        nodeIntegration: false,
-        sandbox: false,
       },
     });
 
     this.playerWindow.webContents.on('did-finish-load', () => {
-      const targetVol = this.isMuted ? 0 : this.volume / 100;
-      this.executeJs(`
-        (function() {
-          let attempts = 0;
-          const tryPlay = () => {
-            const v = document.querySelector('video');
-            const playBtn = document.querySelector('.ytp-large-play-button');
-            if (playBtn) {
-              try { playBtn.click(); } catch(e) {}
+      let attempts = 0;
+      const poll = setInterval(() => {
+        attempts++;
+        if (!this.playerWindow || this.playerWindow.isDestroyed() || attempts > 20) {
+          clearInterval(poll);
+          return;
+        }
+
+        const targetVol = this.isMuted ? 0 : this.volume / 100;
+        this.playerWindow.webContents
+          .executeJavaScript(
+            `
+          (function() {
+            const skipBtn = document.querySelector('.ytp-skip-ad-button, .ytp-ad-skip-button, .ytp-ad-skip-button-modern');
+            if (skipBtn) {
+              try { skipBtn.click(); } catch(e) {}
             }
+            const v = document.querySelector('video');
             if (v) {
               v.muted = ${this.isMuted};
               v.volume = ${targetVol};
-              const p = v.play();
-              if (p && p.catch) {
-                p.catch(function(e) {
-                  v.muted = false;
-                  v.play().catch(function() {});
-                });
+              if (v.paused) {
+                v.play().catch(function() {});
               }
-              v.onended = () => {
-                window.location.hash = 'ended-' + Date.now();
-              };
-            } else if (attempts < 25) {
-              attempts++;
-              setTimeout(tryPlay, 200);
+              if (!v.__echoHooked) {
+                v.__echoHooked = true;
+                v.onended = () => {
+                  window.location.hash = 'ended-' + Date.now();
+                };
+              }
+              return { ready: true, paused: v.paused, time: v.currentTime };
             }
-          };
-          tryPlay();
-        })();
-      `);
+            return { ready: false };
+          })()
+        `,
+          )
+          .then((res: { ready?: boolean; paused?: boolean }) => {
+            if (res && res.ready && !res.paused) {
+              clearInterval(poll);
+            }
+          })
+          .catch(() => {});
+      }, 500);
     });
 
     this.playerWindow.webContents.on('did-navigate-in-page', (_event, url) => {
@@ -152,8 +163,8 @@ class MusicPlayerManager {
 
     this.currentTrackId = videoId;
     const win = this.ensurePlayerWindow();
-    const embedUrl = `https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&start=${Math.floor(startSeconds)}`;
-    void win.loadURL(embedUrl);
+    const watchUrl = `https://www.youtube.com/watch?v=${videoId}${startSeconds > 0 ? `&t=${Math.floor(startSeconds)}s` : ''}`;
+    void win.loadURL(watchUrl).catch(() => {});
   }
 
   private executeJs(code: string): void {

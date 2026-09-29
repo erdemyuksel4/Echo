@@ -209,20 +209,19 @@ if (!gotTheLock) {
     const cleanChromeUa = baseUa.replace(/Electron\/\S+\s*/g, '').replace(/Echo\/\S+\s*/g, '');
     session.defaultSession.setUserAgent(cleanChromeUa);
 
-    // Ensure YouTube requests always include valid Referer and Origin headers in Electron (Fixes Error 152 & 153)
+    // Ensure YouTube & Google Video requests always include valid Referer and Origin headers in Electron
     session.defaultSession.webRequest.onBeforeSendHeaders(
       {
         urls: [
+          '*://*.googlevideo.com/*',
           '*://*.youtube.com/*',
           '*://*.youtube-nocookie.com/*',
-          '*://*.googlevideo.com/*',
           '*://*.ytimg.com/*',
         ],
       },
       (details, callback) => {
-        const appOrigin = 'https://echo-server.erdemyuksel04.workers.dev';
-        details.requestHeaders['Referer'] = `${appOrigin}/`;
-        details.requestHeaders['Origin'] = appOrigin;
+        details.requestHeaders['Referer'] = 'https://www.youtube.com/';
+        details.requestHeaders['Origin'] = 'https://www.youtube.com';
 
         if (details.requestHeaders['User-Agent']) {
           details.requestHeaders['User-Agent'] = details.requestHeaders['User-Agent']
