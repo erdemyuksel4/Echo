@@ -684,3 +684,15 @@ Bu dosya her faz ve görev sonunda güncellenir.
   - `!music` / `!help`: Komut rehberini gösterir.
 - [x] **Ses Sahnesi Entegrasyonu (`VoiceStageView.tsx`):**
   - Ses kanalı üst çubuğunda ve alt yüzen araç çubuğunda 🎵 "Birlikte Dinle / Müzik" butonu ve çalan şarkı göstergesi.
+
+## YouTube Oynatıcı & Hata 152 / 153 Çözümü (v0.1.34 - v0.1.35)
+
+- [x] **YouTube Referer & Origin Doğrulaması (`apps/desktop/src/main/index.ts`):**
+  - *Kök Neden:* Paketlenmiş Electron masaüstü uygulamasında HTML dosyaları yerel `file://` protokolünden yüklendiğinden, tarayıcı YouTube API isteklerinde `Referer` ve `Origin` başlıklarını göndermiyordu. YouTube, `file://` protokolünden gelen veya boş referer içeren gömülü oynatıcıları "Hata Kodu 153" ile engelliyordu. `Referer: https://www.youtube.com/` yapıldığında ise "EMBEDDER_IDENTITY_DENIED" (Hata Kodu 152-4) oluşuyordu.
+  - *Çözüm:* 
+    1. `session.defaultSession.webRequest.onBeforeSendHeaders` ile YouTube domainlerine (`*.youtube.com`, `*.youtube-nocookie.com`, `*.googlevideo.com`, `*.ytimg.com`) giden tüm isteklere geçerli sunucu kökü (`Referer: https://echo-server.erdemyuksel04.workers.dev/`, `Origin: https://echo-server.erdemyuksel04.workers.dev`) enjekte edildi.
+    2. User-Agent başlığından `Electron/` ve `Echo/` izleri tamamen temizlenerek standart Google Chrome masaüstü kimliği sağlandı.
+    3. `session.defaultSession.webRequest.onHeadersReceived` kuralı eklenerek YouTube yanıtlarındaki `X-Frame-Options` kısıtlayıcı başlıkları temizlendi.
+    4. `MusicPlayerWidget.tsx` içinde iframe için `referrerpolicy="strict-origin-when-cross-origin"` ve `allow="autoplay; encrypted-media; picture-in-picture"` ayarlandı; oynatıcıda lisanslı video veya hata durumunda otomatik sıradaki parçaya atlama (`skip`) devreye alındı.
+    5. Otomatik `pnpm release` ile `v0.1.35` sürümü derlenip GitHub Releases'e yüklendi.
+
