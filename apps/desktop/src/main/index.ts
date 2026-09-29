@@ -18,6 +18,7 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils';
 import { APP_NAME, PROTOCOL_VERSION } from '@echo/shared';
 import { IdentityManager } from './identity';
 import { initAutoUpdater } from './updater';
+import { musicPlayerManager } from './musicPlayer';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -156,6 +157,7 @@ function createWindow(): void {
   }
 
   initAutoUpdater(mainWindow);
+  musicPlayerManager.init(mainWindow);
 }
 
 // Single Instance Lock (disabled or isolated when testing with custom profiles)
@@ -174,6 +176,7 @@ if (!gotTheLock) {
 
   app.on('before-quit', () => {
     isQuitting = true;
+    musicPlayerManager.stop();
   });
 
   void app.whenReady().then(() => {

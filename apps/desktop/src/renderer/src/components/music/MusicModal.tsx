@@ -12,8 +12,6 @@ import {
   ListPlus,
   Trash2,
   X,
-  Maximize2,
-  Minimize2,
   Loader2,
   Radio,
 } from 'lucide-react';
@@ -34,8 +32,6 @@ export const MusicModal: React.FC = () => {
     setVolume,
     isMuted,
     toggleMute,
-    isExpandedStage,
-    setExpandedStage,
   } = useMusicStore();
 
   const playbackState = useMusicStore((state) =>
@@ -186,13 +182,6 @@ export const MusicModal: React.FC = () => {
 
           <div className="flex items-center gap-1.5">
             <button
-              onClick={() => setExpandedStage(!isExpandedStage)}
-              className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition"
-              title={isExpandedStage ? 'Sahneden Gizle' : 'Sahneye Büyüt'}
-            >
-              {isExpandedStage ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
-            </button>
-            <button
               onClick={() => setPanelOpen(false)}
               className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition"
             >
@@ -255,16 +244,6 @@ export const MusicModal: React.FC = () => {
                         Ekleyen: {currentTrack.addedByName}
                       </span>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => setExpandedStage(!isExpandedStage)}
-                      className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity"
-                    >
-                      <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-xs font-semibold shadow-lg">
-                        <Maximize2 className="h-3.5 w-3.5" />
-                        {isExpandedStage ? 'Videoyu Gizle' : 'Videoyu Aç (PiP)'}
-                      </span>
-                    </button>
                   </div>
 
                   {/* Title & Author */}

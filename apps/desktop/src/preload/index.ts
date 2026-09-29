@@ -50,6 +50,15 @@ export interface EchoApi {
     cb: (progress: { percent: number; bytesPerSecond: number }) => void,
   ) => () => void;
   onUpdateDownloaded: (cb: (info: { version: string }) => void) => () => void;
+  music: {
+    loadTrack: (videoId: string, startSeconds?: number) => Promise<boolean>;
+    pause: () => Promise<boolean>;
+    resume: () => Promise<boolean>;
+    seek: (seconds: number) => Promise<boolean>;
+    setVolume: (volume: number, isMuted: boolean) => Promise<boolean>;
+    stop: () => Promise<boolean>;
+    onEnded: (cb: () => void) => () => void;
+  };
 }
 
 const echoApi: EchoApi = {
@@ -152,6 +161,35 @@ const echoApi: EchoApi = {
     return () => {
       ipcRenderer.removeListener('updater:downloaded', handler);
     };
+  },
+  music: {
+    loadTrack: (videoId: string, startSeconds?: number): Promise<boolean> => {
+      return ipcRenderer.invoke('music:loadTrack', { videoId, startSeconds });
+    },
+    pause: (): Promise<boolean> => {
+      return ipcRenderer.invoke('music:pause');
+    },
+    resume: (): Promise<boolean> => {
+      return ipcRenderer.invoke('music:resume');
+    },
+    seek: (seconds: number): Promise<boolean> => {
+      return ipcRenderer.invoke('music:seek', { seconds });
+    },
+    setVolume: (volume: number, isMuted: boolean): Promise<boolean> => {
+      return ipcRenderer.invoke('music:setVolume', { volume, isMuted });
+    },
+    stop: (): Promise<boolean> => {
+      return ipcRenderer.invoke('music:stop');
+    },
+    onEnded: (cb: () => void): (() => void) => {
+      const handler = (): void => {
+        cb();
+      };
+      ipcRenderer.on('music:onEnded', handler);
+      return () => {
+        ipcRenderer.removeListener('music:onEnded', handler);
+      };
+    },
   },
 };
 

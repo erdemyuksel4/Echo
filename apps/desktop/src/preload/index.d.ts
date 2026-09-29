@@ -55,6 +55,15 @@ export interface EchoApi {
     onUpdateDownloaded: (cb: (info: {
         version: string;
     }) => void) => () => void;
+    music: {
+        loadTrack: (videoId: string, startSeconds?: number) => Promise<boolean>;
+        pause: () => Promise<boolean>;
+        resume: () => Promise<boolean>;
+        seek: (seconds: number) => Promise<boolean>;
+        setVolume: (volume: number, isMuted: boolean) => Promise<boolean>;
+        stop: () => Promise<boolean>;
+        onEnded: (cb: () => void) => () => void;
+    };
 }
 
 declare global {
