@@ -23,9 +23,6 @@ export interface VoiceState {
     isDiagnosticsOpen: boolean;
     localAudioLevel: number;
     isMicUnavailable: boolean;
-    isSelfLoopbackActive: boolean;
-    setSelfLoopbackActive: (active: boolean) => void;
-    toggleSelfLoopback: () => void;
     setConnecting: (groupId: string, groupName: string, channelId: string, channelName: string) => void;
     setConnected: (channelId: string) => void;
     setDisconnected: () => void;

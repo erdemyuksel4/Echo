@@ -38,7 +38,6 @@ export interface VoiceState {
 
   localAudioLevel: number;
   isMicUnavailable: boolean;
-  isSelfLoopbackActive: boolean;
 
   // Individual peer volume control (0.0 to 2.0 -> 0% to 200%) & local mute
   peerVolumes: Record<string, number>;
@@ -47,8 +46,6 @@ export interface VoiceState {
   // Actions
   setPeerVolume: (userId: string, volume: number) => void;
   setPeerMuted: (userId: string, muted: boolean) => void;
-  setSelfLoopbackActive: (active: boolean) => void;
-  toggleSelfLoopback: () => void;
   setConnecting: (
     groupId: string,
     groupName: string,
@@ -120,13 +117,6 @@ const getInitialPttReleaseDelay = (): number => {
   }
 };
 
-const getInitialSelfLoopback = (): boolean => {
-  try {
-    return localStorage.getItem('echo_voice_self_loopback') === 'true';
-  } catch {
-    return false;
-  }
-};
 
 const getInitialPeerVolumes = (): Record<string, number> => {
   try {
@@ -172,7 +162,6 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
 
   localAudioLevel: 0,
   isMicUnavailable: false,
-  isSelfLoopbackActive: getInitialSelfLoopback(),
   peerVolumes: getInitialPeerVolumes(),
   peerMuted: getInitialPeerMuted(),
 
@@ -197,24 +186,6 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
     set({ peerMuted: next });
   },
 
-  setSelfLoopbackActive: (active: boolean) => {
-    try {
-      localStorage.setItem('echo_voice_self_loopback', String(active));
-    } catch {
-      // Ignore
-    }
-    set({ isSelfLoopbackActive: active });
-  },
-
-  toggleSelfLoopback: () => {
-    const next = !get().isSelfLoopbackActive;
-    try {
-      localStorage.setItem('echo_voice_self_loopback', String(next));
-    } catch {
-      // Ignore
-    }
-    set({ isSelfLoopbackActive: next });
-  },
 
   setConnecting: (groupId, groupName, channelId, channelName) =>
     set({

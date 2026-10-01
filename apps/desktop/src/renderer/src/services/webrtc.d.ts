@@ -35,9 +35,6 @@ declare class WebRTCVoiceService {
     private outputVolume;
     private testMicStream;
     private testMicAudioEl;
-    private loopbackSenderPc;
-    private loopbackReceiverPc;
-    private loopbackAudioEl;
     init(): Promise<void>;
     join(groupId: string, groupName: string, channelId: string, channelName: string): Promise<void>;
     leave(): void;
@@ -75,11 +72,6 @@ declare class WebRTCVoiceService {
     getOutputVolume(): number;
     getInputDeviceId(): string | null;
     getOutputDeviceId(): string | null;
-    startLoopbackTest(): Promise<void>;
-    stopLoopbackTest(): void;
-    restartLoopbackTest(): Promise<void>;
-    setSelfLoopbackActive(active: boolean): void;
-    toggleSelfLoopback(): void;
     testMicrophone(onLevel: (rms: number) => void, enableLoopback?: boolean): () => void;
     setTestMicLoopback(enable: boolean): void;
     getLocalCameraStream(): MediaStream | null;

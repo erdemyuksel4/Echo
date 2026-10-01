@@ -56,70 +56,8 @@ export async function getRnnoise(): Promise<ArrayBuffer> {
   }
 }
 
-const speechGateWorkletSource = `
-class EchoSpeechGateProcessor extends AudioWorkletProcessor {
-  constructor() {
-    super();
-    // Open threshold: -42 dB (~0.0079 linear amplitude)
-    // Close threshold: -48 dB (~0.00398 linear amplitude)
-    this.openThreshold = 0.0079;
-    this.closeThreshold = 0.00398;
-    // ~130 ms hold time in 128-sample blocks at 48kHz (1 block = 2.66ms -> 49 blocks)
-    this.holdBlocks = 49;
-    this.holdCounter = 0;
-    this.currentGain = 0.0;
-    this.isOpen = false;
-  }
-
-  process(inputs, outputs) {
-    const input = inputs[0];
-    const output = outputs[0];
-    if (!input || !input[0] || input[0].length === 0) return true;
-
-    const inChannel = input[0];
-    const outChannel = output[0];
-    const len = inChannel.length;
-
-    // Calculate RMS energy of current 128-sample block
-    let sum = 0;
-    for (let i = 0; i < len; i++) {
-      const sample = inChannel[i];
-      sum += sample * sample;
-    }
-    const rms = Math.sqrt(sum / len);
-
-    // Gate state machine with hysteresis
-    if (rms >= this.openThreshold) {
-      this.isOpen = true;
-      this.holdCounter = this.holdBlocks;
-    } else if (rms < this.closeThreshold) {
-      if (this.holdCounter > 0) {
-        this.holdCounter--;
-      } else {
-        this.isOpen = false;
-      }
-    }
-
-    const targetGain = this.isOpen ? 1.0 : 0.0;
-    // Fast attack (under 1ms), smooth natural release (approx 15-20ms)
-    const step = this.isOpen ? 0.04 : 0.009;
-
-    for (let i = 0; i < len; i++) {
-      this.currentGain += (targetGain - this.currentGain) * step;
-      if (this.currentGain < 0.0001) {
-        this.currentGain = 0.0;
-      }
-      outChannel[i] = inChannel[i] * this.currentGain;
-    }
-
-    return true;
-  }
-}
-registerProcessor('echo-speech-gate', EchoSpeechGateProcessor);
-`;
-
 /**
- * Registers GTCRN (2024), RNNoise, and Echo Speech Gate worklet processors into the AudioContext
+ * Registers GTCRN (2024) and RNNoise worklet processors into the AudioContext
  * using in-memory Blob URLs to avoid Electron file:// cross-origin issues.
  */
 async function ensureWorkletModule(ctx: AudioContext): Promise<void> {
@@ -133,9 +71,6 @@ async function ensureWorkletModule(ctx: AudioContext): Promise<void> {
   const rnnoiseBlob = new Blob([rnnoiseWorkletSource], { type: 'text/javascript' });
   const rnnoiseBlobUrl = URL.createObjectURL(rnnoiseBlob);
 
-  const speechGateBlob = new Blob([speechGateWorkletSource], { type: 'text/javascript' });
-  const speechGateBlobUrl = URL.createObjectURL(speechGateBlob);
-
   try {
     await Promise.all([
       ctx.audioWorklet.addModule(gtcrnBlobUrl).catch((err: unknown) => {
@@ -144,16 +79,12 @@ async function ensureWorkletModule(ctx: AudioContext): Promise<void> {
       ctx.audioWorklet.addModule(rnnoiseBlobUrl).catch((err: unknown) => {
         console.warn('[Echo AI Denoise] RNNoise worklet load warning:', err);
       }),
-      ctx.audioWorklet.addModule(speechGateBlobUrl).catch((err: unknown) => {
-        console.warn('[Echo AI Denoise] Speech gate worklet load warning:', err);
-      }),
     ]);
     cachedWorkletLoadedContexts.add(ctx);
     console.log('[Echo AI Denoise] AudioWorklet modules registered.');
   } finally {
     URL.revokeObjectURL(gtcrnBlobUrl);
     URL.revokeObjectURL(rnnoiseBlobUrl);
-    URL.revokeObjectURL(speechGateBlobUrl);
   }
 }
 
@@ -228,9 +159,6 @@ export async function createRNNoiseProcessor(
   peakLimiter.attack.setValueAtTime(0.003, audioContext.currentTime); // 3ms transparent attack
   peakLimiter.release.setValueAtTime(0.05, audioContext.currentTime); // 50ms fast recovery
 
-  // 6. Intelligent Speech Gate: Completely cuts output to 0.0 in pauses between words/sentences
-  const speechGateNode = new AudioWorkletNode(audioContext, 'echo-speech-gate');
-
   // Cross-fade gain nodes for smooth, click-free live bypass toggling
   const denoiseGain = audioContext.createGain();
   const bypassGain = audioContext.createGain();
@@ -239,15 +167,14 @@ export async function createRNNoiseProcessor(
   bypassGain.gain.setValueAtTime(initialEnabled ? 0.0 : 1.0, audioContext.currentTime);
 
   // Audio Graph:
-  // Denoised branch: sourceNode -> highpass -> denoiseNode -> clarityEq -> airEq -> peakLimiter -> speechGateNode -> denoiseGain -> destinationNode
+  // Denoised branch: sourceNode -> highpass -> denoiseNode -> clarityEq -> airEq -> peakLimiter -> denoiseGain -> destinationNode
   // Bypassed branch: sourceNode -> bypassGain -> destinationNode
   sourceNode.connect(highpass);
   highpass.connect(denoiseNode);
   denoiseNode.connect(clarityEq);
   clarityEq.connect(airEq);
   airEq.connect(peakLimiter);
-  peakLimiter.connect(speechGateNode);
-  speechGateNode.connect(denoiseGain);
+  peakLimiter.connect(denoiseGain);
   denoiseGain.connect(destinationNode);
 
   sourceNode.connect(bypassGain);
@@ -273,7 +200,6 @@ export async function createRNNoiseProcessor(
       clarityEq.disconnect();
       airEq.disconnect();
       peakLimiter.disconnect();
-      speechGateNode.disconnect();
       denoiseGain.disconnect();
       bypassGain.disconnect();
       destinationNode.disconnect();

@@ -740,5 +740,12 @@ Bu dosya her faz ve görev sonunda güncellenir.
   - Zaman çubuğu sarıldığında (`handleSeekCommit`), yerel ses motoru anında `window.echoApi.music.seek` ile yeni konuma atlatılır.
   - Ses çubuğu ve susturma butonları doğrudan `window.echoApi.music.setVolume` ile anlık senkronize çalışır.
 
+## Ses Test Modunun Kaldırılması & Doğrudan Ses İletim Standardı (v0.1.39)
 
-
+- [x] **Ses İletimi Kök Nedenlerinin Çözümü (Karşı Tarafa Ses Gitmeme Sorunu):**
+  - *Kök Neden 1 (rnnoiseProcessor.ts):* `EchoSpeechGateProcessor` yapısı -42 dB (`openThreshold = 0.0079`) altında kalan tüm sesleri `currentGain = 0.0` ile sıfırlıyordu. Normal konuşma seviyeleri bu eşiğin altında kaldığı için ses karşı tarafa gitmiyordu; test modu açıldığında hoparlörden mikrofon geri beslemesi oluşup eşik aşıldığı için sadece test modunda ses gidiyor sanılıyordu. Bu yapay kapı (gate) kaldırılarak sinir ağı modelinin (RNNoise) temiz ses çıkışı doğrudan WebRTC ses kanalına bağlandı.
+  - *Kök Neden 2 (webrtc.ts):* Karşı taraftan gelen sesler `peerAudioContext` (`createMediaStreamDestination`) üzerinden dolaylı yürütülüyordu; Electron/Chromium arka plan veya autoplay politikası nedeniyle bu context askıya alındığında karşı taraf sessiz kalıyordu. Gelen akış doğrudan HTML5 Audio öğesine (`audio.srcObject = remoteStream`) bağlandı ve seviye ayarı yerel `audio.volume` / `audio.muted` ile pürüzsüz hale getirildi.
+- [x] **Ağ ve Ses Test Modunun (Self-Loopback) Tamamen Kaldırılması:**
+  - `VoiceStageView.tsx`, `VoicePanel.tsx`, `SettingsModal.tsx` bileşenlerindeki kafa karıştırıcı "Ağ Test Modu", "Ses Test Modu" butonları ve uyarı rozetleri tamamen kaldırıldı.
+  - `webrtc.ts` ve `useVoiceStore.ts` içerisindeki loopback mekanizması temizlendi.
+  - Standart Discord kalıbı sağlandı: Kullanıcı kanala katıldığında sesi doğal, berrak ve kesintisiz şekilde karşı taraftaki tüm kullanıcılara iletilir.
