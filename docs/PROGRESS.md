@@ -812,6 +812,11 @@ Bu dosya her faz ve görev sonunda güncellenir.
     4. `index.ts`: YouTube'un kendi iç çağrıları engelleme listesinden çıkarıldı, yalnızca üçüncü parti reklam ağları (`doubleclick.net`, `googleads.g.doubleclick.net`, `adservice.google.com`) filtrelendi.
     5. Chromium pencere karartma / arka plan kısıtlamalarını engellemek için `disable-background-timer-throttling`, `disable-backgrounding-occluded-windows`, `disable-renderer-backgrounding` bayrakları eklendi.
 
+## Sistem Tepsisi ve Görev Çubuğu Simge Düzeltmesi (v0.1.44)
 
-
-
+- [x] **Küçük Simgelerin (Sistem Tepsisi / Görev Çubuğu) Görünmeme Sorununun Çözümü:**
+  - *Kök Neden:* `createTray` fonksiyonunda sabit, renksiz 16x16 base64 piksellik bir deneme ikonu kullanılıyordu; bu da Windows bildirim alanında (sağ alt sistem tepsisi / küçük simgeler) simgenin görünmez olmasına yol açıyordu. Ayrıca `BrowserWindow` oluşturulurken `icon:` parametresi tanımlanmamıştı ve `package.json` derleme yapılandırmasında `resources` klasörü paket dosyalarına dahil edilmemişti.
+  - *Çözüm:*
+    1. `apps/desktop/src/main/index.ts` içine çoklu yol arayan (`resources/icon.ico`, `resources/icon.png`, `process.resourcesPath`) akıllı `getAppIcon()` fonksiyonu yazıldı.
+    2. Sistem Tepsisi (`Tray`) ve Ana Pencere (`BrowserWindow`) doğrudan Echo'nun yüksek çözünürlüklü özgün `.ico` ve `.png` simgelerine bağlandı.
+    3. `apps/desktop/package.json` derleme ayarlarına `resources/**/*` ve `extraResources` tanımları eklenerek kurulum sonrasında da simgelerin kayıpsız erişimi garanti altına alındı.
