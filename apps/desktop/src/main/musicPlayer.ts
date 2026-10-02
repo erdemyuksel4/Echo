@@ -1,4 +1,4 @@
-import { BrowserWindow, ipcMain } from 'electron';
+import { BrowserWindow, ipcMain, session } from 'electron';
 
 class MusicPlayerManager {
   private playerWindow: BrowserWindow | null = null;
@@ -7,6 +7,7 @@ class MusicPlayerManager {
   private isMuted: boolean = false;
   private isPaused: boolean = false;
   private mainWindow: BrowserWindow | null = null;
+  private isAdCurrentlyActive: boolean = false;
 
   public init(mainWindow: BrowserWindow): void {
     this.mainWindow = mainWindow;
@@ -128,6 +129,75 @@ class MusicPlayerManager {
       this.stop();
       return true;
     });
+
+    // Google / YouTube Login
+    ipcMain.handle('music:loginGoogle', async () => {
+      return await this.openGoogleLoginWindow();
+    });
+
+    // Check YouTube Auth status
+    ipcMain.handle('music:checkAuth', async () => {
+      return await this.checkYouTubeAuth();
+    });
+
+    // Logout from YouTube / Google
+    ipcMain.handle('music:logoutGoogle', async () => {
+      return await this.logoutYouTube();
+    });
+  }
+
+  private async checkYouTubeAuth(): Promise<{ isLoggedIn: boolean }> {
+    try {
+      const sess = session.fromPartition('persist:youtube');
+      const cookies = await sess.cookies.get({ domain: '.youtube.com' });
+      const hasAuth = cookies.some(
+        (c) => c.name === 'LOGIN_INFO' || c.name === 'SAPISID' || c.name === 'SID'
+      );
+      return { isLoggedIn: hasAuth };
+    } catch {
+      return { isLoggedIn: false };
+    }
+  }
+
+  private async logoutYouTube(): Promise<boolean> {
+    try {
+      const sess = session.fromPartition('persist:youtube');
+      await sess.clearStorageData();
+      if (this.playerWindow && !this.playerWindow.isDestroyed()) {
+        this.playerWindow.webContents.reload();
+      }
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  private openGoogleLoginWindow(): Promise<boolean> {
+    return new Promise((resolve) => {
+      const loginWin = new BrowserWindow({
+        width: 520,
+        height: 680,
+        title: 'YouTube / Google Girişi',
+        parent: this.mainWindow || undefined,
+        modal: true,
+        autoHideMenuBar: true,
+        webPreferences: {
+          partition: 'persist:youtube',
+          contextIsolation: true,
+          sandbox: true,
+        },
+      });
+
+      loginWin.loadURL('https://accounts.google.com/ServiceLogin?service=youtube&continue=https%3A%2F%2Fwww.youtube.com%2F');
+
+      loginWin.on('close', async () => {
+        const auth = await this.checkYouTubeAuth();
+        if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+          this.mainWindow.webContents.send('music:onAuthChange', auth);
+        }
+        resolve(auth.isLoggedIn);
+      });
+    });
   }
 
   private ensurePlayerWindow(): BrowserWindow {
@@ -144,6 +214,7 @@ class MusicPlayerManager {
       focusable: false,
       skipTaskbar: true,
       webPreferences: {
+        partition: 'persist:youtube',
         backgroundThrottling: false,
         autoplayPolicy: 'no-user-gesture-required',
       },
@@ -157,6 +228,17 @@ class MusicPlayerManager {
       if (url.includes('#ended-')) {
         if (this.mainWindow && !this.mainWindow.isDestroyed()) {
           this.mainWindow.webContents.send('music:onEnded');
+        }
+      }
+      if (url.includes('#echo-ad-active')) {
+        if (!this.isAdCurrentlyActive) {
+          this.isAdCurrentlyActive = true;
+          this.mainWindow?.webContents.send('music:onAdState', { isAd: true });
+        }
+      } else if (url.includes('#echo-ad-inactive')) {
+        if (this.isAdCurrentlyActive) {
+          this.isAdCurrentlyActive = false;
+          this.mainWindow?.webContents.send('music:onAdState', { isAd: false });
         }
       }
     });
@@ -191,15 +273,28 @@ class MusicPlayerManager {
             // 2. Check if an advertisement is actively showing
             const isAd = mp && (mp.classList.contains('ad-showing') || mp.classList.contains('ad-interrupting'));
             if (isAd) {
-              const skipBtn = document.querySelector('.ytp-skip-ad-button, .ytp-ad-skip-button, .ytp-ad-skip-button-modern, button.ytp-ad-skip-button-modern, .ytp-ad-text');
-              if (skipBtn) skipBtn.click();
-              if (typeof mp.skipAd === 'function') mp.skipAd();
-
+              if (!window.location.hash.includes('echo-ad-active')) {
+                window.location.hash = '#echo-ad-active';
+              }
+              // Fast-forward unskippable ads and mute audio during ad
               if (v) {
-                v.playbackRate = 16.0;
-                v.muted = true;
+                try {
+                  v.muted = true;
+                  v.playbackRate = 16.0;
+                } catch(e) {}
+              }
+              const skipBtn = document.querySelector('.ytp-skip-ad-button, .ytp-ad-skip-button, .ytp-ad-skip-button-modern, button.ytp-ad-skip-button-modern, .videoAdUiSkipButton, [id^="skip-button"]');
+              if (skipBtn) {
+                try { (skipBtn as HTMLElement).click(); } catch(e) {}
+              }
+              if (typeof mp.skipAd === 'function') {
+                try { mp.skipAd(); } catch(e) {}
               }
               return;
+            } else {
+              if (window.location.hash.includes('echo-ad-active')) {
+                window.location.hash = '#echo-ad-inactive';
+              }
             }
 
             // 3. Main song playback configuration

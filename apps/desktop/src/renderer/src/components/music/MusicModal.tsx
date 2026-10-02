@@ -14,6 +14,9 @@ import {
   X,
   Loader2,
   Radio,
+  CheckCircle,
+  LogIn,
+  AlertCircle,
 } from 'lucide-react';
 import type { MusicTrack } from '@echo/shared';
 import { useMusicStore } from '../../stores/useMusicStore';
@@ -52,6 +55,19 @@ export const MusicModal: React.FC = () => {
 
   // Real-time ticking playback position
   const [currentPosition, setCurrentPosition] = useState(playbackState?.positionSeconds ?? 0);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [isAd, setIsAd] = useState(false);
+
+  useEffect(() => {
+    if (!window.echoApi?.music) return;
+    void window.echoApi.music.checkAuth().then((res) => setIsLoggedIn(res.isLoggedIn));
+    const cleanupAuth = window.echoApi.music.onAuthChange((res) => setIsLoggedIn(res.isLoggedIn));
+    const cleanupAd = window.echoApi.music.onAdState((data) => setIsAd(data.isAd));
+    return () => {
+      cleanupAuth();
+      cleanupAd();
+    };
+  }, []);
 
   useEffect(() => {
     if (status !== 'playing') {
@@ -186,10 +202,33 @@ export const MusicModal: React.FC = () => {
             </h2>
           </div>
 
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-2">
+            {/* Google / YouTube Login Status */}
+            {isLoggedIn ? (
+              <button
+                type="button"
+                onClick={() => void window.echoApi.music.logoutGoogle()}
+                className="flex items-center gap-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 px-2.5 py-1 text-xs font-semibold border border-emerald-500/30 transition cursor-pointer"
+                title="YouTube hesabınız bağlı. Çıkış yapmak için tıklayın."
+              >
+                <CheckCircle className="h-3.5 w-3.5" />
+                <span>YouTube Bağlı</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => void window.echoApi.music.loginGoogle()}
+                className="flex items-center gap-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white px-2.5 py-1 text-xs font-semibold shadow transition cursor-pointer"
+                title="YouTube Premium hesabınızla giriş yaparak şarkıları tamamen reklamsız dinleyin"
+              >
+                <LogIn className="h-3.5 w-3.5" />
+                <span>YouTube ile Giriş</span>
+              </button>
+            )}
+
             <button
               onClick={() => setPanelOpen(false)}
-              className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition"
+              className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition cursor-pointer"
             >
               <X className="h-4 w-4" />
             </button>
@@ -256,7 +295,26 @@ export const MusicModal: React.FC = () => {
                   <h3 className="text-sm font-bold text-white text-center line-clamp-1 max-w-md px-2">
                     {currentTrack.title}
                   </h3>
-                  <p className="text-xs text-slate-400 text-center mb-4">{currentTrack.author}</p>
+                  <p className="text-xs text-slate-400 text-center mb-2">{currentTrack.author}</p>
+
+                  {/* Host badge */}
+                  {playbackState?.hostDisplayName && (
+                    <div className="flex items-center gap-1.5 text-[11px] text-indigo-300/90 mb-2 bg-indigo-950/40 px-2.5 py-1 rounded-full border border-indigo-500/20">
+                      <span>Başlatan:</span>
+                      <span className="font-semibold text-white">{playbackState.hostDisplayName}</span>
+                      {playbackState.hostUserId === identity?.userId && (
+                        <span className="text-[10px] text-indigo-400 font-normal">(Siz)</span>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Ad notification banner */}
+                  {isAd && (
+                    <div className="w-full max-w-md mb-3 px-3 py-2 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center gap-2 text-amber-300 text-xs font-medium animate-pulse">
+                      <AlertCircle className="h-4 w-4 shrink-0 text-amber-400" />
+                      <span>YouTube Reklamı Oynatılıyor — Geçilebilir olduğunda otomatik atlanacak</span>
+                    </div>
+                  )}
 
                   {/* Progress Slider */}
                   <div className="w-full max-w-md px-2 flex items-center gap-2 mb-4">
@@ -342,10 +400,20 @@ export const MusicModal: React.FC = () => {
                   </p>
                   <button
                     onClick={() => setActiveTab('search')}
-                    className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow transition"
+                    className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow transition mb-3"
                   >
                     Şarkı Ara
                   </button>
+                  {!isLoggedIn && (
+                    <button
+                      type="button"
+                      onClick={() => void window.echoApi.music.loginGoogle()}
+                      className="text-[11px] text-slate-400 hover:text-white flex items-center gap-1.5 transition"
+                    >
+                      <LogIn className="h-3 w-3 text-red-400" />
+                      <span>YouTube Premium ile tamamen reklamsız dinlemek için giriş yapın</span>
+                    </button>
+                  )}
                 </div>
               )}
             </div>

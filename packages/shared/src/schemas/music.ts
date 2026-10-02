@@ -28,6 +28,8 @@ export const MusicPlaybackStateSchema = z.object({
   lastUpdatedTimestamp: z.number().int().positive().default(() => Date.now()),
   queue: z.array(MusicTrackSchema).default([]),
   loopMode: MusicLoopModeSchema.default('off'),
+  hostUserId: z.string().optional(),
+  hostDisplayName: z.string().optional(),
 });
 
 export type MusicPlaybackState = z.infer<typeof MusicPlaybackStateSchema>;

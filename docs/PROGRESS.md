@@ -820,3 +820,20 @@ Bu dosya her faz ve görev sonunda güncellenir.
     1. `apps/desktop/src/main/index.ts` içine çoklu yol arayan (`resources/icon.ico`, `resources/icon.png`, `process.resourcesPath`) akıllı `getAppIcon()` fonksiyonu yazıldı.
     2. Sistem Tepsisi (`Tray`) ve Ana Pencere (`BrowserWindow`) doğrudan Echo'nun yüksek çözünürlüklü özgün `.ico` ve `.png` simgelerine bağlandı.
     3. `apps/desktop/package.json` derleme ayarlarına `resources/**/*` ve `extraResources` tanımları eklenerek kurulum sonrasında da simgelerin kayıpsız erişimi garanti altına alındı.
+
+## Google/YouTube Girişi, Reklam Yönetimi ve Şarkı Yayını Senkronizasyonu (v0.1.45)
+
+- [x] **Google / YouTube Girişi & Oturum Kalıcılığı:**
+  - `apps/desktop/src/main/musicPlayer.ts` içinde `session.fromPartition('persist:youtube')` izole oturumu üzerinden çalışan `music:loginGoogle` (520x680 modal pencere), `music:checkAuth` (çerez kontrolü: `LOGIN_INFO`, `SAPISID`, `SID`) ve `music:logoutGoogle` köprüleri oluşturuldu.
+  - YouTube Premium hesabı olan kullanıcılar bağlandığında arka plandaki gizli oynatıcı doğrudan YouTube Premium ile çalışarak sıfır reklam deneyimi sunar.
+- [x] **Otomatik Reklam Algılama & Hızlı Atlama Motoru:**
+  - Oynatıcı sayfasındaki reklam durumu (`#movie_player.ad-showing` / `ad-interrupting`) anlık olarak `#echo-ad-active` hash bildirimiyle ana pencereye iletilir (`music:onAdState`).
+  - Reklam çıktığında video sesi geçici olarak kapatılır ve atlanamayan reklamlar 16x hızda oynatılarak 1 saniye içinde sonlanır.
+  - Reklam atlama butonları (`.ytp-skip-ad-button, .ytp-ad-skip-button, .ytp-ad-skip-button-modern, [id^="skip-button"]`) çıktığı milisaniyede otomatik tıklanır ve `mp.skipAd()` tetiklenir.
+- [x] **Arayüzde Reklam & Çalan Kişi (Host) Bilgisi:**
+  - `packages/shared/src/schemas/music.ts` ve `apps/server/src/durable/GroupDO.ts` içinde `MusicPlaybackState` şemasına `hostUserId` ve `hostDisplayName` alanları eklendi. Şarkıyı başlatan veya atlayan kullanıcının kimliği tüm odaya senkronize edildi.
+  - `MusicPlayerWidget.tsx` ve `MusicModal.tsx`:
+    - Reklam çıktığında animasyonlu sarı uyarı: "⚠️ YouTube Reklamı Oynatılıyor — Geçilebilir olduğunda otomatik atlanacak".
+    - Şarkının altında "Başlatan: <Kullanıcı Adı> (Siz)" rozeti.
+    - Modal başlığında "YouTube ile Giriş" / "YouTube Bağlı" durum butonu ve oturum açılmamışsa bilgilendirici ipucu.
+

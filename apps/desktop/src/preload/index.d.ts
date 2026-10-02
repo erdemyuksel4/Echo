@@ -73,6 +73,11 @@ export interface EchoApi {
         setVolume: (volume: number, isMuted: boolean) => Promise<boolean>;
         stop: () => Promise<boolean>;
         onEnded: (cb: () => void) => () => void;
+        loginGoogle: () => Promise<boolean>;
+        checkAuth: () => Promise<{ isLoggedIn: boolean }>;
+        logoutGoogle: () => Promise<boolean>;
+        onAuthChange: (cb: (auth: { isLoggedIn: boolean }) => void) => () => void;
+        onAdState: (cb: (data: { isAd: boolean }) => void) => () => void;
     };
 }
 

@@ -67,6 +67,11 @@ export interface EchoApi {
     setVolume: (volume: number, isMuted: boolean) => Promise<boolean>;
     stop: () => Promise<boolean>;
     onEnded: (cb: () => void) => () => void;
+    loginGoogle: () => Promise<boolean>;
+    checkAuth: () => Promise<{ isLoggedIn: boolean }>;
+    logoutGoogle: () => Promise<boolean>;
+    onAuthChange: (cb: (auth: { isLoggedIn: boolean }) => void) => () => void;
+    onAdState: (cb: (data: { isAd: boolean }) => void) => () => void;
   };
 }
 
@@ -213,6 +218,33 @@ const echoApi: EchoApi = {
       ipcRenderer.on('music:onEnded', handler);
       return () => {
         ipcRenderer.removeListener('music:onEnded', handler);
+      };
+    },
+    loginGoogle: (): Promise<boolean> => {
+      return ipcRenderer.invoke('music:loginGoogle');
+    },
+    checkAuth: (): Promise<{ isLoggedIn: boolean }> => {
+      return ipcRenderer.invoke('music:checkAuth');
+    },
+    logoutGoogle: (): Promise<boolean> => {
+      return ipcRenderer.invoke('music:logoutGoogle');
+    },
+    onAuthChange: (cb: (auth: { isLoggedIn: boolean }) => void): (() => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, auth: { isLoggedIn: boolean }): void => {
+        cb(auth);
+      };
+      ipcRenderer.on('music:onAuthChange', handler);
+      return () => {
+        ipcRenderer.removeListener('music:onAuthChange', handler);
+      };
+    },
+    onAdState: (cb: (data: { isAd: boolean }) => void): (() => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, data: { isAd: boolean }): void => {
+        cb(data);
+      };
+      ipcRenderer.on('music:onAdState', handler);
+      return () => {
+        ipcRenderer.removeListener('music:onAdState', handler);
       };
     },
   },

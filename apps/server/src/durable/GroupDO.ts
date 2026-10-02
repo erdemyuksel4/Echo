@@ -1747,6 +1747,8 @@ export class GroupDO extends DurableObject<Env> {
 
     switch (action.action) {
       case 'play': {
+        state.hostUserId = _session.userId;
+        state.hostDisplayName = _session.displayName;
         if (action.track) {
           state.currentTrack = action.track;
           state.status = 'playing';
@@ -1803,6 +1805,8 @@ export class GroupDO extends DurableObject<Env> {
             state.status = 'playing';
             state.positionSeconds = 0;
             state.lastUpdatedTimestamp = now;
+            state.hostUserId = _session.userId;
+            state.hostDisplayName = _session.displayName;
           } else {
             state.currentTrack = null;
             state.status = 'stopped';

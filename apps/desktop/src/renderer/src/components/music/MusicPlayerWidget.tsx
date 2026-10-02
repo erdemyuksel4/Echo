@@ -23,6 +23,15 @@ export const MusicPlayerWidget: React.FC = () => {
 
   // Real-time ticking playback position for the small player
   const [currentPosition, setCurrentPosition] = useState(positionSeconds);
+  const [isAd, setIsAd] = useState(false);
+
+  useEffect(() => {
+    if (!window.echoApi?.music) return;
+    const cleanup = window.echoApi.music.onAdState((data) => {
+      setIsAd(data.isAd);
+    });
+    return cleanup;
+  }, []);
 
   useEffect(() => {
     if (status !== 'playing') {
@@ -173,17 +182,28 @@ export const MusicPlayerWidget: React.FC = () => {
         )}
 
         {/* Track Info & Time */}
-        <div className="flex flex-col min-w-0 max-w-[150px] md:max-w-[180px]">
+        <div className="flex flex-col min-w-0 max-w-[150px] md:max-w-[190px]">
           <span className="font-bold truncate text-[11px] leading-tight text-white">
             {currentTrack?.title}
           </span>
-          <div className="flex items-center gap-1.5 text-[10px] text-slate-400 truncate leading-tight mt-0.5">
-            <span className="truncate max-w-[90px]">{currentTrack?.author || 'YouTube'}</span>
-            <span>•</span>
-            <span className="font-mono text-indigo-300">
-              {formatSeconds(currentPosition)} / {currentTrack?.duration || formatSeconds(durationSeconds)}
+          {isAd ? (
+            <span className="text-[10px] font-bold text-amber-400 animate-pulse truncate leading-tight mt-0.5">
+              ⚠️ Reklam (Otomatik Atlanacak)
             </span>
-          </div>
+          ) : (
+            <div className="flex items-center gap-1.5 text-[10px] text-slate-400 truncate leading-tight mt-0.5">
+              <span className="truncate max-w-[90px]">{currentTrack?.author || 'YouTube'}</span>
+              <span>•</span>
+              <span className="font-mono text-indigo-300">
+                {formatSeconds(currentPosition)} / {currentTrack?.duration || formatSeconds(durationSeconds)}
+              </span>
+            </div>
+          )}
+          {playbackState?.hostDisplayName && (
+            <span className="text-[9px] text-indigo-300/80 truncate leading-tight">
+              Açan: {playbackState.hostDisplayName}
+            </span>
+          )}
         </div>
 
         {/* Controls */}
