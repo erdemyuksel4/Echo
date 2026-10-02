@@ -12,7 +12,6 @@ import {
   Minimize2,
   Users,
   Radio,
-  Activity,
   Monitor,
   MonitorOff,
   Eye,
@@ -33,7 +32,6 @@ import { useChatStore } from '../stores/useChatStore';
 import { useScreenShareStore } from '../stores/useScreenShareStore';
 import { useMusicStore } from '../stores/useMusicStore';
 import { webrtcService } from '../services/webrtc';
-import { VoiceDiagnosticsModal } from './VoiceDiagnosticsModal';
 import { useScreenShareViewerDucking } from '../hooks/useScreenShareViewerDucking';
 import { UserContextMenu, type ContextMenuUser } from './UserContextMenu';
 
@@ -448,7 +446,6 @@ export const VoiceStageView: React.FC<Props> = ({ channel }) => {
     isCameraActive,
     cameraStreams,
     pingMs,
-    setDiagnosticsOpen,
     peerVolumes,
     peerMuted,
   } = useVoiceStore();
@@ -562,27 +559,11 @@ export const VoiceStageView: React.FC<Props> = ({ channel }) => {
             <div className="flex items-center gap-1.5 text-xs text-slate-400 font-medium">
               <Users className="h-3.5 w-3.5" />
               <span>{participants.length} Katılımcı</span>
-              <span className="text-slate-600">•</span>
-              <span>480p24 WebRTC Mesh</span>
             </div>
           </div>
         </div>
 
         <div className="flex items-center gap-2">
-          {/* WebRTC Diagnostics */}
-          {isCurrentChannel && (
-            <button
-              type="button"
-              onClick={() => setDiagnosticsOpen(true)}
-              className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-slate-300 hover:bg-slate-800 hover:text-white transition border border-slate-800"
-              title="Bağlantı & Mesh Tanısı"
-            >
-              <Activity className="h-4 w-4 text-indigo-400" />
-              <span className="hidden sm:inline">Tanı</span>
-            </button>
-          )}
-
-
           {/* Fullscreen Button */}
           <button
             type="button"
@@ -795,7 +776,6 @@ export const VoiceStageView: React.FC<Props> = ({ channel }) => {
           </div>
         );
       })()}
-      <VoiceDiagnosticsModal />
       {contextMenu && (
         <UserContextMenu
           user={contextMenu.user}

@@ -166,15 +166,28 @@ class MusicPlayerManager {
           .executeJavaScript(
             `
           (function() {
-            try {
-              const skipBtn = document.querySelector('.ytp-skip-ad-button, .ytp-ad-skip-button, .ytp-ad-skip-button-modern');
-              if (skipBtn) skipBtn.click();
-            } catch(e) {}
-
-            try {
-              const confirmBtn = document.querySelector('yt-confirm-dialog-renderer #confirm-button button');
-              if (confirmBtn) confirmBtn.click();
-            } catch(e) {}
+            // Permanent In-Page Instant Ad Killer
+            if (!window.__echoAdKiller) {
+              window.__echoAdKiller = setInterval(function() {
+                try {
+                  const adShowing = document.querySelector('.ad-showing, .ad-interrupting, .ytp-ad-player-overlay');
+                  const mp = document.getElementById('movie_player');
+                  const v = document.querySelector('video');
+                  if (adShowing || (mp && typeof mp.getAdState === 'function' && mp.getAdState() > 0)) {
+                    if (v) {
+                      v.muted = true;
+                      v.currentTime = isFinite(v.duration) && v.duration > 0 ? v.duration : 9999;
+                      v.playbackRate = 16.0;
+                    }
+                    const skipBtn = document.querySelector('.ytp-skip-ad-button, .ytp-ad-skip-button, .ytp-ad-skip-button-modern, .ytp-ad-text');
+                    if (skipBtn) skipBtn.click();
+                    if (mp && typeof mp.skipAd === 'function') mp.skipAd();
+                  }
+                  const confirmBtn = document.querySelector('yt-confirm-dialog-renderer #confirm-button button');
+                  if (confirmBtn) confirmBtn.click();
+                } catch(e) {}
+              }, 100);
+            }
 
             const mp = document.getElementById('movie_player');
             const v = document.querySelector('video');

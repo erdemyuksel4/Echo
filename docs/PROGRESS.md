@@ -749,3 +749,15 @@ Bu dosya her faz ve görev sonunda güncellenir.
   - `VoiceStageView.tsx`, `VoicePanel.tsx`, `SettingsModal.tsx` bileşenlerindeki kafa karıştırıcı "Ağ Test Modu", "Ses Test Modu" butonları ve uyarı rozetleri tamamen kaldırıldı.
   - `webrtc.ts` ve `useVoiceStore.ts` içerisindeki loopback mekanizması temizlendi.
   - Standart Discord kalıbı sağlandı: Kullanıcı kanala katıldığında sesi doğal, berrak ve kesintisiz şekilde karşı taraftaki tüm kullanıcılara iletilir.
+
+## Arayüz Sadeleştirme & YouTube Reklamlarını Sıfırlama (v0.1.40)
+
+- [x] **Ağ Düzeyinde YouTube Reklam Engelleyici (Ad-Blocker):**
+  - `apps/desktop/src/main/index.ts`: `session.defaultSession.webRequest.onBeforeRequest` hook'u ile Google/YouTube reklam istekleri (`doubleclick.net`, `googleads`, `googlesyndication`, `youtube.com/pagead`, `youtube.com/api/stats/ads`, `get_midroll_info`, `ad_break`) Electron ağ seviyesinde doğrudan engellendi (`cancel: true`).
+  - `apps/desktop/src/main/musicPlayer.ts`: Oynatıcı sayfasına 100ms döngüyle çalışan yerel reklam avcısı (`__echoAdKiller`) enjekte edildi. Reklam tespit edildiği an ses anında sıfırlanır, video süresi sona sarılır (`currentTime = duration`) ve reklam 0.05 saniyede atlanır. Böylece kullanıcılar hiçbir reklam beklemesi yaşamadan aynı anda parçayı dinler.
+- [x] **Arayüz Sadeleştirme & Gereksiz Jargon/Butonların Temizlenmesi:**
+  - `VoiceStageView.tsx`: Kanal başlığı altındaki teknik `"480p24 WebRTC Mesh"` yazısı ve üst bardaki `"Tanı"` (Activity) butonu kaldırıldı.
+  - `VoicePanel.tsx`: `"RTC Bağlanıyor..."` yerine sade `"Bağlanıyor..."`, grup adı yoksa `"/ RTC Mesh"` yerine `"/ Ses Kanalı"` yazıldı. Teknik ağ tanı butonu (`Activity`) kaldırıldı.
+  - `ChannelList.tsx`: Profil kartının yanındaki mükerrer `"Info"` (Echo Hakkında) butonu kaldırıldı (Ayarlar modalında zaten Hakkında sekmesi mevcut).
+  - `ChatArea.tsx`: Üst bardaki 3 yeşil sinyal çubuğu kaldırılıp sade ve şık bir "Bağlı" rozeti bırakıldı.
+

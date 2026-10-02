@@ -4,7 +4,6 @@ import {
   MicOff,
   Headphones,
   PhoneOff,
-  Activity,
   VolumeX,
   Monitor,
   MonitorOff,
@@ -16,7 +15,6 @@ import { useChatStore } from '../stores/useChatStore';
 import { useVoiceStore } from '../stores/useVoiceStore';
 import { useScreenShareStore } from '../stores/useScreenShareStore';
 import { webrtcService } from '../services/webrtc';
-import { VoiceDiagnosticsModal } from './VoiceDiagnosticsModal';
 import { ScreenSourcePickerModal } from './ScreenSourcePickerModal';
 
 export const VoicePanel: React.FC = () => {
@@ -31,7 +29,6 @@ export const VoicePanel: React.FC = () => {
     pingMs,
     localAudioLevel,
     isMicUnavailable,
-    setDiagnosticsOpen,
   } = useVoiceStore();
 
   const { isSharing, viewerCount, stopSharing } = useScreenShareStore();
@@ -98,7 +95,7 @@ export const VoicePanel: React.FC = () => {
                     isConnected ? 'text-emerald-400' : 'text-amber-400'
                   }`}
                 >
-                  {isConnected ? 'Ses Bağlandı' : 'RTC Bağlanıyor...'}
+                  {isConnected ? 'Ses Bağlandı' : 'Bağlanıyor...'}
                 </span>
                 {isConnected && pingMs > 0 && (
                   <span className={`text-[10px] font-mono font-medium ${getRttBadgeColor(pingMs)}`}>
@@ -110,7 +107,7 @@ export const VoicePanel: React.FC = () => {
                 className="truncate text-[11px] text-slate-400 font-medium"
                 title={`${currentChannelName ?? ''} / ${currentGroupName ?? 'Ses'}`}
               >
-                {currentChannelName} {currentGroupName ? `/ ${currentGroupName}` : '/ RTC Mesh'}
+                {currentChannelName} {currentGroupName ? `/ ${currentGroupName}` : '/ Ses Kanalı'}
               </div>
               {/* Live Mic Activity Bar */}
               <div
@@ -133,15 +130,6 @@ export const VoicePanel: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-1">
-            {/* Diagnostics modal button */}
-            <button
-              onClick={() => setDiagnosticsOpen(true)}
-              className="rounded p-1.5 text-slate-400 hover:bg-slate-800 hover:text-indigo-400 transition"
-              title="Bağlantı Tanısı & WebRTC İstatistikleri"
-            >
-              <Activity className="h-4 w-4" />
-            </button>
-
             {/* Disconnect button */}
             <button
               onClick={handleDisconnect}
@@ -252,7 +240,6 @@ export const VoicePanel: React.FC = () => {
         </div>
       </div>
 
-      <VoiceDiagnosticsModal />
       <ScreenSourcePickerModal
         isOpen={showSourcePicker}
         onClose={() => setShowSourcePicker(false)}

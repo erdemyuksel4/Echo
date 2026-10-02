@@ -14,7 +14,6 @@ import {
   MessageSquare,
   Radio,
   Video,
-  Info,
 } from 'lucide-react';
 import { UserAudioState, computeAudioState } from '@echo/shared';
 import { useChatStore } from '../stores/useChatStore';
@@ -163,13 +162,6 @@ export const ChannelList: React.FC = () => {
             <div className="text-[10px] text-emerald-400">Çevrimiçi</div>
           </div>
           <div className="flex items-center gap-0.5">
-            <button
-              onClick={() => openSettings('about')}
-              className="rounded p-1.5 text-slate-400 hover:bg-slate-800 hover:text-white transition"
-              title="Echo Hakkında & Sürüm Bilgileri"
-            >
-              <Info className="h-4 w-4" />
-            </button>
             <button
               onClick={() => openSettings('voice')}
               className="rounded p-1.5 text-slate-400 hover:bg-slate-800 hover:text-white transition"
@@ -672,13 +664,6 @@ export const ChannelList: React.FC = () => {
           <div className="text-[10px] text-emerald-400">Çevrimiçi</div>
         </div>
         <div className="flex items-center gap-0.5">
-          <button
-            onClick={() => openSettings('about')}
-            className="rounded p-1.5 text-slate-400 hover:bg-slate-800 hover:text-white transition"
-            title="Echo Hakkında & Sürüm Bilgileri"
-          >
-            <Info className="h-4 w-4" />
-          </button>
           <button
             onClick={() => openSettings('voice')}
             className="rounded p-1.5 text-slate-400 hover:bg-slate-800 hover:text-white transition"

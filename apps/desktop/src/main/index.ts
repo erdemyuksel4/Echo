@@ -209,6 +209,26 @@ if (!gotTheLock) {
     const cleanChromeUa = baseUa.replace(/Electron\/\S+\s*/g, '').replace(/Echo\/\S+\s*/g, '');
     session.defaultSession.setUserAgent(cleanChromeUa);
 
+    // Block all YouTube / Google Ad Networks at network level to guarantee ad-free playback
+    session.defaultSession.webRequest.onBeforeRequest(
+      {
+        urls: [
+          '*://*.doubleclick.net/*',
+          '*://*.googleads.g.doubleclick.net/*',
+          '*://*.googlesyndication.com/*',
+          '*://*.adservice.google.com/*',
+          '*://www.youtube.com/pagead/*',
+          '*://www.youtube.com/api/stats/ads*',
+          '*://www.youtube.com/get_midroll_info*',
+          '*://www.youtube.com/youtubei/v1/player/ad_break*',
+          '*://static.doubleclick.net/*',
+        ],
+      },
+      (_details, callback) => {
+        callback({ cancel: true });
+      },
+    );
+
     // Ensure YouTube & Google Video requests always include valid Referer and Origin headers in Electron
     session.defaultSession.webRequest.onBeforeSendHeaders(
       {

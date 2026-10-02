@@ -498,17 +498,9 @@ export const ChatArea: React.FC = () => {
         {/* Connection Status */}
         <div className="flex items-center gap-2">
           {connectionStatus === 'connected' && (
-            <div className="flex items-center gap-2 rounded-full bg-emerald-950/60 border border-emerald-500/30 px-2.5 py-1 text-xs text-emerald-400 shadow-sm">
-              <span className="relative flex h-2 w-2">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-                <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
-              </span>
-              <span className="font-semibold text-[11px] tracking-wide">Bağlı</span>
-              <div className="flex items-end gap-0.5 ml-0.5 h-3" title="Sinyal Gücü: Mükemmel">
-                <span className="w-0.5 h-1.5 bg-emerald-400 rounded-full" />
-                <span className="w-0.5 h-2.5 bg-emerald-400 rounded-full" />
-                <span className="w-0.5 h-3.5 bg-emerald-400 rounded-full" />
-              </div>
+            <div className="flex items-center gap-1.5 rounded-full bg-emerald-950/40 border border-emerald-500/20 px-2.5 py-0.5 text-xs text-emerald-400">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+              <span className="font-medium text-[11px]">Bağlı</span>
             </div>
           )}
           {connectionStatus === 'connecting' && (
