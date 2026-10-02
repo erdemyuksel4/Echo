@@ -54,6 +54,7 @@ export interface EchoApi {
       total?: number;
     }) => void,
   ) => () => void;
+  onUpdateDownloaded: (cb: (info: { version: string }) => void) => () => void;
   saveRecordedVideo: (options: {
     defaultName?: string;
     buffer: Uint8Array;

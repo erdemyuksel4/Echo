@@ -26,6 +26,10 @@ class ScreenRecorderService {
     return this.mediaRecorder !== null && this.mediaRecorder.state === 'recording';
   }
 
+  public getCurrentStream(): MediaStream | null {
+    return this.currentStream;
+  }
+
   public startRecording(stream: MediaStream, targetName: string): boolean {
     if (this.isRecording()) {
       console.warn('[ScreenRecorder] Zaten aktif bir kayıt var.');

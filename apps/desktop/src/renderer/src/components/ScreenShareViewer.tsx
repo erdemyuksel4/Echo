@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Maximize2, Minimize2, Volume2, VolumeX, X, Radio, Loader2 } from 'lucide-react';
+import { Maximize2, Minimize2, Volume2, VolumeX, X, Radio, Loader2, Circle, Square } from 'lucide-react';
 import { useScreenShareStore } from '../stores/useScreenShareStore';
+import { useRecordingStore, formatRecordingDuration } from '../stores/useRecordingStore';
+import { screenRecorderService } from '../services/screenRecorder';
 import { useScreenShareViewerDucking } from '../hooks/useScreenShareViewerDucking';
 
 export const ScreenShareViewer: React.FC = () => {
@@ -19,6 +21,9 @@ export const ScreenShareViewer: React.FC = () => {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showControls, setShowControls] = useState(true);
   const controlsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const { isRecording, isSaving, recordingTargetName, durationSeconds } = useRecordingStore();
+  const isThisRecording = isRecording && recordingTargetName === viewingShare?.displayName;
 
   const { isDucked, effectiveVolume } = useScreenShareViewerDucking({
     videoRef,
@@ -117,12 +122,49 @@ export const ScreenShareViewer: React.FC = () => {
               <Radio className="h-3 w-3 animate-pulse" />
               <span>CANLI</span>
             </div>
+            {isThisRecording && (
+              <div className="flex items-center gap-1.5 rounded-md bg-rose-700/90 text-white px-2.5 py-0.5 text-[11px] font-mono font-bold shadow border border-rose-500 animate-pulse">
+                <span className="h-2 w-2 rounded-full bg-white" />
+                <span>REC {formatRecordingDuration(durationSeconds)}</span>
+              </div>
+            )}
             <span className="text-sm font-bold text-white drop-shadow">
               {viewingShare.displayName}
             </span>
           </div>
 
           <div className="flex items-center gap-3">
+            {/* Screen Stream Recording Button */}
+            {viewingShare.stream && (
+              isThisRecording ? (
+                <button
+                  type="button"
+                  disabled={isSaving}
+                  onClick={() => void screenRecorderService.stopRecording()}
+                  className="flex items-center gap-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white px-3 py-1.5 text-xs font-semibold shadow transition cursor-pointer"
+                  title="Kaydı Durdur ve Bilgisayarına Kaydet"
+                >
+                  {isSaving ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Square className="h-4 w-4 fill-current" />
+                  )}
+                  <span>{isSaving ? 'Kaydediliyor...' : `Kaydı Bitir (${formatRecordingDuration(durationSeconds)})`}</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  disabled={isRecording}
+                  onClick={() => screenRecorderService.startRecording(viewingShare.stream!, viewingShare.displayName)}
+                  className="flex items-center gap-1.5 rounded-xl bg-slate-900/80 hover:bg-slate-800 text-slate-200 hover:text-white px-3 py-1.5 text-xs font-semibold border border-slate-700/60 shadow transition disabled:opacity-40 cursor-pointer"
+                  title={isRecording ? 'Şu anda başka bir kayıt yapılıyor' : 'Bu yayını bilgisayarına kaydet (.webm)'}
+                >
+                  <Circle className="h-3.5 w-3.5 text-rose-500 fill-rose-500" />
+                  <span>Kaydet</span>
+                </button>
+              )
+            )}
+
             {/* Audio Volume Slider */}
             <div className="flex items-center gap-2 rounded-xl bg-slate-900/80 backdrop-blur px-3 py-1.5 border border-slate-700/60 shadow">
               <button

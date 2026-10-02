@@ -212,6 +212,10 @@ const ScreenShareTile: React.FC<ScreenShareTileProps> = ({ share, isLocal, chann
   const stream = isLocal ? localStream : viewingShare?.stream;
   const isLoading = !isLocal && viewingShare?.userId === share.userId && viewingShare.isLoading;
 
+  const { isRecording, isSaving, recordingTargetName, durationSeconds } = useRecordingStore();
+  const targetId = isLocal ? 'Senin Ekranın' : share.displayName;
+  const isThisRecording = isRecording && recordingTargetName === targetId;
+
   const { isDucked, effectiveVolume } = useScreenShareViewerDucking({
     videoRef,
     userVolume: viewerVolume,
@@ -303,6 +307,12 @@ const ScreenShareTile: React.FC<ScreenShareTileProps> = ({ share, isLocal, chann
                 <Radio className="h-3 w-3 animate-pulse" />
                 <span>CANLI</span>
               </div>
+              {isThisRecording && (
+                <div className="flex items-center gap-1.5 rounded-md bg-rose-700/90 text-white px-2 py-0.5 text-[11px] font-mono font-bold shadow border border-rose-500 animate-pulse">
+                  <span className="h-2 w-2 rounded-full bg-white" />
+                  <span>REC {formatRecordingDuration(durationSeconds)}</span>
+                </div>
+              )}
               <span className="rounded-md bg-slate-950/80 backdrop-blur px-2 py-0.5 text-[11px] font-medium text-slate-300 border border-slate-800">
                 {isLocal ? 'Senin Ekranın' : `${share.displayName} kullanıcısının ekranı`}
               </span>
@@ -328,6 +338,14 @@ const ScreenShareTile: React.FC<ScreenShareTileProps> = ({ share, isLocal, chann
             </div>
           </div>
 
+          {/* Always visible REC indicator when recording */}
+          {isThisRecording && (
+            <div className="absolute top-2.5 left-2.5 z-20 flex items-center gap-1.5 rounded-md bg-rose-600/90 text-white px-2.5 py-1 text-xs font-mono font-bold shadow-lg border border-rose-400 group-hover:hidden">
+              <span className="h-2 w-2 rounded-full bg-white animate-ping" />
+              <span>REC {formatRecordingDuration(durationSeconds)}</span>
+            </div>
+          )}
+
           {/* Bottom Bar Controls Overlay */}
           <div className="absolute bottom-2.5 inset-x-2.5 flex items-center justify-between rounded-xl bg-slate-950/85 backdrop-blur px-3 py-1.5 border border-slate-800/80 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
             <div className="flex items-center gap-2 min-w-0">
@@ -338,6 +356,37 @@ const ScreenShareTile: React.FC<ScreenShareTileProps> = ({ share, isLocal, chann
             </div>
 
             <div className="flex items-center gap-2">
+              {/* Screen Stream Recording Button */}
+              {stream && (
+                isThisRecording ? (
+                  <button
+                    type="button"
+                    disabled={isSaving}
+                    onClick={() => void screenRecorderService.stopRecording()}
+                    className="flex items-center gap-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white px-2.5 py-1 text-xs font-semibold shadow transition cursor-pointer"
+                    title="Kaydı Durdur ve Bilgisayarına Kaydet"
+                  >
+                    {isSaving ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Square className="h-3.5 w-3.5 fill-current" />
+                    )}
+                    <span>{isSaving ? 'Kaydediliyor...' : `Kaydı Bitir (${formatRecordingDuration(durationSeconds)})`}</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={isRecording}
+                    onClick={() => screenRecorderService.startRecording(stream, targetId)}
+                    className="flex items-center gap-1.5 rounded-lg bg-slate-900/90 hover:bg-slate-800 text-slate-200 hover:text-white px-2.5 py-1 text-xs font-semibold border border-slate-700/60 shadow transition disabled:opacity-40 cursor-pointer"
+                    title={isRecording ? 'Şu anda başka bir kayıt yapılıyor' : 'Bu yayını bilgisayarına kaydet (.webm)'}
+                  >
+                    <Circle className="h-3 w-3 text-rose-500 fill-rose-500" />
+                    <span>Kaydet</span>
+                  </button>
+                )
+              )}
+
               {/* Audio Volume Controls for Viewers */}
               {!isLocal && (
                 <div className="flex items-center gap-1.5 rounded-lg bg-slate-900/90 backdrop-blur px-2 py-1 border border-slate-700/60 shadow">
