@@ -49,7 +49,14 @@
     },
     "files": [
       "out/**/*",
+      "resources/**/*",
       "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "resources",
+        "to": "resources"
+      }
     ],
     "extraFiles": [
       {

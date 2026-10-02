@@ -800,5 +800,18 @@ Bu dosya her faz ve görev sonunda güncellenir.
   - Canlı Sanal Lazer İmleç (`RemoteControlOverlay.tsx`): Kontrol eden kullanıcının fare hareketleri ve tıklamaları normalize koordinatlarla yayıncının ekranında kırmızı lazer imleç ve kontrol eden kişinin ad etiketiyle anlık yansıtılır.
   - Kontrolü Bırakma / Geri Alma: Hem kontrol eden hem de yayıncı tek tıkla oturumu anında sonlandırabilir.
 
+## Müzik Oynatma ve Reklam Atlama Kök Neden Düzeltmesi (v0.1.43)
+
+- [x] **Şarkı Çalmama & Ses Gelmeme Sorununun Kök Nedeninin Çözümü:**
+  - *Kök Neden 1 (musicPlayer.ts):* Eski ad-killer scriptinde yer alan `document.querySelector('.ad-showing, .ad-interrupting, .ytp-ad-player-overlay')` kuralında `.ytp-ad-player-overlay` sınıfı YouTube oynatıcısının şablonunda HER VİDEODA statik olarak bulunuyordu. Bu nedenle her şarkı açıldığında video reklam zannedilerek `v.muted = true` yapılıyor, `v.currentTime = v.duration` ile anında sona sarılıyor ve tetiklenen `onended` olayı yüzünden şarkı hiç çalmadan milisaniyeler içinde sonraki parçaya atlanıyordu.
+  - *Kök Neden 2 (index.ts):* `session.defaultSession.webRequest.onBeforeRequest` içinde YouTube'un kendi iç uç noktaları (`youtube.com/pagead`, `youtube.com/api/stats/ads`, `get_midroll_info`, `youtubei/v1/player/ad_break`) `cancel: true` ile engellendiğinde, YouTube oynatıcı motoru adblocker tespiti yapıp oynatmayı tamamen kilitliyordu.
+  - *Çözüm:*
+    1. `musicPlayer.ts`: Yalnızca `#movie_player.ad-showing` veya `#movie_player.ad-interrupting` aktifken reklam modu devreye sokulur; reklam butonları tıklandıktan sonra reklam süresince 16x oynatma ve geçici sessiz alma uygulanır. Asla `v.currentTime = v.duration` zorlanmaz.
+    2. Reklam bitip asıl şarkı başladığında video hızı `1.0`'a, kullanıcının sesi ve sessiz durumu (`v.muted`, `v.volume`) anında orijinal haline geri döndürülür.
+    3. `onended` tetikleyicisi yalnızca reklam aktif DEĞİLKEN (`!isAd`) devreye girecek şekilde filtrelendi.
+    4. `index.ts`: YouTube'un kendi iç çağrıları engelleme listesinden çıkarıldı, yalnızca üçüncü parti reklam ağları (`doubleclick.net`, `googleads.g.doubleclick.net`, `adservice.google.com`) filtrelendi.
+    5. Chromium pencere karartma / arka plan kısıtlamalarını engellemek için `disable-background-timer-throttling`, `disable-backgrounding-occluded-windows`, `disable-renderer-backgrounding` bayrakları eklendi.
+
+
 
 

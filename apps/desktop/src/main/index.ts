@@ -26,6 +26,9 @@ const __dirname = dirname(__filename);
 
 // Allow autoplay with sound without requiring a direct user gesture inside iframes
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
+app.commandLine.appendSwitch('disable-background-timer-throttling');
+app.commandLine.appendSwitch('disable-backgrounding-occluded-windows');
+app.commandLine.appendSwitch('disable-renderer-backgrounding');
 
 // Custom profile support for multi-user simulation (e.g. --profile=user2 or ECHO_PROFILE=user2)
 const profileArg = process.argv.find((a) => a.startsWith('--profile='));
@@ -56,15 +59,42 @@ function getPreloadPath(): string {
   return jsPath;
 }
 
-function createTray(): void {
-  // 16x16 PNG fallback icon
-  const icon = nativeImage.createFromBuffer(
+function getAppIcon(): Electron.NativeImage {
+  const candidates = [
+    join(__dirname, '../../resources/icon.ico'),
+    join(__dirname, '../../resources/icon.png'),
+    join(process.resourcesPath, 'resources/icon.ico'),
+    join(process.resourcesPath, 'resources/icon.png'),
+    join(process.resourcesPath, 'icon.ico'),
+    join(process.resourcesPath, 'icon.png'),
+    join(app.getAppPath(), 'resources/icon.ico'),
+    join(app.getAppPath(), 'resources/icon.png'),
+  ];
+
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) {
+      try {
+        const icon = nativeImage.createFromPath(candidate);
+        if (!icon.isEmpty()) {
+          return icon;
+        }
+      } catch (err) {
+        console.warn('[Echo Main] Error loading icon from:', candidate, err);
+      }
+    }
+  }
+
+  // 16x16 PNG fallback icon if files cannot be located
+  return nativeImage.createFromBuffer(
     Buffer.from(
       'iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAAXNSR0IArs4c6QAAAElEQVQ4T2Nk+M/wnwEHQEQY1UAMjAYg2QCkGD3k8BmA1IBRAwZcAE6n49MAl214NUA3eWjQ4wYgN4fQo8gYq0GjBshhAACd4iIRfF9RMAAAAABJRU5ErkJggg==',
       'base64',
     ),
   );
+}
 
+function createTray(): void {
+  const icon = getAppIcon();
   tray = new Tray(icon);
   tray.setToolTip(profileName ? `${APP_NAME} (${profileName})` : APP_NAME);
 
@@ -110,6 +140,7 @@ function createWindow(): void {
     show: false,
     autoHideMenuBar: true,
     title: profileName ? `${APP_NAME} (${profileName})` : APP_NAME,
+    icon: getAppIcon(),
     webPreferences: {
       preload: getPreloadPath(),
       sandbox: true,
@@ -210,7 +241,7 @@ if (!gotTheLock) {
     const cleanChromeUa = baseUa.replace(/Electron\/\S+\s*/g, '').replace(/Echo\/\S+\s*/g, '');
     session.defaultSession.setUserAgent(cleanChromeUa);
 
-    // Block all YouTube / Google Ad Networks at network level to guarantee ad-free playback
+    // Block third-party ad networks at network level while preserving YouTube player integrity
     session.defaultSession.webRequest.onBeforeRequest(
       {
         urls: [
@@ -218,10 +249,6 @@ if (!gotTheLock) {
           '*://*.googleads.g.doubleclick.net/*',
           '*://*.googlesyndication.com/*',
           '*://*.adservice.google.com/*',
-          '*://www.youtube.com/pagead/*',
-          '*://www.youtube.com/api/stats/ads*',
-          '*://www.youtube.com/get_midroll_info*',
-          '*://www.youtube.com/youtubei/v1/player/ad_break*',
           '*://static.doubleclick.net/*',
         ],
       },
