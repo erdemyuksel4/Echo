@@ -20,6 +20,8 @@ import {
   Music,
   Circle,
   Square,
+  Pen,
+  MousePointer2,
 } from 'lucide-react';
 import {
   type Channel,
@@ -34,10 +36,16 @@ import { useChatStore } from '../stores/useChatStore';
 import { useScreenShareStore } from '../stores/useScreenShareStore';
 import { useMusicStore } from '../stores/useMusicStore';
 import { useRecordingStore, formatRecordingDuration } from '../stores/useRecordingStore';
+import { useAnnotationStore } from '../stores/useAnnotationStore';
+import { useRemoteControlStore } from '../stores/useRemoteControlStore';
 import { screenRecorderService } from '../services/screenRecorder';
+import { wsService } from '../services/websocket';
 import { webrtcService } from '../services/webrtc';
 import { useScreenShareViewerDucking } from '../hooks/useScreenShareViewerDucking';
 import { UserContextMenu, type ContextMenuUser } from './UserContextMenu';
+import { ScreenAnnotationOverlay } from './ScreenAnnotationOverlay';
+import { RemoteControlOverlay } from './RemoteControlOverlay';
+import { RemoteControlPromptModal } from './RemoteControlPromptModal';
 
 interface Props {
   channel: Channel;
@@ -213,6 +221,9 @@ const ScreenShareTile: React.FC<ScreenShareTileProps> = ({ share, isLocal, chann
   const isLoading = !isLocal && viewingShare?.userId === share.userId && viewingShare.isLoading;
 
   const { isRecording, isSaving, recordingTargetName, durationSeconds } = useRecordingStore();
+  const isDrawingOpen = useAnnotationStore((s) => s.isDrawingOpen);
+  const { isControlling, controllingStreamUserId } = useRemoteControlStore();
+  const isControllingThis = isControlling && controllingStreamUserId === share.userId;
   const targetId = isLocal ? 'Senin Ekranın' : share.displayName;
   const isThisRecording = isRecording && recordingTargetName === targetId;
 
@@ -286,13 +297,25 @@ const ScreenShareTile: React.FC<ScreenShareTileProps> = ({ share, isLocal, chann
               </span>
             </div>
           ) : stream ? (
-            <video
-              ref={attachVideo}
-              autoPlay
-              playsInline
-              muted={isLocal}
-              className="w-full h-full object-contain bg-black"
-            />
+            <>
+              <video
+                ref={attachVideo}
+                autoPlay
+                playsInline
+                muted={isLocal}
+                className="w-full h-full object-contain bg-black"
+              />
+              <ScreenAnnotationOverlay
+                channelId={channelId}
+                streamUserId={share.userId}
+                isLocal={isLocal}
+              />
+              <RemoteControlOverlay
+                channelId={channelId}
+                streamUserId={share.userId}
+                isLocal={isLocal}
+              />
+            </>
           ) : (
             <div className="flex flex-col items-center justify-center gap-2 text-slate-500 text-xs">
               <Monitor className="h-8 w-8 text-slate-600" />
@@ -383,6 +406,51 @@ const ScreenShareTile: React.FC<ScreenShareTileProps> = ({ share, isLocal, chann
                   >
                     <Circle className="h-3 w-3 text-rose-500 fill-rose-500" />
                     <span>Kaydet</span>
+                  </button>
+                )
+              )}
+
+              {/* Screen Annotation / Drawing Tool Toggle */}
+              {stream && (
+                <button
+                  type="button"
+                  onClick={() => useAnnotationStore.getState().toggleDrawingOpen()}
+                  className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold border shadow transition cursor-pointer ${
+                    isDrawingOpen
+                      ? 'bg-indigo-600 text-white border-indigo-500 shadow-indigo-500/20'
+                      : 'bg-slate-900/90 hover:bg-slate-800 text-slate-200 hover:text-white border-slate-700/60'
+                  }`}
+                  title={isDrawingOpen ? 'Çizim Aracını Kapat' : 'Ekrana Çizim Yap'}
+                >
+                  <Pen className="h-3 w-3" />
+                  <span>Çizim</span>
+                </button>
+              )}
+
+              {/* Remote Control Button for Viewers */}
+              {!isLocal && stream && (
+                isControllingThis ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      wsService.sendRemoteControlStop(channelId, share.userId);
+                      useRemoteControlStore.getState().reset();
+                    }}
+                    className="flex items-center gap-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white px-2.5 py-1 text-xs font-semibold shadow transition cursor-pointer"
+                    title="Uzaktan Kontrolü Bırak (veya ESC)"
+                  >
+                    <MousePointer2 className="h-3.5 w-3.5" />
+                    <span>Kontrolü Bırak</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => wsService.sendRemoteControlRequest(channelId, share.userId)}
+                    className="flex items-center gap-1.5 rounded-lg bg-slate-900/90 hover:bg-slate-800 text-slate-200 hover:text-white px-2.5 py-1 text-xs font-semibold border border-slate-700/60 shadow transition cursor-pointer"
+                    title="Yayıncının bilgisayarını kontrol etmek için izin iste"
+                  >
+                    <MousePointer2 className="h-3.5 w-3.5 text-indigo-400" />
+                    <span>Kontrol İste</span>
                   </button>
                 )
               )}
@@ -836,6 +904,7 @@ export const VoiceStageView: React.FC<Props> = ({ channel }) => {
           onClose={() => setContextMenu(null)}
         />
       )}
+      <RemoteControlPromptModal />
     </div>
   );
 };

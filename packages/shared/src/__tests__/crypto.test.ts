@@ -7,6 +7,12 @@ import {
   buildAuthPayload,
   bytesToBase32,
   base32ToBytes,
+  deriveKeyFromSecret,
+  encryptText,
+  decryptText,
+  formatE2EEMessage,
+  isE2EEMessage,
+  parseE2EEMessage,
 } from '../index';
 
 describe('Crypto & Identity Helpers', () => {
@@ -50,5 +56,28 @@ describe('Crypto & Identity Helpers', () => {
     const encoded = bytesToBase32(sampleBytes);
     const decoded = base32ToBytes(encoded);
     expect(Array.from(decoded)).toEqual(Array.from(sampleBytes));
+  });
+
+  it('should encrypt and decrypt messages with E2EE (AES-256-GCM)', async () => {
+    const secret = 'my-super-secret-channel-key';
+    const key = await deriveKeyFromSecret(secret);
+
+    const message = 'Merhaba! Bu çok gizli bir Echo mesajıdır 🔒';
+    const { cipherText, iv } = await encryptText(message, key);
+
+    const formatted = formatE2EEMessage(iv, cipherText);
+    expect(isE2EEMessage(formatted)).toBe(true);
+
+    const parsed = parseE2EEMessage(formatted);
+    expect(parsed).not.toBeNull();
+    expect(parsed!.iv).toBe(iv);
+    expect(parsed!.cipherText).toBe(cipherText);
+
+    const decrypted = await decryptText(parsed!.cipherText, parsed!.iv, key);
+    expect(decrypted).toBe(message);
+
+    // Decrypting with wrong key must fail (tamper resistance)
+    const wrongKey = await deriveKeyFromSecret('wrong-secret-key');
+    await expect(decryptText(parsed!.cipherText, parsed!.iv, wrongKey)).rejects.toThrow();
   });
 });

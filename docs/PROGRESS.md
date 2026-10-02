@@ -16,6 +16,7 @@ Bu dosya her faz ve görev sonunda güncellenir.
 | Faz 7 | SFU (kapılı)                            | Atlandı    | -                         | Patron kararıyla şimdilik atlandı (P2P Mesh yeterli)                                                                                     |
 | Faz 8 | Cilalama ve dağıtım                     | Tamamlandı | `faz-8-cilalama-dagitim`  | Bas-konuş, Windows ile başlat, boş durumlar, NSIS tek tıkla .exe kurulumu                                                                |
 | Faz 9 | Kamera (Webcam)                         | Tamamlandı | `faz-9-kamera`            | WebRTC 480p24 mesh kamera yayını, VoiceStageView video grid, Ayarlar kamera seçici & ayna testi                                          |
+| Faz 10 | Gelişmiş İşbirliği & Güvenlik Özellikleri | Tamamlandı | `main`                    | Ekran kaydetme (.webm), Ekrana çizim/beyaz tahta, Uçtan Uca Şifreleme (E2EE), Uzaktan kontrol (TeamViewer tarzı)                       |
 
 ## Faz 0 — Kabul Kriterleri ve Gerçekleşenler
 
@@ -774,5 +775,30 @@ Bu dosya her faz ve görev sonunda güncellenir.
   - `UpdateNotification.tsx`: Diferansiyel indirme esnasında aktarılan ve toplam MB bilgisi (`2.4 MB / 4.1 MB`) ve anlık indirme hızı gösterilecek şekilde güncellendi.
   - İndirme tamamlandığında kullanıcıya "Yeniden Başlat" butonu sunularak kesintisiz ve sıfır gecikmeli sürüm geçişi sağlandı.
   - `test-auto-updater.mjs` test komutu yeni diferansiyel blok haritasını ve latest.yml dağıtımını %100 kapsayacak şekilde güncellendi.
+
+## Faz 10 — Gelişmiş İşbirliği & Güvenlik Özellikleri (v0.1.42)
+
+- [x] **Ekran Yayınlarını Kaydetme (Stream Recording):**
+  - `apps/desktop/src/main/index.ts`: `recording:saveFile` IPC işleyicisi eklendi. Electron `dialog.showSaveDialog` ile Windows dosya kaydetme penceresi açılarak seçilen dizine `.webm` formatında pürüzsüz yazım sağlandı.
+  - `apps/desktop/src/preload/index.ts`: Güvenli `window.echoApi.saveRecordedVideo(buffer, defaultFilename)` köprüsü tanımlandı.
+  - `apps/desktop/src/renderer/src/services/screenRecorder.ts`: `MediaRecorder` API'si (VP9/VP8, 30fps) tabanlı parça (chunk) toplayıcı, canlı süre sayacı ve kaydı tamamlama servisi kuruldu.
+  - `VoiceStageView.tsx` & `ScreenShareViewer.tsx`: Yayıncı veya izleyiciler için yayın üzerinde tek tıkla "Kaydet / Kaydı Durdur" butonları ve canlı yanıp sönen `REC 00:00` göstergesi entegre edildi.
+- [x] **Ekrana Çizim & Beyaz Tahta Aracı (Screen Annotation & Whiteboard):**
+  - `packages/shared/src/schemas/screenshare.ts`: `AnnotationStrokeSchema`, `ClientAnnotationDrawPayloadSchema`, `ClientAnnotationClearPayloadSchema` şemaları oluşturuldu.
+  - `apps/server/src/durable/GroupDO.ts`: `SHARE_ANNOTATION_DRAW` ve `SHARE_ANNOTATION_CLEAR` WebSocket olayları karşılandı ve ses/yayın kanalındaki tüm kullanıcılara sıfır gecikmeyle yayınlandı.
+  - `apps/desktop/src/renderer/src/components/ScreenAnnotationOverlay.tsx`: Ekran yayını üzerine HTML5 Canvas yerleşimi. Çözünürlükten bağımsız normalize edilmiş koordinatlar (0-1), serbest çizim (pen), ok (arrow), dikdörtgen (rect), 6 farklı renk paleti, 3 kademeli fırça kalınlığı, geri alma (undo) ve tahtayı temizleme desteği eklendi.
+  - `VoiceStageView.tsx` ve `ScreenShareViewer.tsx`: "Çizim" butonu ile çizim modu açma/kapama ve anlık eşzamanlı beyaz tahta deneyimi sağlandı.
+- [x] **Mesajlarda Uçtan Uca Şifreleme (E2EE):**
+  - `packages/shared/src/crypto/e2ee.ts`: Web Crypto API tabanlı AES-256-GCM şifreleme/çözme motoru ve PBKDF2 anahtar türetme fonksiyonları oluşturuldu. Güvenli `e2ee:v1:<iv>:<ciphertext>` zarf standardı tanımlandı.
+  - Sunucu Sıfır-Bilgi (Zero-Knowledge): Sunucu ve veritabanı şifrelenmiş metinleri doğrudan taşır, içeriği okuyamaz veya değiştiremez.
+  - `apps/desktop/src/renderer/src/services/e2eeService.ts` & `useE2EEStore.ts`: İstemci tarafı şifreleme/çözme servisi ve durum yöneticisi kuruldu.
+  - `apps/desktop/src/renderer/src/components/ChatArea.tsx`: Mesaj yazma çubuğuna uçtan uca şifreleme açma/kapama kalkan butonu (`ShieldCheck`) eklendi.
+  - `apps/desktop/src/renderer/src/components/ChatMessageItem.tsx`: Şifrelenmiş mesajları otomatik arka planda çözen ve mesaj yanında güvenli yeşil "E2EE" kalkan rozeti gösteren arayüz bileşeni entegre edildi.
+- [x] **Uzaktan Kontrol (TeamViewer Tarzı):**
+  - `packages/shared/src/schemas/screenshare.ts`: `RemoteControlEvent`, istek, yanıt ve sonlandırma protokol şemaları tanımlandı.
+  - Güvenli İzin Modalı (`RemoteControlPromptModal.tsx`): İzleyici kontrol talep ettiğinde, yayıncının ekranında istekte bulunan kullanıcının adı ve onay penceresi belirir. Yayıncı onaylamadan hiçbir kontrol komutu iletilmez.
+  - Canlı Sanal Lazer İmleç (`RemoteControlOverlay.tsx`): Kontrol eden kullanıcının fare hareketleri ve tıklamaları normalize koordinatlarla yayıncının ekranında kırmızı lazer imleç ve kontrol eden kişinin ad etiketiyle anlık yansıtılır.
+  - Kontrolü Bırakma / Geri Alma: Hem kontrol eden hem de yayıncı tek tıkla oturumu anında sonlandırabilir.
+
 
 

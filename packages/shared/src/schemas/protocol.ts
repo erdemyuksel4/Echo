@@ -46,6 +46,12 @@ export const WsClientEvents = {
   SHARE_START: 'share.start',
   SHARE_STOP: 'share.stop',
   SHARE_SIGNAL: 'share.signal',
+  SHARE_ANNOTATION_DRAW: 'share.annotation_draw',
+  SHARE_ANNOTATION_CLEAR: 'share.annotation_clear',
+  SHARE_RC_REQUEST: 'share.rc_request',
+  SHARE_RC_RESPONSE: 'share.rc_response',
+  SHARE_RC_EVENT: 'share.rc_event',
+  SHARE_RC_STOP: 'share.rc_stop',
   MUSIC_ACTION: 'music.action',
 } as const;
 
@@ -83,6 +89,12 @@ export const WsServerEvents = {
   SHARE_STOPPED: 'share.stopped',
   SHARE_SIGNAL: 'share.signal',
   SHARE_ACTIVE_LIST: 'share.active_list',
+  SHARE_ANNOTATION_DRAW: 'share.annotation_draw',
+  SHARE_ANNOTATION_CLEAR: 'share.annotation_clear',
+  SHARE_RC_REQUEST: 'share.rc_request',
+  SHARE_RC_RESPONSE: 'share.rc_response',
+  SHARE_RC_EVENT: 'share.rc_event',
+  SHARE_RC_STOP: 'share.rc_stop',
   MUSIC_STATE: 'music.state',
 } as const;
 

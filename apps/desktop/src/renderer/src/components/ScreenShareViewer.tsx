@@ -1,9 +1,14 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Maximize2, Minimize2, Volume2, VolumeX, X, Radio, Loader2, Circle, Square } from 'lucide-react';
+import { Maximize2, Minimize2, Volume2, VolumeX, X, Radio, Loader2, Circle, Square, Pen, MousePointer2 } from 'lucide-react';
 import { useScreenShareStore } from '../stores/useScreenShareStore';
 import { useRecordingStore, formatRecordingDuration } from '../stores/useRecordingStore';
+import { useAnnotationStore } from '../stores/useAnnotationStore';
+import { useRemoteControlStore } from '../stores/useRemoteControlStore';
 import { screenRecorderService } from '../services/screenRecorder';
+import { wsService } from '../services/websocket';
 import { useScreenShareViewerDucking } from '../hooks/useScreenShareViewerDucking';
+import { ScreenAnnotationOverlay } from './ScreenAnnotationOverlay';
+import { RemoteControlOverlay } from './RemoteControlOverlay';
 
 export const ScreenShareViewer: React.FC = () => {
   const {
@@ -23,7 +28,11 @@ export const ScreenShareViewer: React.FC = () => {
   const controlsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const { isRecording, isSaving, recordingTargetName, durationSeconds } = useRecordingStore();
+  const isDrawingOpen = useAnnotationStore((s) => s.isDrawingOpen);
   const isThisRecording = isRecording && recordingTargetName === viewingShare?.displayName;
+
+  const { isControlling, controllingStreamUserId } = useRemoteControlStore();
+  const isControllingThis = isControlling && controllingStreamUserId === viewingShare?.userId;
 
   const { isDucked, effectiveVolume } = useScreenShareViewerDucking({
     videoRef,
@@ -107,7 +116,19 @@ export const ScreenShareViewer: React.FC = () => {
               </span>
             </div>
           ) : (
-            <video ref={attachVideo} autoPlay playsInline className="h-full w-full object-contain" />
+            <>
+              <video ref={attachVideo} autoPlay playsInline className="h-full w-full object-contain" />
+              <ScreenAnnotationOverlay
+                channelId={useScreenShareStore.getState().activeShares[0]?.channelId || ''}
+                streamUserId={viewingShare.userId}
+                isLocal={false}
+              />
+              <RemoteControlOverlay
+                channelId={useScreenShareStore.getState().activeShares[0]?.channelId || ''}
+                streamUserId={viewingShare.userId}
+                isLocal={false}
+              />
+            </>
           )}
         </div>
 
@@ -161,6 +182,55 @@ export const ScreenShareViewer: React.FC = () => {
                 >
                   <Circle className="h-3.5 w-3.5 text-rose-500 fill-rose-500" />
                   <span>Kaydet</span>
+                </button>
+              )
+            )}
+
+            {/* Screen Annotation / Drawing Tool Toggle */}
+            {viewingShare.stream && (
+              <button
+                type="button"
+                onClick={() => useAnnotationStore.getState().toggleDrawingOpen()}
+                className={`flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold border shadow transition cursor-pointer ${
+                  isDrawingOpen
+                    ? 'bg-indigo-600 text-white border-indigo-500 shadow-indigo-500/20'
+                    : 'bg-slate-900/80 hover:bg-slate-800 text-slate-200 hover:text-white border-slate-700/60'
+                }`}
+                title={isDrawingOpen ? 'Çizim Aracını Kapat' : 'Ekrana Çizim Yap'}
+              >
+                <Pen className="h-4 w-4" />
+                <span>Çizim</span>
+              </button>
+            )}
+
+            {/* Remote Control Button for Viewers */}
+            {viewingShare.stream && (
+              isControllingThis ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const chId = useScreenShareStore.getState().activeShares[0]?.channelId || '';
+                    wsService.sendRemoteControlStop(chId, viewingShare.userId);
+                    useRemoteControlStore.getState().reset();
+                  }}
+                  className="flex items-center gap-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white px-3 py-1.5 text-xs font-semibold shadow transition cursor-pointer"
+                  title="Uzaktan Kontrolü Bırak (veya ESC)"
+                >
+                  <MousePointer2 className="h-4 w-4" />
+                  <span>Kontrolü Bırak</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const chId = useScreenShareStore.getState().activeShares[0]?.channelId || '';
+                    wsService.sendRemoteControlRequest(chId, viewingShare.userId);
+                  }}
+                  className="flex items-center gap-1.5 rounded-xl bg-slate-900/80 hover:bg-slate-800 text-slate-200 hover:text-white px-3 py-1.5 text-xs font-semibold border border-slate-700/60 shadow transition cursor-pointer"
+                  title="Yayıncının bilgisayarını kontrol etmek için izin iste"
+                >
+                  <MousePointer2 className="h-4 w-4 text-indigo-400" />
+                  <span>Kontrol İste</span>
                 </button>
               )
             )}

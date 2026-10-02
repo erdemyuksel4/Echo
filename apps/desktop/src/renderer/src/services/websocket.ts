@@ -13,12 +13,21 @@ import {
   type ScreenQualityPreset,
   type MusicPlaybackState,
   type MusicAction,
+  type AnnotationStroke,
+  type ServerAnnotationDrawPayload,
+  type ServerAnnotationClearPayload,
+  type RemoteControlEvent,
+  type ServerRemoteControlRequestPayload,
+  type ServerRemoteControlResponsePayload,
+  type ServerRemoteControlEventPayload,
 } from '@echo/shared';
 import { useChatStore } from '../stores/useChatStore';
 import { useAuthStore } from '../stores/useAuthStore';
 import { useVoiceStore } from '../stores/useVoiceStore';
 import { useScreenShareStore } from '../stores/useScreenShareStore';
 import { useMusicStore } from '../stores/useMusicStore';
+import { useAnnotationStore } from '../stores/useAnnotationStore';
+import { useRemoteControlStore } from '../stores/useRemoteControlStore';
 import { soundService } from './sound';
 import { SERVER_WS_URL } from '../config';
 import { webrtcService } from './webrtc';
@@ -491,6 +500,53 @@ class EchoWebSocketService {
         break;
       }
 
+      case WsServerEvents.SHARE_ANNOTATION_DRAW: {
+        const data = envelope.d as ServerAnnotationDrawPayload;
+        useAnnotationStore.getState().addRemoteStroke(data.streamUserId, data.stroke);
+        break;
+      }
+
+      case WsServerEvents.SHARE_ANNOTATION_CLEAR: {
+        const data = envelope.d as ServerAnnotationClearPayload;
+        useAnnotationStore.getState().clearStrokes(data.streamUserId);
+        break;
+      }
+
+      case WsServerEvents.SHARE_RC_REQUEST: {
+        const data = envelope.d as ServerRemoteControlRequestPayload;
+        useRemoteControlStore.getState().setPendingRequest(data);
+        soundService.playNotification();
+        break;
+      }
+
+      case WsServerEvents.SHARE_RC_RESPONSE: {
+        const data = envelope.d as ServerRemoteControlResponsePayload;
+        if (data.approved) {
+          useRemoteControlStore.getState().startControlling(data.channelId, data.streamUserId);
+        } else {
+          useRemoteControlStore.getState().reset();
+        }
+        break;
+      }
+
+      case WsServerEvents.SHARE_RC_EVENT: {
+        const data = envelope.d as ServerRemoteControlEventPayload;
+        if (data.event.x !== undefined && data.event.y !== undefined) {
+          useRemoteControlStore.getState().updateVirtualCursor({
+            x: data.event.x,
+            y: data.event.y,
+            displayName: data.fromDisplayName,
+            isDown: data.event.type === 'mousedown',
+          });
+        }
+        break;
+      }
+
+      case WsServerEvents.SHARE_RC_STOP: {
+        useRemoteControlStore.getState().reset();
+        break;
+      }
+
       case WsServerEvents.MUSIC_STATE: {
         const data = envelope.d as MusicPlaybackState;
         useMusicStore.getState().setPlaybackState(data);
@@ -503,6 +559,51 @@ class EchoWebSocketService {
         break;
       }
     }
+  }
+
+  sendAnnotationStroke(channelId: string, streamUserId: string, stroke: AnnotationStroke): void {
+    this.send(WsClientEvents.SHARE_ANNOTATION_DRAW, {
+      channelId,
+      streamUserId,
+      stroke,
+    });
+  }
+
+  sendAnnotationClear(channelId: string, streamUserId: string): void {
+    this.send(WsClientEvents.SHARE_ANNOTATION_CLEAR, {
+      channelId,
+      streamUserId,
+    });
+  }
+
+  sendRemoteControlRequest(channelId: string, streamUserId: string): void {
+    this.send(WsClientEvents.SHARE_RC_REQUEST, {
+      channelId,
+      streamUserId,
+    });
+  }
+
+  sendRemoteControlResponse(channelId: string, requesterUserId: string, approved: boolean): void {
+    this.send(WsClientEvents.SHARE_RC_RESPONSE, {
+      channelId,
+      requesterUserId,
+      approved,
+    });
+  }
+
+  sendRemoteControlEvent(channelId: string, streamUserId: string, event: RemoteControlEvent): void {
+    this.send(WsClientEvents.SHARE_RC_EVENT, {
+      channelId,
+      streamUserId,
+      event,
+    });
+  }
+
+  sendRemoteControlStop(channelId: string, targetUserId: string): void {
+    this.send(WsClientEvents.SHARE_RC_STOP, {
+      channelId,
+      targetUserId,
+    });
   }
 
   sendMusicAction(action: MusicAction): void {

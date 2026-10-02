@@ -30,6 +30,12 @@ import {
   ClientShareStartPayloadSchema,
   ClientShareStopPayloadSchema,
   ClientShareSignalPayloadSchema,
+  ClientAnnotationDrawPayloadSchema,
+  ClientAnnotationClearPayloadSchema,
+  ClientRemoteControlRequestPayloadSchema,
+  ClientRemoteControlResponsePayloadSchema,
+  ClientRemoteControlEventPayloadSchema,
+  ClientRemoteControlStopPayloadSchema,
   type VoiceParticipant,
   type ScreenShareState,
   type GroupSnapshot,
@@ -804,6 +810,24 @@ export class GroupDO extends DurableObject<Env> {
         break;
       case WsClientEvents.SHARE_SIGNAL:
         this.handleShareSignal(session, envelope);
+        break;
+      case WsClientEvents.SHARE_ANNOTATION_DRAW:
+        this.handleShareAnnotationDraw(session, envelope);
+        break;
+      case WsClientEvents.SHARE_ANNOTATION_CLEAR:
+        this.handleShareAnnotationClear(session, envelope);
+        break;
+      case WsClientEvents.SHARE_RC_REQUEST:
+        this.handleRemoteControlRequest(session, envelope);
+        break;
+      case WsClientEvents.SHARE_RC_RESPONSE:
+        this.handleRemoteControlResponse(session, envelope);
+        break;
+      case WsClientEvents.SHARE_RC_EVENT:
+        this.handleRemoteControlEvent(session, envelope);
+        break;
+      case WsClientEvents.SHARE_RC_STOP:
+        this.handleRemoteControlStop(session, envelope);
         break;
       case WsClientEvents.MUSIC_ACTION:
         this.handleMusicAction(ws, session, envelope);
@@ -1584,6 +1608,68 @@ export class GroupDO extends DurableObject<Env> {
       channelId,
       fromUserId: session.userId,
       signal,
+    });
+  }
+
+  private handleShareAnnotationDraw(_session: WsSessionAttachment, envelope: WsEnvelope): void {
+    const parse = ClientAnnotationDrawPayloadSchema.safeParse(envelope.d);
+    if (!parse.success) return;
+
+    this.broadcast(WsServerEvents.SHARE_ANNOTATION_DRAW, parse.data, envelope.id);
+  }
+
+  private handleShareAnnotationClear(_session: WsSessionAttachment, envelope: WsEnvelope): void {
+    const parse = ClientAnnotationClearPayloadSchema.safeParse(envelope.d);
+    if (!parse.success) return;
+
+    this.broadcast(WsServerEvents.SHARE_ANNOTATION_CLEAR, parse.data, envelope.id);
+  }
+
+  private handleRemoteControlRequest(session: WsSessionAttachment, envelope: WsEnvelope): void {
+    const parse = ClientRemoteControlRequestPayloadSchema.safeParse(envelope.d);
+    if (!parse.success) return;
+
+    const { channelId, streamUserId } = parse.data;
+    this.sendToUser(streamUserId, WsServerEvents.SHARE_RC_REQUEST, {
+      channelId,
+      requesterUserId: session.userId,
+      requesterDisplayName: session.displayName,
+    });
+  }
+
+  private handleRemoteControlResponse(session: WsSessionAttachment, envelope: WsEnvelope): void {
+    const parse = ClientRemoteControlResponsePayloadSchema.safeParse(envelope.d);
+    if (!parse.success) return;
+
+    const { channelId, requesterUserId, approved } = parse.data;
+    this.sendToUser(requesterUserId, WsServerEvents.SHARE_RC_RESPONSE, {
+      channelId,
+      streamUserId: session.userId,
+      approved,
+    });
+  }
+
+  private handleRemoteControlEvent(session: WsSessionAttachment, envelope: WsEnvelope): void {
+    const parse = ClientRemoteControlEventPayloadSchema.safeParse(envelope.d);
+    if (!parse.success) return;
+
+    const { channelId, streamUserId, event } = parse.data;
+    this.sendToUser(streamUserId, WsServerEvents.SHARE_RC_EVENT, {
+      channelId,
+      fromUserId: session.userId,
+      fromDisplayName: session.displayName,
+      event,
+    });
+  }
+
+  private handleRemoteControlStop(session: WsSessionAttachment, envelope: WsEnvelope): void {
+    const parse = ClientRemoteControlStopPayloadSchema.safeParse(envelope.d);
+    if (!parse.success) return;
+
+    const { channelId, targetUserId } = parse.data;
+    this.sendToUser(targetUserId, WsServerEvents.SHARE_RC_STOP, {
+      channelId,
+      stoppedByUserId: session.userId,
     });
   }
 

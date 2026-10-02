@@ -9,6 +9,7 @@ import {
   CheckCircle2,
   AlertCircle,
   Loader2,
+  ShieldCheck,
 } from 'lucide-react';
 import {
   type Message,
@@ -21,6 +22,7 @@ import {
 import { useAuthStore } from '../stores/useAuthStore';
 import { useChatStore } from '../stores/useChatStore';
 import { wsService } from '../services/websocket';
+import { e2eeService } from '../services/e2eeService';
 import { p2pFileTransferService, type P2PTransferProgress } from '../services/p2pFileTransfer';
 import { ImageViewerModal } from './ImageViewerModal';
 import { SERVER_HTTP_URL } from '../config';
@@ -170,6 +172,27 @@ export const ChatMessageItem: React.FC<Props> = ({
     user: ContextMenuUser;
     position: { x: number; y: number };
   } | null>(null);
+
+  const [decryptedText, setDecryptedText] = useState<string>(message.content);
+  const [isEncrypted, setIsEncrypted] = useState<boolean>(false);
+
+  useEffect(() => {
+    let isMounted = true;
+    if (e2eeService.isEncrypted(message.content)) {
+      setIsEncrypted(true);
+      void e2eeService.decryptMessage(message.channelId, message.content).then((res) => {
+        if (isMounted) {
+          setDecryptedText(res.text);
+        }
+      });
+    } else {
+      setIsEncrypted(false);
+      setDecryptedText(message.content);
+    }
+    return () => {
+      isMounted = false;
+    };
+  }, [message.content, message.channelId]);
 
   const isAuthor = identity?.userId === message.authorId;
   const canDelete = isAuthor || currentUserRole === 'owner' || currentUserRole === 'admin';
@@ -496,6 +519,15 @@ export const ChatMessageItem: React.FC<Props> = ({
               (düzenlendi)
             </span>
           )}
+          {isEncrypted && (
+            <span
+              className="inline-flex items-center gap-1 rounded bg-emerald-500/15 border border-emerald-500/30 px-1.5 py-0.2 text-[9px] font-bold text-emerald-300 shadow-sm select-none"
+              title="Uçtan Uca Şifreli Mesaj (AES-256-GCM)"
+            >
+              <ShieldCheck className="h-3 w-3 text-emerald-400" />
+              <span>E2EE</span>
+            </span>
+          )}
         </div>
 
         {/* Content or Edit Form */}
@@ -534,9 +566,9 @@ export const ChatMessageItem: React.FC<Props> = ({
           </div>
         ) : (
           <>
-            {!isOnlyMediaLink && message.content && (
+            {!isOnlyMediaLink && (decryptedText || message.content) && (
               <div className="mt-0.5 text-xs text-slate-200 break-words leading-relaxed select-text">
-                {renderContentTokens(message.content)}
+                {renderContentTokens(decryptedText)}
               </div>
             )}
 
