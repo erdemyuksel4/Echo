@@ -51,10 +51,20 @@ export interface EchoApi {
     onUpdateProgress: (cb: (progress: {
         percent: number;
         bytesPerSecond: number;
+        transferred?: number;
+        total?: number;
     }) => void) => () => void;
     onUpdateDownloaded: (cb: (info: {
         version: string;
     }) => void) => () => void;
+    saveRecordedVideo: (options: {
+        defaultName?: string;
+        buffer: Uint8Array;
+    }) => Promise<{
+        canceled: boolean;
+        filePath: string | null;
+        error?: string;
+    }>;
     music: {
         loadTrack: (videoId: string, startSeconds?: number) => Promise<boolean>;
         pause: () => Promise<boolean>;

@@ -47,9 +47,17 @@ export interface EchoApi {
   ) => () => void;
   onUpdateAvailable: (cb: (info: { version: string; releaseNotes?: string }) => void) => () => void;
   onUpdateProgress: (
-    cb: (progress: { percent: number; bytesPerSecond: number }) => void,
+    cb: (progress: {
+      percent: number;
+      bytesPerSecond: number;
+      transferred?: number;
+      total?: number;
+    }) => void,
   ) => () => void;
-  onUpdateDownloaded: (cb: (info: { version: string }) => void) => () => void;
+  saveRecordedVideo: (options: {
+    defaultName?: string;
+    buffer: Uint8Array;
+  }) => Promise<{ canceled: boolean; filePath: string | null; error?: string }>;
   music: {
     loadTrack: (videoId: string, startSeconds?: number) => Promise<boolean>;
     pause: () => Promise<boolean>;
@@ -140,11 +148,21 @@ const echoApi: EchoApi = {
     };
   },
   onUpdateProgress: (
-    cb: (progress: { percent: number; bytesPerSecond: number }) => void,
+    cb: (progress: {
+      percent: number;
+      bytesPerSecond: number;
+      transferred?: number;
+      total?: number;
+    }) => void,
   ): (() => void) => {
     const handler = (
       _event: Electron.IpcRendererEvent,
-      progress: { percent: number; bytesPerSecond: number },
+      progress: {
+        percent: number;
+        bytesPerSecond: number;
+        transferred?: number;
+        total?: number;
+      },
     ): void => {
       cb(progress);
     };
@@ -161,6 +179,12 @@ const echoApi: EchoApi = {
     return () => {
       ipcRenderer.removeListener('updater:downloaded', handler);
     };
+  },
+  saveRecordedVideo: (options: {
+    defaultName?: string;
+    buffer: Uint8Array;
+  }): Promise<{ canceled: boolean; filePath: string | null; error?: string }> => {
+    return ipcRenderer.invoke('recording:saveFile', options);
   },
   music: {
     loadTrack: (videoId: string, startSeconds?: number): Promise<boolean> => {

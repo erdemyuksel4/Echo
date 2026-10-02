@@ -120,49 +120,60 @@ async function runTests() {
   assert(publishConfig?.owner === 'erdemyuksel4', 'GitHub owner: erdemyuksel4');
   assert(publishConfig?.repo === 'Echo', 'GitHub repo: Echo');
 
-  // 2. GitHub Releases API Check
-  console.log('\n[2/5] GitHub Releases API Kontrolü...');
-  let latestRelease;
-  try {
-    const releaseJson = await fetchText(
-      'https://api.github.com/repos/erdemyuksel4/Echo/releases/latest'
-    );
-    latestRelease = JSON.parse(releaseJson);
-    assert(Boolean(latestRelease.tag_name), `GitHub latest release bulundu: ${latestRelease.tag_name}`);
-    console.log(`        Yayın Tarihi: ${latestRelease.published_at}`);
-    console.log(`        Release Adı: ${latestRelease.name}`);
-  } catch (err) {
-    assert(false, `GitHub Releases API erişim hatası: ${err.message}`);
-  }
-
-  // 3. latest.yml Dosyası Doğrulama
-  console.log('\n[3/5] GitHub latest.yml Dağıtım Dosyası Kontrolü...');
+  // 2. Direct latest.yml check (CDN / zero rate limit)
+  console.log('\n[2/5] GitHub latest.yml Dağıtım Dosyası Doğrulanıyor (Sıfır Rate Limit)...');
   let remoteVersion = null;
-  const currentTag = latestRelease?.tag_name || 'v0.1.3';
+  let parsedYml = null;
   try {
     const ymlContent = await fetchText(
-      `https://github.com/erdemyuksel4/Echo/releases/download/${currentTag}/latest.yml`
+      'https://github.com/erdemyuksel4/Echo/releases/latest/download/latest.yml'
     );
-    const parsedYml = parseLatestYml(ymlContent);
+    parsedYml = parseLatestYml(ymlContent);
     remoteVersion = parsedYml.version;
     assert(Boolean(remoteVersion), `latest.yml başarıyla okundu, remote version: v${remoteVersion}`);
     assert(parsedYml.path?.endsWith('.exe'), `latest.yml hedef yürütülebilir dosya: ${parsedYml.path}`);
     assert(Boolean(parsedYml.sha512), `latest.yml SHA512 doğrulaması mevcut: ${parsedYml.sha512.substring(0, 20)}...`);
-
-    // 4. İndirilebilir Asset (Setup.exe) Doğrulama
-    console.log('\n[4/5] GitHub Kurulum Paketi (Setup.exe) Erişilebilirliği...');
-    const assetUrl = `https://github.com/erdemyuksel4/Echo/releases/download/${currentTag}/${encodeURIComponent(parsedYml.path)}`;
-    const res = await checkUrlStatus(assetUrl);
-    assert(
-      res.statusCode === 200,
-      `${parsedYml.path} doğrudan indirilebilir durumda (HTTP ${res.statusCode})`
-    );
-    if (res.headers['content-length']) {
-      const mb = (Number(res.headers['content-length']) / (1024 * 1024)).toFixed(1);
-      console.log(`        Dosya boyutu: ${mb} MB`);
-    }
   } catch (err) {
-    assert(false, `latest.yml veya exe doğrulanamadı: ${err.message}`);
+    assert(false, `latest.yml okunamadı: ${err.message}`);
+  }
+
+  // 3. Diferansiyel Güncelleme (.blockmap) Dosyası Doğrulama
+  console.log('\n[3/5] Diferansiyel Güncelleme (.blockmap) Dosyası Kontrolü...');
+  if (parsedYml?.path) {
+    const blockmapName = `${parsedYml.path}.blockmap`;
+    const blockmapUrl = `https://github.com/erdemyuksel4/Echo/releases/latest/download/${encodeURIComponent(blockmapName)}`;
+    try {
+      const res = await checkUrlStatus(blockmapUrl);
+      assert(
+        res.statusCode === 200,
+        `Diferansiyel blok haritası (${blockmapName}) erişilebilir durumda (HTTP ${res.statusCode})`
+      );
+      if (res.headers['content-length']) {
+        const kb = (Number(res.headers['content-length']) / 1024).toFixed(1);
+        console.log(`        Blockmap boyutu: ${kb} KB (delta indirme için hazır)`);
+      }
+    } catch (err) {
+      assert(false, `Blockmap erişilemedi: ${err.message}`);
+    }
+  }
+
+  // 4. Kurulum Paketi (Setup.exe) Erişilebilirliği
+  console.log('\n[4/5] GitHub Kurulum Paketi (Setup.exe) Erişilebilirliği...');
+  if (parsedYml?.path) {
+    const assetUrl = `https://github.com/erdemyuksel4/Echo/releases/latest/download/${encodeURIComponent(parsedYml.path)}`;
+    try {
+      const res = await checkUrlStatus(assetUrl);
+      assert(
+        res.statusCode === 200,
+        `${parsedYml.path} doğrudan indirilebilir durumda (HTTP ${res.statusCode})`
+      );
+      if (res.headers['content-length']) {
+        const mb = (Number(res.headers['content-length']) / (1024 * 1024)).toFixed(1);
+        console.log(`        Tam dosya boyutu: ${mb} MB`);
+      }
+    } catch (err) {
+      assert(false, `Setup exe erişilemedi: ${err.message}`);
+    }
   }
 
   // 5. Semver Karşılaştırma & Senaryo Testi (autoUpdater davranış simülasyonu)

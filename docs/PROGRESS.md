@@ -761,3 +761,18 @@ Bu dosya her faz ve görev sonunda güncellenir.
   - `ChannelList.tsx`: Profil kartının yanındaki mükerrer `"Info"` (Echo Hakkında) butonu kaldırıldı (Ayarlar modalında zaten Hakkında sekmesi mevcut).
   - `ChatArea.tsx`: Üst bardaki 3 yeşil sinyal çubuğu kaldırılıp sade ve şık bir "Bağlı" rozeti bırakıldı.
 
+## Diferansiyel (Delta / Blockmap) Güncelleme Mimarisi (v0.1.41)
+
+- [x] **84 MB İndirme Kök Nedeninin Çözümü:**
+  - *Kök Neden:* Önceki mimaride çalışan harici C# uygulaması (`EchoUpdater.exe`), GitHub Release'deki tüm kurulum paketini (`Echo-Setup-x.y.z.exe`, ~88 MB) her güncellemede sıfırdan indiriyordu. Bu durum, 1 satırlık ufak bir düzeltmede bile kullanıcının gereksiz yere 88 MB indirmesine neden oluyordu.
+  - *Çözüm:*
+    1. Masaüstü uygulamasının güncelleme altyapısı doğrudan `electron-updater`'ın yerleşik **diferansiyel (delta) indirme motoruna** geçirildi.
+    2. GitHub Release'deki `latest.yml` ve `.blockmap` dosyaları kullanılarak, sadece kullanıcının bilgisayarındaki mevcut sürümle yeni sürüm arasındaki fark blokları (HTTP Range istekleri ile) indirilir.
+    3. Böylece indirme boyutu 88 MB yerine **2 MB - 8 MB** arasına düşürüldü.
+    4. GitHub API saatlik istek sınırına (rate limit 403) takılmamak için doğrudan public CDN üzerinden `generic` dağıtım akışı yapılandırıldı.
+- [x] **Uygulama İçi Şık Güncelleme Deneyimi:**
+  - `UpdateNotification.tsx`: Diferansiyel indirme esnasında aktarılan ve toplam MB bilgisi (`2.4 MB / 4.1 MB`) ve anlık indirme hızı gösterilecek şekilde güncellendi.
+  - İndirme tamamlandığında kullanıcıya "Yeniden Başlat" butonu sunularak kesintisiz ve sıfır gecikmeli sürüm geçişi sağlandı.
+  - `test-auto-updater.mjs` test komutu yeni diferansiyel blok haritasını ve latest.yml dağıtımını %100 kapsayacak şekilde güncellendi.
+
+

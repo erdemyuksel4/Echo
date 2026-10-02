@@ -1,4 +1,4 @@
-import { existsSync } from 'fs';
+import { existsSync, promises as fsPromises } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import {
@@ -13,6 +13,7 @@ import {
   session,
   clipboard,
   desktopCapturer,
+  dialog,
 } from 'electron';
 import { electronApp, optimizer, is } from '@electron-toolkit/utils';
 import { APP_NAME, PROTOCOL_VERSION } from '@echo/shared';
@@ -391,6 +392,33 @@ if (!gotTheLock) {
           openAsHidden: true,
         });
         return true;
+      },
+    );
+
+    // Handle Screen Stream Recording Save Dialog & File Write
+    ipcMain.handle(
+      'recording:saveFile',
+      async (_, { defaultName, buffer }: { defaultName: string; buffer: Uint8Array }) => {
+        try {
+          const { canceled, filePath } = await dialog.showSaveDialog({
+            title: 'Ekran Kaydını Kaydet',
+            defaultPath: defaultName || `Echo-Kayit-${Date.now()}.webm`,
+            filters: [
+              { name: 'WebM Video (*.webm)', extensions: ['webm'] },
+              { name: 'Tüm Dosyalar (*.*)', extensions: ['*'] },
+            ],
+          });
+
+          if (canceled || !filePath) {
+            return { canceled: true, filePath: null };
+          }
+
+          await fsPromises.writeFile(filePath, Buffer.from(buffer));
+          return { canceled: false, filePath };
+        } catch (error) {
+          console.error('[Echo Recording] Kayıt dosyası kaydedilemedi:', error);
+          return { canceled: false, filePath: null, error: String(error) };
+        }
       },
     );
 

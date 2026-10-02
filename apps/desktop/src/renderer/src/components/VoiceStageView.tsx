@@ -18,6 +18,8 @@ import {
   EyeOff,
   Loader2,
   Music,
+  Circle,
+  Square,
 } from 'lucide-react';
 import {
   type Channel,
@@ -31,6 +33,8 @@ import { useAuthStore } from '../stores/useAuthStore';
 import { useChatStore } from '../stores/useChatStore';
 import { useScreenShareStore } from '../stores/useScreenShareStore';
 import { useMusicStore } from '../stores/useMusicStore';
+import { useRecordingStore, formatRecordingDuration } from '../stores/useRecordingStore';
+import { screenRecorderService } from '../services/screenRecorder';
 import { webrtcService } from '../services/webrtc';
 import { useScreenShareViewerDucking } from '../hooks/useScreenShareViewerDucking';
 import { UserContextMenu, type ContextMenuUser } from './UserContextMenu';

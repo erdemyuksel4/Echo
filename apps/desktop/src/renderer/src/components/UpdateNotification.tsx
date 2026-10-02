@@ -11,6 +11,8 @@ interface UpdateInfo {
 interface UpdateProgress {
   percent: number;
   bytesPerSecond: number;
+  transferred?: number;
+  total?: number;
 }
 
 function formatSpeed(bytesPerSec: number): string {
@@ -109,26 +111,29 @@ export const UpdateNotification: React.FC = () => {
           <div className="flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-2 min-w-0">
             <span className="text-xs font-semibold text-slate-100">
               {status === 'available' &&
-                `Yeni Echo sürümü indiriliyor: v${updateInfo?.version ?? ''}`}
+                `Yeni Echo sürümü hazırlanıyor: v${updateInfo?.version ?? ''}`}
               {status === 'downloading' && `Echo Güncelleniyor... %${progress.percent}`}
-              {status === 'downloaded' && 'Echo Güncellendi! Yeniden başlatılıyor...'}
+              {status === 'downloaded' && `Echo v${updateInfo?.version ?? ''} Hazır!`}
             </span>
 
             {status === 'available' && (
               <span className="text-[11px] text-slate-400 truncate">
-                Güncelleme otomatik olarak kurulacak.
+                Fark paketi arka planda indiriliyor...
               </span>
             )}
 
             {status === 'downloading' && (
               <span className="text-[11px] text-slate-400">
+                {progress.total && progress.total > 0
+                  ? `${(progress.transferred ? progress.transferred / (1024 * 1024) : 0).toFixed(1)} MB / ${(progress.total / (1024 * 1024)).toFixed(1)} MB `
+                  : ''}
                 {progress.bytesPerSecond > 0 && `(${formatSpeed(progress.bytesPerSecond)})`}
               </span>
             )}
 
             {status === 'downloaded' && (
               <span className="text-[11px] text-slate-400 truncate">
-                Uygulama otomatik olarak yeniden açılacak.
+                Güncelleme kuruldu. Uygulamayı yeniden başlatabilirsiniz.
               </span>
             )}
           </div>
@@ -146,10 +151,13 @@ export const UpdateNotification: React.FC = () => {
           )}
 
           {status === 'downloaded' && (
-            <div className="flex items-center gap-2 text-xs font-medium text-emerald-400">
-              <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-              <span>Yeniden başlatılıyor...</span>
-            </div>
+            <button
+              onClick={handleInstall}
+              className="flex items-center gap-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 px-3 py-1 text-xs font-bold text-slate-950 shadow-md shadow-emerald-500/20 transition-all cursor-pointer"
+            >
+              <RefreshCw className="h-3.5 w-3.5" />
+              <span>Yeniden Başlat</span>
+            </button>
           )}
 
           <button
