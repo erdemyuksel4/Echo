@@ -9,12 +9,14 @@ interface MusicStoreState {
   isMuted: boolean;
   isPanelOpen: boolean;
   isExpandedStage: boolean;
+  isAdPlaying: boolean;
 
   setPlaybackState: (state: MusicPlaybackState) => void;
   setVolume: (volume: number) => void;
   toggleMute: () => void;
   setPanelOpen: (open: boolean) => void;
   setExpandedStage: (expanded: boolean) => void;
+  setIsAdPlaying: (isAd: boolean) => void;
   getChannelPlayback: (channelId: string | null) => MusicPlaybackState | null;
 }
 
@@ -24,6 +26,7 @@ export const useMusicStore = create<MusicStoreState>((set, get) => ({
   isMuted: false,
   isPanelOpen: false,
   isExpandedStage: true,
+  isAdPlaying: false,
 
   setPlaybackState: (state) =>
     set((prev) => {
@@ -33,6 +36,7 @@ export const useMusicStore = create<MusicStoreState>((set, get) => ({
 
       return {
         isExpandedStage: shouldExpand,
+        isAdPlaying: isNewSong ? false : prev.isAdPlaying,
         playbackStates: {
           ...prev.playbackStates,
           [state.channelId]: state,
@@ -51,6 +55,8 @@ export const useMusicStore = create<MusicStoreState>((set, get) => ({
   setPanelOpen: (isPanelOpen) => set({ isPanelOpen }),
 
   setExpandedStage: (isExpandedStage) => set({ isExpandedStage }),
+
+  setIsAdPlaying: (isAdPlaying) => set({ isAdPlaying }),
 
   getChannelPlayback: (channelId) => {
     if (!channelId) return null;

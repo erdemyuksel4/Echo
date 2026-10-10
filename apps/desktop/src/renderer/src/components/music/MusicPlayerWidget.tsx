@@ -12,7 +12,8 @@ export const MusicPlayerWidget: React.FC = () => {
   const playbackState = useMusicStore((state) =>
     currentChannelId ? state.playbackStates[currentChannelId] ?? null : null,
   );
-  const { volume, setVolume, isMuted, toggleMute, setPanelOpen } = useMusicStore();
+  const { volume, setVolume, isMuted, toggleMute, setPanelOpen, isAdPlaying, setIsAdPlaying } =
+    useMusicStore();
 
   const currentTrack = playbackState?.currentTrack;
   const trackId = currentTrack?.id;
@@ -23,19 +24,20 @@ export const MusicPlayerWidget: React.FC = () => {
 
   // Real-time ticking playback position for the small player
   const [currentPosition, setCurrentPosition] = useState(positionSeconds);
-  const [isAd, setIsAd] = useState(false);
 
   useEffect(() => {
     if (!window.echoApi?.music) return;
     const cleanup = window.echoApi.music.onAdState((data) => {
-      setIsAd(data.isAd);
+      setIsAdPlaying(data.isAd);
     });
     return cleanup;
-  }, []);
+  }, [setIsAdPlaying]);
 
   useEffect(() => {
-    if (status !== 'playing') {
-      setCurrentPosition(positionSeconds);
+    if (status !== 'playing' || isAdPlaying) {
+      if (!isAdPlaying) {
+        setCurrentPosition(positionSeconds);
+      }
       return;
     }
 
@@ -46,7 +48,7 @@ export const MusicPlayerWidget: React.FC = () => {
     }, 500);
 
     return () => clearInterval(interval);
-  }, [status, positionSeconds, lastUpdatedTimestamp, durationSeconds]);
+  }, [status, isAdPlaying, positionSeconds, lastUpdatedTimestamp, durationSeconds]);
 
   // Handle server-side seek events
   useEffect(() => {
@@ -183,12 +185,20 @@ export const MusicPlayerWidget: React.FC = () => {
 
         {/* Track Info & Time */}
         <div className="flex flex-col min-w-0 max-w-[150px] md:max-w-[190px]">
-          <span className="font-bold truncate text-[11px] leading-tight text-white">
-            {currentTrack?.title}
-          </span>
-          {isAd ? (
-            <span className="text-[10px] font-bold text-amber-400 animate-pulse truncate leading-tight mt-0.5">
-              ⚠️ Reklam (Otomatik Atlanacak)
+          <div className="flex items-center gap-1.5 min-w-0">
+            <span className="font-bold truncate text-[11px] leading-tight text-white">
+              {currentTrack?.title}
+            </span>
+            {isAdPlaying && (
+              <span className="shrink-0 px-1.5 py-0.5 bg-amber-500/20 border border-amber-500/50 text-amber-300 rounded text-[9px] font-black uppercase tracking-wider animate-pulse">
+                REKLAM
+              </span>
+            )}
+          </div>
+          {isAdPlaying ? (
+            <span className="text-[10px] font-bold text-amber-400 animate-pulse truncate leading-tight mt-0.5 flex items-center gap-1">
+              <span>⚠️</span>
+              <span>Reklam Atlanıyor...</span>
             </span>
           ) : (
             <div className="flex items-center gap-1.5 text-[10px] text-slate-400 truncate leading-tight mt-0.5">
@@ -199,7 +209,7 @@ export const MusicPlayerWidget: React.FC = () => {
               </span>
             </div>
           )}
-          {playbackState?.hostDisplayName && (
+          {playbackState?.hostDisplayName && !isAdPlaying && (
             <span className="text-[9px] text-indigo-300/80 truncate leading-tight">
               Açan: {playbackState.hostDisplayName}
             </span>
@@ -278,11 +288,15 @@ export const MusicPlayerWidget: React.FC = () => {
       </div>
 
       {/* Mini Progress Bar at bottom */}
-      <div className="w-full h-1 bg-slate-800/80">
-        <div
-          className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 transition-all duration-300"
-          style={{ width: `${Math.min(100, Math.max(0, progressPercent))}%` }}
-        />
+      <div className="w-full h-1 bg-slate-800/80 overflow-hidden">
+        {isAdPlaying ? (
+          <div className="h-full bg-gradient-to-r from-amber-500 via-orange-500 to-amber-500 w-full animate-pulse" />
+        ) : (
+          <div
+            className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 transition-all duration-300"
+            style={{ width: `${Math.min(100, Math.max(0, progressPercent))}%` }}
+          />
+        )}
       </div>
     </div>
   );

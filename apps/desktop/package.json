@@ -84,6 +84,9 @@
       "shortcutName": "Echo",
       "uninstallDisplayName": "Echo",
       "runAfterFinish": true
+    },
+    "nsisWeb": {
+      "differentialPackage": true
     }
   }
 }

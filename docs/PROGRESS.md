@@ -837,3 +837,15 @@ Bu dosya her faz ve görev sonunda güncellenir.
     - Şarkının altında "Başlatan: <Kullanıcı Adı> (Siz)" rozeti.
     - Modal başlığında "YouTube ile Giriş" / "YouTube Bağlı" durum butonu ve oturum açılmamışsa bilgilendirici ipucu.
 
+## Reklam Esnasında İlerleme Çubuğu Duraklatma & Belirgin Reklam Rozeti (v0.1.46)
+
+- [x] **Reklam Sırasında İlerleme Çubuğunun İlerlemesini Engelleme:**
+  - `MusicPlayerWidget.tsx` ve `MusicModal.tsx`: `isAdPlaying` aktifken çalışan `setInterval` zamanlayıcısı duraklatıldı; süre ve ilerleme yüzdesi reklam bitene kadar 0 (veya mevcut konumda) sabit tutuldu.
+  - `MusicPlayerWidget.tsx`: Reklam sırasında alttaki ilerleme çubuğu mor dolgu yerine yanıp sönen animasyonlu amber (turuncu-sarı) `Reklam` çubuğuna dönüştürüldü.
+- [x] **Arayüzde Belirgin `[REKLAM]` Rozeti ve Bildirimi:**
+  - `MusicPlayerWidget.tsx`: Şarkı başlığının hemen yanına belirgin `REKLAM` rozeti ve altında yanıp sönen `⚠️ Reklam Atlanıyor...` durumu eklendi.
+  - `MusicModal.tsx`: Albüm kapağı üzerine `REKLAM` rozeti ve üst kısma belirgin bilgilendirme kutusu eklendi.
+- [x] **Sağlam Konsol Mesajı Tabanlı Reklam & Bitiş Algılama:**
+  - `apps/desktop/src/main/musicPlayer.ts`: Güvensiz URL hash manipülasyonu yerine Chromium `console.log('__ECHO_AD__:true')` / `console.log('__ECHO_AD__:false')` ve `console.log('__ECHO_ENDED__')` IPC mekanizmasına geçildi. Reklam tespiti YouTube'un en güncel DOM sınıflarını ve API'lerini (`.ad-showing`, `.ad-interrupting`, `.ytp-ad-text`, `getAdState`) kapsayacak şekilde güçlendirildi.
+
+

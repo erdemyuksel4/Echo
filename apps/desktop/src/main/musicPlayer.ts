@@ -224,21 +224,24 @@ class MusicPlayerManager {
       this.syncPlaybackStateInPage();
     });
 
-    this.playerWindow.webContents.on('did-navigate-in-page', (_event, url) => {
-      if (url.includes('#ended-')) {
-        if (this.mainWindow && !this.mainWindow.isDestroyed()) {
-          this.mainWindow.webContents.send('music:onEnded');
-        }
-      }
-      if (url.includes('#echo-ad-active')) {
+    this.playerWindow.webContents.on('console-message', (_event, _level, message) => {
+      if (message === '__ECHO_AD__:true') {
         if (!this.isAdCurrentlyActive) {
           this.isAdCurrentlyActive = true;
-          this.mainWindow?.webContents.send('music:onAdState', { isAd: true });
+          if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+            this.mainWindow.webContents.send('music:onAdState', { isAd: true });
+          }
         }
-      } else if (url.includes('#echo-ad-inactive')) {
+      } else if (message === '__ECHO_AD__:false') {
         if (this.isAdCurrentlyActive) {
           this.isAdCurrentlyActive = false;
-          this.mainWindow?.webContents.send('music:onAdState', { isAd: false });
+          if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+            this.mainWindow.webContents.send('music:onAdState', { isAd: false });
+          }
+        }
+      } else if (message === '__ECHO_ENDED__') {
+        if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+          this.mainWindow.webContents.send('music:onEnded');
         }
       }
     });
@@ -270,12 +273,16 @@ class MusicPlayerManager {
             const confirmBtn = document.querySelector('yt-confirm-dialog-renderer #confirm-button button, .yt-spec-button-shape-next--filled');
             if (confirmBtn) confirmBtn.click();
 
-            // 2. Check if an advertisement is actively showing
-            const isAd = mp && (mp.classList.contains('ad-showing') || mp.classList.contains('ad-interrupting'));
+            // 2. Comprehensive check if an advertisement is actively showing
+            const isAd = Boolean(
+              (mp && (mp.classList.contains('ad-showing') || mp.classList.contains('ad-interrupting'))) ||
+              (mp && typeof mp.getAdState === 'function' && mp.getAdState() > 0) ||
+              document.querySelector('.ytp-ad-text, .ytp-ad-preview-text, .ytp-ad-skip-button-modern, .ytp-skip-ad-button, .ytp-ad-player-overlay-layout')
+            );
+
             if (isAd) {
-              if (!window.location.hash.includes('echo-ad-active')) {
-                window.location.hash = '#echo-ad-active';
-              }
+              console.log('__ECHO_AD__:true');
+
               // Fast-forward unskippable ads and mute audio during ad
               if (v) {
                 try {
@@ -284,17 +291,15 @@ class MusicPlayerManager {
                 } catch(e) {}
               }
               const skipBtn = document.querySelector('.ytp-skip-ad-button, .ytp-ad-skip-button, .ytp-ad-skip-button-modern, button.ytp-ad-skip-button-modern, .videoAdUiSkipButton, [id^="skip-button"]');
-              if (skipBtn) {
-                try { (skipBtn as HTMLElement).click(); } catch(e) {}
+              if (skipBtn && typeof (skipBtn as any).click === 'function') {
+                try { (skipBtn as any).click(); } catch(e) {}
               }
-              if (typeof mp.skipAd === 'function') {
+              if (mp && typeof mp.skipAd === 'function') {
                 try { mp.skipAd(); } catch(e) {}
               }
               return;
             } else {
-              if (window.location.hash.includes('echo-ad-active')) {
-                window.location.hash = '#echo-ad-inactive';
-              }
+              console.log('__ECHO_AD__:false');
             }
 
             // 3. Main song playback configuration
@@ -341,9 +346,12 @@ class MusicPlayerManager {
               if (!v.__echoHooked) {
                 v.__echoHooked = true;
                 v.onended = () => {
-                  const adActive = mp && (mp.classList.contains('ad-showing') || mp.classList.contains('ad-interrupting'));
+                  const adActive = Boolean(
+                    (mp && (mp.classList.contains('ad-showing') || mp.classList.contains('ad-interrupting'))) ||
+                    document.querySelector('.ytp-ad-text, .ytp-ad-skip-button-modern, .ytp-skip-ad-button')
+                  );
                   if (!adActive) {
-                    window.location.hash = 'ended-' + Date.now();
+                    console.log('__ECHO_ENDED__');
                   }
                 };
               }
@@ -356,6 +364,10 @@ class MusicPlayerManager {
 
   private playTrack(videoId: string, startSeconds: number): void {
     this.isPaused = false;
+    this.isAdCurrentlyActive = false;
+    if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+      this.mainWindow.webContents.send('music:onAdState', { isAd: false });
+    }
 
     if (this.currentTrackId === videoId && this.playerWindow && !this.playerWindow.isDestroyed()) {
       // Same track, seek and resume
@@ -378,6 +390,10 @@ class MusicPlayerManager {
   public stop(): void {
     this.isPaused = false;
     this.currentTrackId = null;
+    this.isAdCurrentlyActive = false;
+    if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+      this.mainWindow.webContents.send('music:onAdState', { isAd: false });
+    }
     if (this.playerWindow && !this.playerWindow.isDestroyed()) {
       try {
         void this.playerWindow.webContents

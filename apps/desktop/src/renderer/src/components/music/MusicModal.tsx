@@ -35,6 +35,8 @@ export const MusicModal: React.FC = () => {
     setVolume,
     isMuted,
     toggleMute,
+    isAdPlaying,
+    setIsAdPlaying,
   } = useMusicStore();
 
   const playbackState = useMusicStore((state) =>
@@ -56,22 +58,23 @@ export const MusicModal: React.FC = () => {
   // Real-time ticking playback position
   const [currentPosition, setCurrentPosition] = useState(playbackState?.positionSeconds ?? 0);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [isAd, setIsAd] = useState(false);
 
   useEffect(() => {
     if (!window.echoApi?.music) return;
     void window.echoApi.music.checkAuth().then((res) => setIsLoggedIn(res.isLoggedIn));
     const cleanupAuth = window.echoApi.music.onAuthChange((res) => setIsLoggedIn(res.isLoggedIn));
-    const cleanupAd = window.echoApi.music.onAdState((data) => setIsAd(data.isAd));
+    const cleanupAd = window.echoApi.music.onAdState((data) => setIsAdPlaying(data.isAd));
     return () => {
       cleanupAuth();
       cleanupAd();
     };
-  }, []);
+  }, [setIsAdPlaying]);
 
   useEffect(() => {
-    if (status !== 'playing') {
-      setCurrentPosition(playbackState?.positionSeconds ?? 0);
+    if (status !== 'playing' || isAdPlaying) {
+      if (!isAdPlaying) {
+        setCurrentPosition(playbackState?.positionSeconds ?? 0);
+      }
       return;
     }
 
@@ -82,7 +85,7 @@ export const MusicModal: React.FC = () => {
     }, 500);
 
     return () => clearInterval(interval);
-  }, [status, playbackState?.positionSeconds, playbackState?.lastUpdatedTimestamp, durationSec]);
+  }, [status, isAdPlaying, playbackState?.positionSeconds, playbackState?.lastUpdatedTimestamp, durationSec]);
 
   const handleSearch = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -284,6 +287,11 @@ export const MusicModal: React.FC = () => {
                       alt={currentTrack.title}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                     />
+                    {isAdPlaying && (
+                      <span className="absolute top-2 left-2 px-2 py-0.5 rounded bg-amber-500 text-slate-950 font-black text-[10px] tracking-wide animate-pulse z-10 shadow-lg">
+                        REKLAM
+                      </span>
+                    )}
                     <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent flex items-end p-2.5 pointer-events-none">
                       <span className="text-[10px] text-indigo-300 font-mono">
                         Ekleyen: {currentTrack.addedByName}
@@ -309,10 +317,10 @@ export const MusicModal: React.FC = () => {
                   )}
 
                   {/* Ad notification banner */}
-                  {isAd && (
-                    <div className="w-full max-w-md mb-3 px-3 py-2 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center gap-2 text-amber-300 text-xs font-medium animate-pulse">
+                  {isAdPlaying && (
+                    <div className="w-full max-w-md mb-3 px-3 py-2.5 rounded-xl bg-amber-500/20 border border-amber-500/50 flex items-center justify-center gap-2 text-amber-300 text-xs font-bold animate-pulse shadow-lg shadow-amber-950/40">
                       <AlertCircle className="h-4 w-4 shrink-0 text-amber-400" />
-                      <span>YouTube Reklamı Oynatılıyor — Geçilebilir olduğunda otomatik atlanacak</span>
+                      <span>YouTube Reklamı Oynatılıyor — Süre duraklatıldı, otomatik atlanıyor</span>
                     </div>
                   )}
 
