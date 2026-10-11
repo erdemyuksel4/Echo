@@ -5,15 +5,51 @@ import { is } from '@electron-toolkit/utils';
 let targetWindow: BrowserWindow | null = null;
 let isInitialized = false;
 
+import { appendFileSync } from 'fs';
+import { join } from 'path';
+
+function getUpdaterLogPath(): string {
+  try {
+    return join(app.getPath('userData'), 'updater.log');
+  } catch {
+    return join(process.cwd(), 'updater.log');
+  }
+}
+
+function writeLog(level: string, message: string): void {
+  try {
+    const entry = `[${new Date().toISOString()}] [${level}] ${message}\n`;
+    appendFileSync(getUpdaterLogPath(), entry, 'utf8');
+  } catch {}
+}
+
+const updaterLogger = {
+  info: (msg: string): void => {
+    console.log('[Echo Updater]', msg);
+    writeLog('INFO', msg);
+  },
+  warn: (msg: string): void => {
+    console.warn('[Echo Updater]', msg);
+    writeLog('WARN', msg);
+  },
+  error: (msg: string): void => {
+    console.error('[Echo Updater]', msg);
+    writeLog('ERROR', msg);
+  },
+  debug: (msg: string): void => {
+    writeLog('DEBUG', msg);
+  },
+};
+
 // Configure autoUpdater
 autoUpdater.autoDownload = true;
 autoUpdater.autoInstallOnAppQuit = true;
 autoUpdater.disableWebInstaller = true;
 autoUpdater.disableDifferentialDownload = false;
-autoUpdater.logger = console;
+autoUpdater.logger = updaterLogger;
 
 // Use GitHub provider so electron-updater can resolve both current and old version blockmaps by tag:
-// e.g. /releases/download/v0.1.47/... and /releases/download/v0.1.46/....blockmap
+// e.g. /releases/download/v0.1.48/... and /releases/download/v0.1.47/....blockmap
 // This enables true differential (delta) updates (~1-5MB instead of full ~86MB installer).
 autoUpdater.setFeedURL({
   provider: 'github',
@@ -72,14 +108,14 @@ export function initAutoUpdater(window: BrowserWindow): void {
   isInitialized = true;
 
   autoUpdater.on('checking-for-update', () => {
-    console.log('[Echo Updater] Checking for update...');
+    writeLog('INFO', 'Checking for update...');
     if (targetWindow && !targetWindow.isDestroyed()) {
       targetWindow.webContents.send('updater:status', { status: 'checking' });
     }
   });
 
   autoUpdater.on('update-available', (info) => {
-    console.log('[Echo Updater] Update available (differential download starting):', info.version);
+    writeLog('INFO', `Update available: v${info.version}`);
     const releaseNotes =
       typeof info.releaseNotes === 'string'
         ? info.releaseNotes
@@ -100,7 +136,7 @@ export function initAutoUpdater(window: BrowserWindow): void {
   });
 
   autoUpdater.on('update-not-available', (info) => {
-    console.log('[Echo Updater] App is up to date:', info.version);
+    writeLog('INFO', `App is up to date: v${info.version}`);
     if (targetWindow && !targetWindow.isDestroyed()) {
       targetWindow.webContents.send('updater:status', {
         status: 'not-available',
@@ -115,8 +151,9 @@ export function initAutoUpdater(window: BrowserWindow): void {
     const transferred = progressObj.transferred;
     const total = progressObj.total;
 
-    console.log(
-      `[Echo Updater] Differential download: ${percent}% (${(transferred / (1024 * 1024)).toFixed(1)}MB / ${(total / (1024 * 1024)).toFixed(1)}MB) at ${(bytesPerSecond / 1024).toFixed(0)} KB/s`
+    writeLog(
+      'PROGRESS',
+      `Progress: ${percent}% (${(transferred / (1024 * 1024)).toFixed(2)}MB / ${(total / (1024 * 1024)).toFixed(2)}MB) at ${(bytesPerSecond / 1024).toFixed(0)} KB/s`
     );
 
     if (targetWindow && !targetWindow.isDestroyed()) {
@@ -134,7 +171,7 @@ export function initAutoUpdater(window: BrowserWindow): void {
   });
 
   autoUpdater.on('update-downloaded', (info) => {
-    console.log('[Echo Updater] Differential update downloaded successfully:', info.version);
+    writeLog('INFO', `Update downloaded successfully: v${info.version}`);
     if (targetWindow && !targetWindow.isDestroyed()) {
       targetWindow.webContents.send('updater:status', {
         status: 'downloaded',
@@ -147,7 +184,7 @@ export function initAutoUpdater(window: BrowserWindow): void {
   });
 
   autoUpdater.on('error', (err) => {
-    console.warn('[Echo Updater] Error occurred:', err.message);
+    writeLog('ERROR', `AutoUpdater error: ${err.message} \n${err.stack || ''}`);
     if (targetWindow && !targetWindow.isDestroyed()) {
       targetWindow.webContents.send('updater:status', {
         status: 'error',
