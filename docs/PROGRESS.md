@@ -993,6 +993,11 @@ Bu dosya her faz ve görev sonunda güncellenir.
   - `flutter analyze`: Sıfır hata, sıfır uyarı (`No issues found!`).
   - `flutter test`: Ed25519 kimlik üretimi, base32 ve E2EE testleri başarıyla geçti (`All tests passed!`).
   - Monorepo `pnpm typecheck`, `pnpm lint`, `pnpm test` hatasız tamamlandı.
+- [x] **CI/CD & Android Release APK:**
+  - GitHub Actions `build-mobile.yml` derleme pipeline'ı kuruldu.
+  - Gradle 8.12 + Android Gradle Plugin 8.9.1 + Kotlin 2.0.20 + Android SDK 34 uyumluluğu sağlandı.
+  - Release APK GitHub Releases (`mobile-v0.1.0`) üzerine başarıyla yüklendi.
+  - İndirme bağlantısı: `https://github.com/erdemyuksel4/Echo/releases/download/mobile-v0.1.0/Echo-Mobile.apk`
 
 
 
