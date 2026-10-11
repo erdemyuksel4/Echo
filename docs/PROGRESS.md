@@ -875,6 +875,12 @@ Bu dosya her faz ve görev sonunda güncellenir.
   - `ChannelList.tsx` ve `VoiceStageView.tsx`: Ses kanalındaki botun yanında Discord tarzı mor `[BOT]` rozeti ve 🎵 müzik avatarı gösterilir.
   - `ChatMessageItem.tsx`: Botların gönderdiği mesajların yanında `[BOT]` rozeti yer alır.
   - `MusicPlayerWidget.tsx`: Yerel Chromium oynatıcı motoru yalnızca Host olan istemcide çalışacak şekilde sınırlandırıldı; dinleyiciler sadece WebRTC üzerinden dinler.
+## Sessiz Arka Plan Güncellemesi & Kurulum Sihirbazı Penceresini Engelleme (v0.1.50)
 
-
+- [x] **Güncelleme Sonrası Kurulum Sihirbazı (.exe) Açılmasını Engelleme:**
+  - *Kök Neden:* `apps/desktop/src/main/updater.ts` dosyasında `autoUpdater.quitAndInstall(false, true)` çağrılıyordu (`isSilent: false`). Ayrıca `apps/desktop/package.json` dosyasında NSIS yapılandırmasında `"oneClick": false, "allowToChangeInstallationDirectory": true` tanımlıydı. Bu iki ayar yüzünden Windows, arka planda sessizce güncellemek yerine güncelleme indirildiğinde kullanıcıya grafiksel NSIS kurulum sihirbazını (`Echo Setup.exe`) açıyordu.
+  - *Çözüm:*
+    1. `apps/desktop/package.json`: NSIS yapılandırması `"oneClick": true` yapıldı, `"allowToChangeInstallationDirectory"` kaldırıldı.
+    2. `apps/desktop/src/main/updater.ts`: `autoUpdater.quitAndInstall(true, true)` (`isSilent: true, isForceRunAfter: true`) olarak güncellendi.
+    3. Güncelleme indirildikten sonra hiçbir kurulum penceresi veya sihirbazı gösterilmez; arka planda sessizce uygulanır (`/S`) ve uygulama doğrudan yeni sürüme yeniden başlar.
 
