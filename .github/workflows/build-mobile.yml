@@ -60,10 +60,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          TAG="v0.1.56"
-          echo "Attaching to release $TAG"
-          gh release upload "$TAG" Echo-Mobile.apk --clobber || echo "Upload to $TAG failed, trying latest release..."
-          LATEST=$(gh release list --limit 1 --json tagName --jq '.[0].tagName')
-          if [ -n "$LATEST" ]; then
-            gh release upload "$LATEST" Echo-Mobile.apk --clobber
-          fi
+          TAG="mobile-v0.1.0"
+          echo "Uploading Echo-Mobile.apk to GitHub Release $TAG..."
+          gh release create "$TAG" Echo-Mobile.apk --title "Echo Mobile v0.1.0" --notes "Echo Mobile Android Release APK" || gh release upload "$TAG" Echo-Mobile.apk --clobber
+
