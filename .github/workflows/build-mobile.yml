@@ -38,7 +38,14 @@ jobs:
 
       - name: Build Android Release APK
         working-directory: apps/mobile
-        run: flutter build apk --release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -o pipefail
+          flutter build apk --release 2>&1 | tee build.log || {
+            gh release create "build-debug" build.log --title "Build Debug Log" --notes "Build failed log" --target "$GITHUB_SHA" || gh release upload "build-debug" build.log --clobber
+            exit 1
+          }
 
       - name: Copy and rename APK
         run: |
