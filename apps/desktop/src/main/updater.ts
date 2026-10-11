@@ -217,8 +217,8 @@ export function initAutoUpdater(window: BrowserWindow): void {
     if (targetWindow && !targetWindow.isDestroyed()) {
       targetWindow.removeAllListeners('close');
     }
-    // isSilent: false, isForceRunAfter: true (app restarts automatically with new version)
-    autoUpdater.quitAndInstall(false, true);
+    // isSilent: true (silent update in background without showing installer wizard exe), isForceRunAfter: true (app restarts automatically with new version)
+    autoUpdater.quitAndInstall(true, true);
   });
 
   // Background check on startup if packaged
