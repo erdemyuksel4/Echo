@@ -924,3 +924,17 @@ Bu dosya her faz ve görev sonunda güncellenir.
   - `apps/desktop/src/renderer/src/services/webrtc.ts`: `setPeerVolume`, `setPeerMuted` ve `applyPeerGain` fonksiyonları bot kimliği (`bot-`) için doğrudan `window.echoApi.music.setVolume` ile bağlandı; host kullanıcısı bota sağ tıklayıp ses kıstığında yerel müzik motorunun sesi anında kısılır veya susturulur.
   - `apps/desktop/src/renderer/src/components/UserContextMenu.tsx`: Botlar için anlamsız olan "Direkt Mesaj Gönder" butonu gizlendi, menüdeki ses ve susturma değişiklikleri bot motoruyla anlık senkronize edildi.
 
+## DM Gezinmesinde Ses Katılımcıları Kaybolma ve Sağ Tık Ses Denetimleri Kalıcı Çözümü (v0.1.54)
+
+- [x] **Durable Object Hibernation & SQLite Kalıcı Katılımcı Depolaması:**
+  - *Kök Neden:* Cloudflare Durable Object WebSocket Hibernation devreye girdiğinde veya nesne boşa çıktığında bellek içi `voiceRooms` ve `userVoiceChannel` Map'leri sıfırlanıyordu. Kullanıcı DM sekmesine gidip birkaç saniye beklediğinde DO belleği temizleniyor ve gruba geri dönüldüğünde `VOICE_SYNC` sunucudan boş liste (`participants: []`) dönüyordu.
+  - *Çözüm:* `apps/server/src/durable/GroupDO.ts` içinde `voice_participants` SQLite tablosu oluşturuldu. Kullanıcı ve bot katıldığında, durum değiştirdiğinde veya ayrıldığında SQLite'a anında yazılır. DO yeniden başlatıldığında (`ensureVoiceRoomsLoaded()`) SQLite tablosundan katılımcılar yüklenir ve kopmuş soketler elenir.
+- [x] **İstemci Tarafında Kesintisiz Ses Varlığı & Kendi Kendini Onarma:**
+  - `apps/desktop/src/renderer/src/components/MemberList.tsx`: DM başlatırken gereksiz yere soketi kapatan `wsService.disconnect()` çağrısı kaldırıldı.
+  - `apps/desktop/src/renderer/src/stores/useVoiceStore.ts`: `setChannelParticipants` içinde kullanıcı eğer o ses kanalına bağlıysa, sunucudan geçici boş anlık görüntü gelse dahi yerel kullanıcının katılımcı listesinden düşmesi engellendi.
+  - `apps/desktop/src/renderer/src/services/websocket.ts`: Gruba geri dönüldüğünde ve soket kimlik doğrulamasında (`AUTH_OK`), kullanıcının aktif ses kanalı varlığı (`VOICE_JOIN` ve `VOICE_STATE`) otomatik olarak sunucuya yeniden teyit edilir.
+- [x] **Gerçek Web Audio API GainNode ile Bireysel Ses Seviyesi (%0 - %200):**
+  - *Kök Neden:* Chromium/Electron motorunda `HTMLMediaElement.volume` özelliği `MediaStream` (`srcObject`) canlı WebRTC akışları için desteklenmemektedir (ses seviyesi değişmez).
+  - *Çözüm:* `apps/desktop/src/renderer/src/services/webrtc.ts` içinde uzaktan gelen her ses akışı `peerAudioContext.createMediaStreamSource(stream)` -> `GainNode` -> `peerAudioContext.destination` hattına bağlandı. Sağ tıklama menüsündeki ses çubuğu ve susturma artık anında ve %0'dan %200'e kadar çalışır.
+
+

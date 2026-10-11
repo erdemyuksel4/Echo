@@ -816,18 +816,53 @@ class WebRTCVoiceService {
       }
       const remoteStream = event.streams[0] ?? new MediaStream([event.track]);
       audio.srcObject = remoteStream;
+      audio.muted = true; // WebAudio GainNode handles output to bypass Chromium MediaStream volume limitations
+
+      if (!this.peerAudioContext || this.peerAudioContext.state === 'closed') {
+        const AudioCtx =
+          window.AudioContext ||
+          (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+        this.peerAudioContext = new AudioCtx();
+      }
+      if (this.peerAudioContext.state === 'suspended') {
+        void this.peerAudioContext.resume();
+      }
+
+      // Route remote stream through Web Audio GainNode for reliable volume scaling (0% to 200%) & instant muting
+      let gainNode = this.peerGainNodes.get(peerId);
+      if (!gainNode) {
+        try {
+          const source = this.peerAudioContext.createMediaStreamSource(remoteStream);
+          gainNode = this.peerAudioContext.createGain();
+          source.connect(gainNode);
+          gainNode.connect(this.peerAudioContext.destination);
+          this.peerGainNodes.set(peerId, gainNode);
+        } catch (err) {
+          console.warn('[Echo WebRTC] createMediaStreamSource failed, falling back to audio element:', err);
+          audio.muted = false;
+        }
+      }
 
       this.applyPeerGain(peerId);
 
       // Apply output device if set
+      const sinkId = !this.selectedOutputDeviceId || this.selectedOutputDeviceId === 'default' ? '' : this.selectedOutputDeviceId;
       if (
-        this.selectedOutputDeviceId &&
+        sinkId &&
         typeof (audio as unknown as { setSinkId?: (id: string) => Promise<void> }).setSinkId === 'function'
       ) {
-        const sinkId = this.selectedOutputDeviceId === 'default' ? '' : this.selectedOutputDeviceId;
         (audio as unknown as { setSinkId: (id: string) => Promise<void> })
           .setSinkId(sinkId)
           .catch((err: unknown) => console.warn('setSinkId error:', err));
+      }
+      if (
+        sinkId &&
+        this.peerAudioContext &&
+        typeof (this.peerAudioContext as unknown as { setSinkId?: (id: string) => Promise<void> }).setSinkId === 'function'
+      ) {
+        (this.peerAudioContext as unknown as { setSinkId: (id: string) => Promise<void> })
+          .setSinkId(sinkId)
+          .catch((err: unknown) => console.warn('AudioContext setSinkId error:', err));
       }
 
       void audio.play().catch((e) => console.warn('[Echo WebRTC] Audio play prevented:', e));
@@ -1490,6 +1525,17 @@ class WebRTCVoiceService {
         await (this.testMicAudioEl as unknown as { setSinkId: (id: string) => Promise<void> }).setSinkId(sinkId);
       } catch (err) {
         console.warn('Failed to setSinkId on test mic audio element:', err);
+      }
+    }
+
+    if (
+      this.peerAudioContext &&
+      typeof (this.peerAudioContext as unknown as { setSinkId?: (id: string) => Promise<void> }).setSinkId === 'function'
+    ) {
+      try {
+        await (this.peerAudioContext as unknown as { setSinkId: (id: string) => Promise<void> }).setSinkId(sinkId);
+      } catch (err) {
+        console.warn('Failed to setSinkId on peerAudioContext:', err);
       }
     }
 

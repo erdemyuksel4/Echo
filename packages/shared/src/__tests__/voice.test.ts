@@ -349,5 +349,25 @@ describe('Voice Schemas & Protocol', () => {
     it('should resolve IDLE when unmuted, undeafened and not speaking', () => {
       expect(computeAudioState({ deafened: false, muted: false, speaking: false })).toBe(UserAudioState.IDLE);
     });
+
+    it('should correctly validate bot VoiceParticipant', () => {
+      const botParticipant = {
+        userId: 'bot-music',
+        displayName: 'Echo Müzik',
+        muted: false,
+        deafened: false,
+        speaking: true,
+        camera: false,
+        isBot: true,
+        botId: 'bot-music',
+        botType: 'music',
+      };
+      const parsed = VoiceParticipantSchema.safeParse(botParticipant);
+      expect(parsed.success).toBe(true);
+      if (parsed.success) {
+        expect(parsed.data.isBot).toBe(true);
+        expect(parsed.data.botId).toBe('bot-music');
+      }
+    });
   });
 });

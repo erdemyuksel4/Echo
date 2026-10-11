@@ -64,6 +64,18 @@ class EchoWebSocketService {
             this.fetchHistory(currentChanId);
           }
           this.syncVoiceParticipants(groupId);
+
+          // If user is currently in a voice channel in this group, re-assert voice presence
+          const voiceState = useVoiceStore.getState();
+          if (voiceState.currentGroupId === groupId && voiceState.currentChannelId) {
+            this.sendToGroup(groupId, WsClientEvents.VOICE_JOIN, { channelId: voiceState.currentChannelId });
+            this.sendVoiceState(voiceState.currentChannelId, {
+              muted: voiceState.isMuted,
+              deafened: voiceState.isDeafened,
+              speaking: voiceState.isSpeaking,
+              camera: voiceState.isCameraActive,
+            });
+          }
         } else {
           useChatStore.getState().setConnectionStatus('connecting');
         }
@@ -206,6 +218,19 @@ class EchoWebSocketService {
         if (isActive) {
           chatStore.setConnectionStatus('connected');
         }
+
+        // If user is currently in a voice channel in this group, re-assert voice presence
+        const voiceState = useVoiceStore.getState();
+        if (voiceState.currentGroupId === groupId && voiceState.currentChannelId) {
+          this.sendToGroup(groupId, WsClientEvents.VOICE_JOIN, { channelId: voiceState.currentChannelId });
+          this.sendVoiceState(voiceState.currentChannelId, {
+            muted: voiceState.isMuted,
+            deafened: voiceState.isDeafened,
+            speaking: voiceState.isSpeaking,
+            camera: voiceState.isCameraActive,
+          });
+        }
+        this.syncVoiceParticipants(groupId);
         break;
       }
 

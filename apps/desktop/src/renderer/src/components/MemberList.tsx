@@ -5,7 +5,6 @@ import { useChatStore } from '../stores/useChatStore';
 import { useAuthStore } from '../stores/useAuthStore';
 import { useVoiceStore } from '../stores/useVoiceStore';
 import { useDmStore } from '../stores/useDmStore';
-import { wsService } from '../services/websocket';
 import { UserContextMenu, type ContextMenuUser } from './UserContextMenu';
 
 export const MemberList: React.FC = () => {
@@ -108,7 +107,6 @@ export const MemberList: React.FC = () => {
               useChatStore.getState().setActiveGroup(null);
               useChatStore.getState().setActiveChannel(null);
               useChatStore.setState({ activeGroupMeta: null });
-              wsService.disconnect();
             }}
             className="rounded p-1 text-slate-500 hover:text-indigo-400 hover:bg-slate-800 transition"
             title="Mesaj Gönder"

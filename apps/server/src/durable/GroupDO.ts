@@ -184,6 +184,19 @@ export class GroupDO extends DurableObject<Env> {
         data_base64 TEXT NOT NULL,
         PRIMARY KEY(attachment_id, chunk_index)
       );
+
+      CREATE TABLE IF NOT EXISTS voice_participants (
+        channel_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        display_name TEXT NOT NULL,
+        muted INTEGER NOT NULL DEFAULT 0,
+        deafened INTEGER NOT NULL DEFAULT 0,
+        speaking INTEGER NOT NULL DEFAULT 0,
+        camera INTEGER NOT NULL DEFAULT 0,
+        is_bot INTEGER NOT NULL DEFAULT 0,
+        joined_at INTEGER NOT NULL,
+        PRIMARY KEY(channel_id, user_id)
+      );
     `);
 
     try {
@@ -913,7 +926,72 @@ export class GroupDO extends DurableObject<Env> {
     this.broadcast(WsServerEvents.PRESENCE_CHANGED, { userId, status: 'online' });
   }
 
+  private ensureVoiceRoomsLoaded(): void {
+    if (this.voiceRooms.size > 0) return;
+
+    try {
+      const rows = [
+        ...this.sql.exec(
+          `SELECT channel_id, user_id, display_name, muted, deafened, speaking, camera, is_bot FROM voice_participants`,
+        ),
+      ] as {
+        channel_id: string;
+        user_id: string;
+        display_name: string;
+        muted: number;
+        deafened: number;
+        speaking: number;
+        camera: number;
+        is_bot: number;
+      }[];
+
+      // Sockets currently connected to this DO instance
+      const activeSockets = this.ctx.getWebSockets();
+      const connectedUserIds = new Set<string>();
+      for (const s of activeSockets) {
+        const att = s.deserializeAttachment() as WsSessionAttachment | null;
+        if (att?.authenticated && att.userId) {
+          connectedUserIds.add(att.userId);
+        }
+      }
+
+      for (const row of rows) {
+        const isBot = Boolean(row.is_bot) || row.user_id.startsWith('bot-');
+        // If human user is not connected via WebSocket, remove stale participant from SQLite
+        if (!isBot && !connectedUserIds.has(row.user_id)) {
+          this.sql.exec(
+            `DELETE FROM voice_participants WHERE channel_id = ? AND user_id = ?`,
+            row.channel_id,
+            row.user_id,
+          );
+          continue;
+        }
+
+        let room = this.voiceRooms.get(row.channel_id);
+        if (!room) {
+          room = new Map();
+          this.voiceRooms.set(row.channel_id, room);
+        }
+
+        const participant: VoiceParticipant = {
+          userId: row.user_id,
+          displayName: row.display_name,
+          muted: Boolean(row.muted),
+          deafened: Boolean(row.deafened),
+          speaking: Boolean(row.speaking),
+          camera: Boolean(row.camera),
+          isBot,
+        };
+        room.set(row.user_id, participant);
+        this.userVoiceChannel.set(row.user_id, row.channel_id);
+      }
+    } catch (err) {
+      console.warn('Failed to load voice rooms from SQLite:', err);
+    }
+  }
+
   private sendAllVoiceParticipants(ws: WebSocket): void {
+    this.ensureVoiceRoomsLoaded();
     const voiceChanRows = [...this.sql.exec(`SELECT id FROM channels WHERE type = 'voice'`)] as {
       id: string;
     }[];
@@ -1372,6 +1450,7 @@ export class GroupDO extends DurableObject<Env> {
   }
 
   private handleVoiceJoin(ws: WebSocket, session: WsSessionAttachment, envelope: WsEnvelope): void {
+    this.ensureVoiceRoomsLoaded();
     const parse = ClientVoiceJoinPayloadSchema.safeParse(envelope.d);
     if (!parse.success) {
       this.sendError(ws, 'INVALID_PAYLOAD', 'Ses kanalına katılım parametreleri geçersiz');
@@ -1404,6 +1483,7 @@ export class GroupDO extends DurableObject<Env> {
       return;
     }
 
+    const isBot = session.userId.startsWith('bot-');
     const participant: VoiceParticipant = {
       userId: session.userId,
       displayName: session.displayName,
@@ -1411,6 +1491,7 @@ export class GroupDO extends DurableObject<Env> {
       deafened: false,
       speaking: false,
       camera: false,
+      isBot,
     };
 
     // Get list of existing participants BEFORE adding this new one (for mesh offer initiation)
@@ -1418,6 +1499,17 @@ export class GroupDO extends DurableObject<Env> {
 
     room.set(session.userId, participant);
     this.userVoiceChannel.set(session.userId, channelId);
+
+    // Persist to SQLite
+    this.sql.exec(
+      `INSERT OR REPLACE INTO voice_participants (channel_id, user_id, display_name, muted, deafened, speaking, camera, is_bot, joined_at)
+       VALUES (?, ?, ?, 0, 0, 0, 0, ?, ?)`,
+      channelId,
+      session.userId,
+      session.displayName,
+      isBot ? 1 : 0,
+      Date.now(),
+    );
 
     // Broadcast to all connected clients in the group so channel avatars & mesh update
     this.broadcast(
@@ -1461,15 +1553,26 @@ export class GroupDO extends DurableObject<Env> {
   }
 
   private leaveVoiceRoom(userId: string, channelId: string, envelopeId?: string): void {
+    this.ensureVoiceRoomsLoaded();
     const room = this.voiceRooms.get(channelId);
     if (room && room.has(userId)) {
       room.delete(userId);
+      this.sql.exec(
+        `DELETE FROM voice_participants WHERE channel_id = ? AND user_id = ?`,
+        channelId,
+        userId,
+      );
 
-      const humansLeft = Array.from(room.values()).filter((p) => !p.isBot);
+      const humansLeft = Array.from(room.values()).filter((p) => !p.isBot && !p.userId.startsWith('bot-'));
       const botId = 'bot-music';
       if (humansLeft.length === 0) {
         if (room.has(botId)) {
           room.delete(botId);
+          this.sql.exec(
+            `DELETE FROM voice_participants WHERE channel_id = ? AND user_id = ?`,
+            channelId,
+            botId,
+          );
           this.broadcast(WsServerEvents.VOICE_USER_LEFT, { channelId, userId: botId });
         }
         const mState = this.musicStates.get(channelId);
@@ -1556,6 +1659,7 @@ export class GroupDO extends DurableObject<Env> {
   }
 
   private handleVoiceState(session: WsSessionAttachment, envelope: WsEnvelope): void {
+    this.ensureVoiceRoomsLoaded();
     const parse = ClientVoiceStatePayloadSchema.safeParse(envelope.d);
     if (!parse.success) return;
 
@@ -1571,6 +1675,17 @@ export class GroupDO extends DurableObject<Env> {
         p.camera = camera;
       }
       currentCamera = p.camera;
+
+      // Persist to SQLite
+      this.sql.exec(
+        `UPDATE voice_participants SET muted = ?, deafened = ?, speaking = ?, camera = ? WHERE channel_id = ? AND user_id = ?`,
+        muted ? 1 : 0,
+        deafened ? 1 : 0,
+        speaking ? 1 : 0,
+        currentCamera ? 1 : 0,
+        channelId,
+        session.userId,
+      );
     }
 
     this.broadcast(WsServerEvents.VOICE_STATE, {
@@ -1934,6 +2049,13 @@ export class GroupDO extends DurableObject<Env> {
           };
           const existingParticipants = Array.from(room.values());
           room.set(botId, botParticipant);
+          this.sql.exec(
+            `INSERT OR REPLACE INTO voice_participants (channel_id, user_id, display_name, muted, deafened, speaking, camera, is_bot, joined_at)
+             VALUES (?, ?, 'Echo Müzik', 0, 0, 1, 0, 1, ?)`,
+            channelId,
+            botId,
+            now,
+          );
           this.broadcast(WsServerEvents.VOICE_USER_JOINED, {
             channelId,
             userId: botId,
@@ -1947,6 +2069,11 @@ export class GroupDO extends DurableObject<Env> {
         } else {
           const bp = room.get(botId)!;
           bp.speaking = true;
+          this.sql.exec(
+            `UPDATE voice_participants SET speaking = 1 WHERE channel_id = ? AND user_id = ?`,
+            channelId,
+            botId,
+          );
           this.broadcast(WsServerEvents.VOICE_STATE, {
             channelId,
             userId: botId,
@@ -1960,6 +2087,11 @@ export class GroupDO extends DurableObject<Env> {
         if (room.has(botId)) {
           const bp = room.get(botId)!;
           bp.speaking = false;
+          this.sql.exec(
+            `UPDATE voice_participants SET speaking = 0 WHERE channel_id = ? AND user_id = ?`,
+            channelId,
+            botId,
+          );
           this.broadcast(WsServerEvents.VOICE_STATE, {
             channelId,
             userId: botId,
@@ -1972,6 +2104,11 @@ export class GroupDO extends DurableObject<Env> {
       } else if (state.status === 'stopped') {
         if (room.has(botId)) {
           room.delete(botId);
+          this.sql.exec(
+            `DELETE FROM voice_participants WHERE channel_id = ? AND user_id = ?`,
+            channelId,
+            botId,
+          );
           this.broadcast(WsServerEvents.VOICE_USER_LEFT, {
             channelId,
             userId: botId,

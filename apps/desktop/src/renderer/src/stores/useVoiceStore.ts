@@ -5,6 +5,7 @@ import {
   UserAudioState,
   VoiceConnectionState,
 } from '@echo/shared';
+import { useAuthStore } from './useAuthStore';
 
 export type VoiceInputMode = 'vad' | 'ptt';
 
@@ -346,12 +347,34 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
   setPttActive: (isPttActive) => set({ isPttActive }),
 
   setChannelParticipants: (channelId, participants) =>
-    set((state) => ({
-      channelParticipants: {
-        ...state.channelParticipants,
-        [channelId]: participants,
-      },
-    })),
+    set((state) => {
+      const myUserId = useAuthStore.getState().identity?.userId;
+      const myDisplayName = useAuthStore.getState().identity?.displayName;
+      let nextParticipants = [...participants];
+
+      // If local user is currently connected to this voice channel, guarantee local presence is NEVER lost
+      if (
+        state.currentChannelId === channelId &&
+        myUserId &&
+        !nextParticipants.some((p) => p.userId === myUserId)
+      ) {
+        nextParticipants.push({
+          userId: myUserId,
+          displayName: myDisplayName || 'Ben',
+          muted: state.isMuted,
+          deafened: state.isDeafened,
+          speaking: state.isSpeaking,
+          camera: state.isCameraActive,
+        });
+      }
+
+      return {
+        channelParticipants: {
+          ...state.channelParticipants,
+          [channelId]: nextParticipants,
+        },
+      };
+    }),
 
   addChannelParticipant: (channelId, participant) =>
     set((state) => {
