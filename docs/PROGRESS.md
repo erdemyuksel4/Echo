@@ -858,4 +858,23 @@ Bu dosya her faz ve görev sonunda güncellenir.
     3. `scripts/bump-version.mjs`: Hatalı `.map` sözdizimi temizlendi, `.exe.delta` dosyası kopyalama ve yükleme akışına dahil edildi.
     4. HTTP Range istekleri (`Accept-Ranges: bytes`, HTTP 206 Partial Content) GitHub Release altyapısında doğrulandı. Değişen bloklar artık karşılaştırılarak tüm 86 MB yerine yalnızca değişen birkaç megabaytlık delta parçası indirilir.
 
+## Genişletilebilir Bot Altyapısı (Bot Framework) ve Sanal Müzik Botu (v0.1.48)
+
+- [x] **Genişletilebilir Bot Altyapısı (Bot Framework):**
+  - `packages/shared/src/schemas/bot.ts`: Gelecekte eklenecek tüm botlar (Müzik, Yapay Zeka, Moderasyon, Oyunlar vb.) için `BotManifest`, `BotType`, `BotCapability` ve `BotCommandDefinition` şemaları oluşturuldu.
+  - `packages/shared/src/schemas/voice.ts`: `ChannelParticipant` ve `VoiceParticipant` şemalarına `isBot?: boolean`, `botId?: string`, `botType?: string` rozet alanları eklendi.
+  - `apps/desktop/src/renderer/src/services/bots/`:
+    - `BaseBot.ts`: Tüm botların ortak temel yaşam döngüsü, komut eşleme ve mesaj işleme sınıfı.
+    - `VoiceBot.ts`: Ses kanallarına bağlanabilen, WebRTC audio track besleyen ses botu tabanı.
+    - `BotManager.ts`: İstemcideki tüm botları yöneten, gelen mesajlardaki `!` ve `/` komutlarını ilgili bota yönlendiren merkezi orkestratör.
+- [x] **Discord Tarzı Sanal Müzik Botu (Virtual WebRTC Peer):**
+  - `MusicBot.ts`: `VoiceBot` tabanlı Discord tarzı müzik botu. `!play`, `!pause`, `!resume`, `!skip`, `!stop`, `!queue`, `!help` komutlarını destekler.
+  - **Sıfır İstemci Yükü (Zero Client Overhead):** Dinleyicilerin bilgisayarında asla gizli YouTube/Chromium açılmaz. Yalnızca şarkıyı başlatan Host arka planda çalar ve WebRTC ses hattına aktarır. Dinleyiciler sesi doğrudan botun WebRTC akışından dinler.
+  - `apps/server/src/durable/GroupDO.ts`: Müzik başladığında odaya `bot-music` katılımcısı eklenir, `isBot: true` rozetiyle yayınlanır. Bot sinyalleşmesi (`VOICE_SIGNAL`) host ile dinleyiciler arasında yönlendirilir. Odada kimse kalmadığında bot otomatik ayrılır; host odadan çıkarsa sahiplik sıradaki kullanıcıya devredilir (Host Handoff).
+- [x] **Discord Tarzı `[BOT]` Arayüzü:**
+  - `ChannelList.tsx` ve `VoiceStageView.tsx`: Ses kanalındaki botun yanında Discord tarzı mor `[BOT]` rozeti ve 🎵 müzik avatarı gösterilir.
+  - `ChatMessageItem.tsx`: Botların gönderdiği mesajların yanında `[BOT]` rozeti yer alır.
+  - `MusicPlayerWidget.tsx`: Yerel Chromium oynatıcı motoru yalnızca Host olan istemcide çalışacak şekilde sınırlandırıldı; dinleyiciler sadece WebRTC üzerinden dinler.
+
+
 

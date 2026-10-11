@@ -6,6 +6,7 @@ import {
 } from '@echo/shared';
 import { useVoiceStore } from '../stores/useVoiceStore';
 import { useAuthStore } from '../stores/useAuthStore';
+import { useMusicStore } from '../stores/useMusicStore';
 import { wsService } from './websocket';
 import { iceServersService } from './iceServers';
 import {

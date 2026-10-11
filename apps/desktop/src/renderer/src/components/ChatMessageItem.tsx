@@ -511,6 +511,11 @@ export const ChatMessageItem: React.FC<Props> = ({
           >
             {message.authorName}
           </span>
+          {message.authorId.startsWith('bot-') && (
+            <span className="shrink-0 rounded bg-indigo-600 px-1.5 py-0.2 text-[8px] font-black uppercase text-white tracking-wider shadow-sm shadow-indigo-600/50 select-none">
+              BOT
+            </span>
+          )}
           <span className="text-[10px] text-slate-500 select-none">
             {formatTime(message.createdAt)}
           </span>

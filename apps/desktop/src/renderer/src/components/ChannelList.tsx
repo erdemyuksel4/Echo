@@ -578,14 +578,13 @@ export const ChannelList: React.FC = () => {
                           >
                             <div className="relative flex items-center justify-center">
                               <div
-                                className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold text-white transition-all duration-150 ${
+                                className={`flex h-5 w-5 items-center justify-center ${p.isBot ? 'rounded-md bg-indigo-600' : 'rounded-full bg-indigo-700'} text-[10px] font-bold text-white transition-all duration-150 ${
                                   speaking
                                     ? 'ring-2 ring-emerald-400 ring-offset-1 ring-offset-slate-900 shadow-sm shadow-emerald-400/80 scale-105'
                                     : ''
                                 }`}
-                                style={{ backgroundColor: '#4f46e5' }}
                               >
-                                {p.displayName.charAt(0).toUpperCase()}
+                                {p.isBot ? '🎵' : p.displayName.charAt(0).toUpperCase()}
                               </div>
                             </div>
                             <span
@@ -595,6 +594,11 @@ export const ChannelList: React.FC = () => {
                             >
                               {p.displayName} {isLocal && '(Sen)'}
                             </span>
+                            {p.isBot && (
+                              <span className="shrink-0 rounded bg-indigo-600 px-1 py-0.2 text-[8px] font-black uppercase tracking-wider text-white">
+                                BOT
+                              </span>
+                            )}
 
                             {activeShares.some(
                               (s) => s.channelId === channel.id && s.userId === p.userId,

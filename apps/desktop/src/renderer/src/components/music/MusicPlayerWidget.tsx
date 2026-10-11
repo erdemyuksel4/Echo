@@ -119,17 +119,6 @@ export const MusicPlayerWidget: React.FC = () => {
     });
     return cleanup;
   }, [currentChannelId, isHost]);
-        wsService.sendMusicAction({
-          action: 'skip',
-          channelId: currentChannelId,
-        });
-      }
-    });
-
-    return () => {
-      cleanup();
-    };
-  }, [currentChannelId]);
 
   // 5. Clean up when leaving channel
   useEffect(() => {

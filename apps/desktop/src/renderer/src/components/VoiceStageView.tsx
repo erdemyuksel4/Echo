@@ -118,16 +118,28 @@ const ParticipantTile: React.FC<ParticipantTileProps> = ({
       ) : (
         <div className="flex flex-col items-center justify-center gap-3">
           <div className="relative flex items-center justify-center">
-            <div
-              className={`flex h-20 w-20 items-center justify-center rounded-full text-2xl font-black text-white shadow-xl transition-all duration-200 ${
-                isSpeaking
-                  ? 'ring-4 ring-emerald-400 ring-offset-4 ring-offset-slate-950 scale-105 shadow-emerald-500/30'
-                  : 'ring-2 ring-slate-700'
-              }`}
-              style={{ backgroundColor: '#4f46e5' }}
-            >
-              {participant.displayName.charAt(0).toUpperCase()}
-            </div>
+            {participant.isBot ? (
+              <div
+                className={`flex h-20 w-20 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-600 via-purple-600 to-indigo-800 text-white shadow-xl transition-all duration-200 ${
+                  isSpeaking
+                    ? 'ring-4 ring-emerald-400 ring-offset-4 ring-offset-slate-950 scale-105 shadow-emerald-500/30'
+                    : 'ring-2 ring-indigo-500/40'
+                }`}
+              >
+                <Music className={`h-9 w-9 ${isSpeaking ? 'text-emerald-300 animate-pulse' : 'text-white'}`} />
+              </div>
+            ) : (
+              <div
+                className={`flex h-20 w-20 items-center justify-center rounded-full text-2xl font-black text-white shadow-xl transition-all duration-200 ${
+                  isSpeaking
+                    ? 'ring-4 ring-emerald-400 ring-offset-4 ring-offset-slate-950 scale-105 shadow-emerald-500/30'
+                    : 'ring-2 ring-slate-700'
+                }`}
+                style={{ backgroundColor: '#4f46e5' }}
+              >
+                {participant.displayName.charAt(0).toUpperCase()}
+              </div>
+            )}
             {isSpeaking && (
               <span className="absolute -inset-2 rounded-full bg-emerald-400/20 animate-ping" />
             )}
@@ -153,6 +165,11 @@ const ParticipantTile: React.FC<ParticipantTileProps> = ({
           >
             {participant.displayName}
           </span>
+          {participant.isBot && (
+            <span className="shrink-0 rounded bg-indigo-600 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-white shadow-sm shadow-indigo-600/50">
+              BOT
+            </span>
+          )}
           {isLocal && (
             <span className="shrink-0 rounded bg-indigo-500/20 px-1.5 py-0.2 text-[10px] font-medium text-indigo-300 border border-indigo-500/30">
               Sen
