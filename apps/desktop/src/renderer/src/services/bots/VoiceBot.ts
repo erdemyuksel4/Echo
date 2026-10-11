@@ -137,6 +137,18 @@ export abstract class VoiceBot extends BaseBot {
     this.activeChannelId = channelId;
   }
 
+  public handleUserLeft(userId: string): void {
+    const pc = this.botPeerConnections.get(userId);
+    if (pc) {
+      try {
+        pc.close();
+      } catch {
+        // Ignore
+      }
+      this.botPeerConnections.delete(userId);
+    }
+  }
+
   public leaveVoice(): void {
     this.closeAllBotPeers();
     this.activeChannelId = null;

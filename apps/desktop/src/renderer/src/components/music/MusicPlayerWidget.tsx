@@ -4,6 +4,7 @@ import { useMusicStore } from '../../stores/useMusicStore';
 import { useVoiceStore } from '../../stores/useVoiceStore';
 import { useAuthStore } from '../../stores/useAuthStore';
 import { wsService } from '../../services/websocket';
+import { webrtcService } from '../../services/webrtc';
 
 export const MusicPlayerWidget: React.FC = () => {
   const lastLoadedTrackIdRef = useRef<string | null>(null);
@@ -102,10 +103,16 @@ export const MusicPlayerWidget: React.FC = () => {
     }
   }, [status, trackId, currentChannelId, isHost]);
 
-  // 3. Sync Volume & Mute (HOST ONLY)
+  // 3. Sync Volume & Mute (Host controls local Chromium player, listeners control incoming bot WebRTC audio)
   useEffect(() => {
-    if (!window.echoApi?.music || !isHost) return;
-    void window.echoApi.music.setVolume(volume, isMuted);
+    if (isHost) {
+      if (window.echoApi?.music) {
+        void window.echoApi.music.setVolume(volume, isMuted);
+      }
+    } else {
+      const effectiveVol = isMuted ? 0 : volume;
+      webrtcService.setPeerVolume('bot-music', effectiveVol);
+    }
   }, [volume, isMuted, isHost]);
 
   // 4. Listen for Track End event from main process -> trigger skip (HOST ONLY)
@@ -135,17 +142,17 @@ export const MusicPlayerWidget: React.FC = () => {
   const handleTogglePlayPause = () => {
     if (!currentChannelId) return;
     if (status === 'playing') {
-      void window.echoApi?.music?.pause();
+      if (isHost && window.echoApi?.music) void window.echoApi.music.pause();
       wsService.sendMusicAction({ action: 'pause', channelId: currentChannelId });
     } else {
-      void window.echoApi?.music?.resume();
+      if (isHost && window.echoApi?.music) void window.echoApi.music.resume();
       wsService.sendMusicAction({ action: 'resume', channelId: currentChannelId });
     }
   };
 
   const handleStop = () => {
     if (!currentChannelId) return;
-    void window.echoApi?.music?.stop();
+    if (isHost && window.echoApi?.music) void window.echoApi.music.stop();
     wsService.sendMusicAction({ action: 'stop', channelId: currentChannelId });
   };
 

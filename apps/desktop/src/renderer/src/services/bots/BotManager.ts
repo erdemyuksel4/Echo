@@ -37,6 +37,14 @@ class BotManager {
     }
   }
 
+  public handleUserLeft(userId: string): void {
+    for (const bot of this.bots.values()) {
+      if (bot instanceof VoiceBot) {
+        bot.handleUserLeft(userId);
+      }
+    }
+  }
+
   public syncHostStatus(isHost: boolean, channelId: string | null): void {
     for (const bot of this.bots.values()) {
       if (bot instanceof VoiceBot) {

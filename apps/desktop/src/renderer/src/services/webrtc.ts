@@ -400,6 +400,11 @@ class WebRTCVoiceService {
       // WE just joined: We are the polite peer. Initiate WebRTC offers to ALL existing participants!
       for (const peer of existingParticipants) {
         if (peer.userId !== myUserId) {
+          if (peer.userId.startsWith('bot-')) {
+            const currentPlayback = useMusicStore.getState().getChannelPlayback(channelId);
+            const isHost = currentPlayback?.hostUserId === myUserId;
+            if (isHost) continue;
+          }
           void this.initiateOffer(peer.userId, peer.displayName);
         }
       }
@@ -418,6 +423,45 @@ class WebRTCVoiceService {
       }
     }
     this.updateConnectionStatusGate();
+  }
+
+  syncBotPeerState(channelId: string, isHost: boolean, botId: string = 'bot-music'): void {
+    if (channelId !== this.currentChannelId) return;
+
+    if (isHost) {
+      // If we are host, close any listener peer connection to the bot
+      const pc = this.peers.get(botId);
+      if (pc) {
+        try {
+          pc.ontrack = null;
+          pc.onicecandidate = null;
+          pc.onconnectionstatechange = null;
+          pc.close();
+        } catch {
+          // Ignore
+        }
+        this.peers.delete(botId);
+      }
+      const audio = this.peerAudioElements.get(botId);
+      if (audio) {
+        try {
+          audio.pause();
+          audio.srcObject = null;
+          audio.remove();
+        } catch {
+          // Ignore
+        }
+        this.peerAudioElements.delete(botId);
+      }
+    } else {
+      // If we are listener, ensure we have an active WebRTC peer connection to the bot
+      const voiceStore = useVoiceStore.getState();
+      const participants = voiceStore.channelParticipants[channelId] ?? [];
+      const botParticipant = participants.find((p) => p.userId === botId);
+      if (botParticipant && !this.peers.has(botId)) {
+        void this.initiateOffer(botId, botParticipant.displayName);
+      }
+    }
   }
 
   handleUserLeft(channelId: string, leftUserId: string): void {

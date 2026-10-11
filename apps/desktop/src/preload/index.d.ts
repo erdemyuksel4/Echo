@@ -78,6 +78,9 @@ export interface EchoApi {
         logoutGoogle: () => Promise<boolean>;
         onAuthChange: (cb: (auth: { isLoggedIn: boolean }) => void) => () => void;
         onAdState: (cb: (data: { isAd: boolean }) => void) => () => void;
+        handleBotSignal: (fromUserId: string, signal: unknown, iceServers?: unknown[]) => Promise<boolean>;
+        removeBotPeer: (userId: string) => Promise<boolean>;
+        onBotSignal: (cb: (data: { toUserId: string; signal: unknown }) => void) => () => void;
     };
 }
 

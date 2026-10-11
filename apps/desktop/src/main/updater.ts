@@ -20,7 +20,9 @@ function writeLog(level: string, message: string): void {
   try {
     const entry = `[${new Date().toISOString()}] [${level}] ${message}\n`;
     appendFileSync(getUpdaterLogPath(), entry, 'utf8');
-  } catch {}
+  } catch {
+    // Ignore logging failure
+  }
 }
 
 const updaterLogger = {

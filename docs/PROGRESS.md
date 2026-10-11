@@ -884,3 +884,14 @@ Bu dosya her faz ve görev sonunda güncellenir.
     2. `apps/desktop/src/main/updater.ts`: `autoUpdater.quitAndInstall(true, true)` (`isSilent: true, isForceRunAfter: true`) olarak güncellendi.
     3. Güncelleme indirildikten sonra hiçbir kurulum penceresi veya sihirbazı gösterilmez; arka planda sessizce uygulanır (`/S`) ve uygulama doğrudan yeni sürüme yeniden başlar.
 
+## Dağıtık Bot Çalıştırıcı (Distributed Bot Runner) & Spotify Entegrasyonu (v0.1.51)
+
+- [x] **Dağıtık WebRTC Bot Çalıştırıcı (Distributed Bot Runner):**
+  - *Mimari:* Şarkıyı açan kullanıcı (Host) arka planda Chromium motorunda YouTube sesini `HTMLMediaElement.captureStream()` ile yakalar.
+  - `apps/desktop/src/main/musicPlayer.ts`: `playerWindow` içinde doğrudan yerel `RTCPeerConnection` açılarak yakalanan saf Opus ses kanalı dinleyicilere basılır. Şarkı değişimlerinde `sender.replaceTrack()` ile bağlantı kopmadan yeni ses akışı aktarılır.
+  - Dinleyiciler (`webrtcService`): Hiçbir gizli tarayıcı veya YouTube penceresi açmaz; odaya katılan `bot-music` [BOT] katılımcısının WebRTC sesini doğrudan dinler ve ses seviyesini istediği gibi ayarlar.
+- [x] **Kesintisiz Sahiplik Devri (Host Handoff):**
+  - `apps/server/src/durable/GroupDO.ts`: Host kullanıcı ses kanalından ayrıldığında, odada kalan sıradaki kullanıcı otomatik olarak yeni Host yapılır. Yeni host'un istemcisi anında yerel motoru devralarak müziği kesintisiz sürdürür. Odadaki tüm kullanıcılar çıktığında bot kanaldan ayrılır.
+- [x] **Spotify Bağlantı Çözümleme (Zero API Keys):**
+  - `apps/server/src/index.ts`: `/api/music/search` uç noktasına gelen `open.spotify.com/track/...` linkleri Spotify'ın genel oEmbed ve OpenGraph başlıkları üzerinden anında `Sanatçı - Şarkı Adı` formatına dönüştürülüp YouTube motoruna yönlendirilir. Kullanıcılar Spotify linklerini doğrudan sohbete veya arama çubuğuna yapıştırarak müzik botunda çalabilir.
+

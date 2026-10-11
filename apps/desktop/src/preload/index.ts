@@ -72,6 +72,9 @@ export interface EchoApi {
     logoutGoogle: () => Promise<boolean>;
     onAuthChange: (cb: (auth: { isLoggedIn: boolean }) => void) => () => void;
     onAdState: (cb: (data: { isAd: boolean }) => void) => () => void;
+    handleBotSignal: (fromUserId: string, signal: unknown, iceServers?: unknown[]) => Promise<boolean>;
+    removeBotPeer: (userId: string) => Promise<boolean>;
+    onBotSignal: (cb: (data: { toUserId: string; signal: unknown }) => void) => () => void;
   };
 }
 
@@ -245,6 +248,30 @@ const echoApi: EchoApi = {
       ipcRenderer.on('music:onAdState', handler);
       return () => {
         ipcRenderer.removeListener('music:onAdState', handler);
+      };
+    },
+    handleBotSignal: (
+      fromUserId: string,
+      signal: unknown,
+      iceServers?: unknown[],
+    ): Promise<boolean> => {
+      return ipcRenderer.invoke('music:handleBotSignal', { fromUserId, signal, iceServers });
+    },
+    removeBotPeer: (userId: string): Promise<boolean> => {
+      return ipcRenderer.invoke('music:removeBotPeer', { userId });
+    },
+    onBotSignal: (
+      cb: (data: { toUserId: string; signal: unknown }) => void,
+    ): (() => void) => {
+      const handler = (
+        _event: Electron.IpcRendererEvent,
+        data: { toUserId: string; signal: unknown },
+      ): void => {
+        cb(data);
+      };
+      ipcRenderer.on('music:onBotSignal', handler);
+      return () => {
+        ipcRenderer.removeListener('music:onBotSignal', handler);
       };
     },
   },

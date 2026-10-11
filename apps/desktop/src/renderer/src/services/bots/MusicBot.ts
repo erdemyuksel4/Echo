@@ -1,11 +1,11 @@
 import { VoiceBot } from './VoiceBot';
-import type { BotManifest } from '@echo/shared';
+import type { BotManifest, VoiceSignalData, MusicTrack } from '@echo/shared';
 import { wsService } from '../websocket';
+import { iceServersService } from '../iceServers';
 import { SERVER_HTTP_URL } from '../../config';
 import { useVoiceStore } from '../../stores/useVoiceStore';
 import { useMusicStore } from '../../stores/useMusicStore';
 import { useAuthStore } from '../../stores/useAuthStore';
-import type { MusicTrack } from '@echo/shared';
 
 export class MusicBot extends VoiceBot {
   public override readonly manifest: BotManifest = {
@@ -65,6 +65,39 @@ export class MusicBot extends VoiceBot {
 
   private audioCtx: AudioContext | null = null;
   private audioDestination: MediaStreamAudioDestinationNode | null = null;
+  private unregisterBotSignalListener: (() => void) | null = null;
+
+  constructor() {
+    super();
+    if (typeof window !== 'undefined' && window.echoApi?.music?.onBotSignal) {
+      this.unregisterBotSignalListener = window.echoApi.music.onBotSignal(({ toUserId, signal }) => {
+        if (this.activeChannelId && this.isHostActive) {
+          wsService.sendVoiceSignal(
+            this.activeChannelId,
+            toUserId,
+            signal as VoiceSignalData,
+            this.id,
+          );
+        }
+      });
+    }
+  }
+
+  public override handleIncomingSignal(fromUserId: string, signal: VoiceSignalData): void {
+    if (!this.isHostActive || !this.activeChannelId) return;
+
+    if (window.echoApi?.music?.handleBotSignal) {
+      const iceServers = iceServersService.getIceServers();
+      void window.echoApi.music.handleBotSignal(fromUserId, signal, iceServers);
+    }
+  }
+
+  public override handleUserLeft(userId: string): void {
+    super.handleUserLeft(userId);
+    if (window.echoApi?.music?.removeBotPeer) {
+      void window.echoApi.music.removeBotPeer(userId);
+    }
+  }
 
   public initAudioPipeline(): MediaStreamTrack | null {
     try {
@@ -212,6 +245,10 @@ export class MusicBot extends VoiceBot {
 
   public override destroy(): void {
     super.destroy();
+    if (this.unregisterBotSignalListener) {
+      this.unregisterBotSignalListener();
+      this.unregisterBotSignalListener = null;
+    }
     if (this.audioCtx && this.audioCtx.state !== 'closed') {
       void this.audioCtx.close().catch(() => {});
     }

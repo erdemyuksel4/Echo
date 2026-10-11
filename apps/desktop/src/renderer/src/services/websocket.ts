@@ -434,6 +434,7 @@ class EchoWebSocketService {
         const data = envelope.d as { channelId: string; userId: string };
         useVoiceStore.getState().removeChannelParticipant(data.channelId, data.userId);
         webrtcService.handleUserLeft(data.channelId, data.userId);
+        botManager.handleUserLeft(data.userId);
         break;
       }
 
@@ -568,6 +569,7 @@ class EchoWebSocketService {
         const myUserId = useAuthStore.getState().identity?.userId;
         const isHost = data.hostUserId === myUserId;
         botManager.syncHostStatus(isHost, data.channelId);
+        webrtcService.syncBotPeerState(data.channelId, isHost, 'bot-music');
         break;
       }
 

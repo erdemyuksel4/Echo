@@ -144,6 +144,29 @@ class MusicPlayerManager {
     ipcMain.handle('music:logoutGoogle', async () => {
       return await this.logoutYouTube();
     });
+
+    // WebRTC Bot Streaming signals for Echo Müzik [BOT]
+    ipcMain.handle(
+      'music:handleBotSignal',
+      async (
+        _,
+        {
+          fromUserId,
+          signal,
+          iceServers,
+        }: {
+          fromUserId: string;
+          signal: unknown;
+          iceServers?: unknown[];
+        },
+      ) => {
+        return this.handleBotSignal(fromUserId, signal, iceServers);
+      },
+    );
+
+    ipcMain.handle('music:removeBotPeer', async (_, { userId }: { userId: string }) => {
+      return this.removeBotPeer(userId);
+    });
   }
 
   private async checkYouTubeAuth(): Promise<{ isLoggedIn: boolean }> {
@@ -242,6 +265,16 @@ class MusicPlayerManager {
       } else if (message === '__ECHO_ENDED__') {
         if (this.mainWindow && !this.mainWindow.isDestroyed()) {
           this.mainWindow.webContents.send('music:onEnded');
+        }
+      } else if (message.startsWith('__ECHO_BOT_SIGNAL__:')) {
+        try {
+          const raw = message.slice('__ECHO_BOT_SIGNAL__:'.length);
+          const data = JSON.parse(raw);
+          if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+            this.mainWindow.webContents.send('music:onBotSignal', data);
+          }
+        } catch (e) {
+          console.warn('[Echo MusicPlayer] Failed to parse bot signal:', e);
         }
       }
     });
@@ -356,10 +389,139 @@ class MusicPlayerManager {
                 };
               }
             }
+
+            // Synchronize audio track for all connected bot WebRTC peers
+            if (window.__echoBotPeers && window.__echoBotPeers.size > 0 && v && typeof v.captureStream === 'function') {
+              try {
+                const s = v.captureStream();
+                const t = s.getAudioTracks()[0];
+                if (t && t.readyState === 'live') {
+                  for (const pc of window.__echoBotPeers.values()) {
+                    const senders = pc.getSenders();
+                    const audioSender = senders.find((snd) => snd.track?.kind === 'audio' || !snd.track);
+                    if (audioSender && audioSender.track !== t) {
+                      void audioSender.replaceTrack(t);
+                    } else if (!audioSender) {
+                      pc.addTrack(t, s);
+                    }
+                  }
+                }
+              } catch(e) {}
+            }
           } catch(e) {}
         }, 500);
       })();
     `);
+  }
+
+  public handleBotSignal(
+    fromUserId: string,
+    signal: unknown,
+    iceServers?: unknown[],
+  ): boolean {
+    if (!this.playerWindow || this.playerWindow.isDestroyed()) return false;
+
+    const payloadStr = JSON.stringify({ fromUserId, signal, iceServers });
+    this.executeJs(`
+      (async function() {
+        try {
+          const { fromUserId, signal, iceServers } = ${payloadStr};
+          window.__echoBotPeers = window.__echoBotPeers || new Map();
+
+          function getAudioMedia() {
+            try {
+              const v = document.querySelector('video');
+              if (v && typeof v.captureStream === 'function') {
+                const s = v.captureStream();
+                const t = s.getAudioTracks()[0];
+                if (t && t.readyState === 'live') return { track: t, stream: s };
+              }
+            } catch(e) {}
+            return null;
+          }
+
+          if (signal.type === 'offer') {
+            let pc = window.__echoBotPeers.get(fromUserId);
+            if (pc) {
+              try { pc.close(); } catch(e) {}
+            }
+
+            const servers = Array.isArray(iceServers) && iceServers.length > 0
+              ? iceServers
+              : [{ urls: 'stun:stun.cloudflare.com:3478' }, { urls: 'stun:stun.l.google.com:19302' }];
+            pc = new RTCPeerConnection({ iceServers: servers });
+            window.__echoBotPeers.set(fromUserId, pc);
+
+            const media = getAudioMedia();
+            if (media && media.track) {
+              pc.addTrack(media.track, media.stream);
+            } else {
+              try {
+                pc.addTransceiver('audio', { direction: 'sendonly' });
+              } catch(e) {}
+            }
+
+            pc.onicecandidate = (evt) => {
+              if (evt.candidate && evt.candidate.candidate) {
+                console.log('__ECHO_BOT_SIGNAL__:' + JSON.stringify({
+                  toUserId: fromUserId,
+                  signal: {
+                    type: 'candidate',
+                    candidate: evt.candidate.candidate,
+                    sdpMid: evt.candidate.sdpMid,
+                    sdpMLineIndex: evt.candidate.sdpMLineIndex,
+                  }
+                }));
+              }
+            };
+
+            await pc.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp: signal.sdp }));
+            const answer = await pc.createAnswer();
+            await pc.setLocalDescription(answer);
+
+            console.log('__ECHO_BOT_SIGNAL__:' + JSON.stringify({
+              toUserId: fromUserId,
+              signal: {
+                type: 'answer',
+                sdp: answer.sdp,
+              }
+            }));
+
+          } else if (signal.type === 'answer') {
+            const pc = window.__echoBotPeers.get(fromUserId);
+            if (pc) {
+              await pc.setRemoteDescription(new RTCSessionDescription({ type: 'answer', sdp: signal.sdp }));
+            }
+          } else if (signal.type === 'candidate' && signal.candidate) {
+            const pc = window.__echoBotPeers.get(fromUserId);
+            if (pc && pc.remoteDescription && pc.remoteDescription.type) {
+              await pc.addIceCandidate(new RTCIceCandidate({
+                candidate: signal.candidate,
+                sdpMid: signal.sdpMid,
+                sdpMLineIndex: signal.sdpMLineIndex,
+              }));
+            }
+          }
+        } catch(err) {
+          console.warn('[Echo Bot WebRTC] Signal error:', err);
+        }
+      })();
+    `);
+    return true;
+  }
+
+  public removeBotPeer(userId: string): boolean {
+    if (!this.playerWindow || this.playerWindow.isDestroyed()) return false;
+    this.executeJs(`
+      (function() {
+        if (window.__echoBotPeers && window.__echoBotPeers.has(${JSON.stringify(userId)})) {
+          const pc = window.__echoBotPeers.get(${JSON.stringify(userId)});
+          try { pc.close(); } catch(e) {}
+          window.__echoBotPeers.delete(${JSON.stringify(userId)});
+        }
+      })();
+    `);
+    return true;
   }
 
   private playTrack(videoId: string, startSeconds: number): void {
@@ -401,6 +563,12 @@ class MusicPlayerManager {
             `
           (function() {
             if (window.__echoPlayerLoop) clearInterval(window.__echoPlayerLoop);
+            if (window.__echoBotPeers) {
+              for (const pc of window.__echoBotPeers.values()) {
+                try { pc.close(); } catch(e) {}
+              }
+              window.__echoBotPeers.clear();
+            }
             try {
               const mp = document.getElementById('movie_player');
               if (mp && typeof mp.stopVideo === 'function') mp.stopVideo();

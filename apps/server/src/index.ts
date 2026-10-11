@@ -543,65 +543,105 @@ app.get('/api/giphy/search', async (c) => {
   return c.json({ results: [] });
 });
 
-// YouTube Music / Video Search Proxy (Zero API keys needed, fast & resilient)
+// YouTube & Spotify Music Search Proxy (Zero API keys needed, fast & resilient)
 app.get('/api/music/search', async (c) => {
   const q = c.req.query('q')?.trim() || '';
   if (!q) {
     return c.json({ results: [] });
   }
 
-  // 1. Direct YouTube URL check
-  const ytUrlMatch = q.match(
-    /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:watch\?v=|embed\/|v\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/i,
-  );
-  if (ytUrlMatch && ytUrlMatch[1]) {
-    const videoId = ytUrlMatch[1];
+  let searchQuery = q;
+
+  // 1. Direct Spotify URL resolution via public oEmbed and OpenGraph
+  const spotifyMatch = q.match(/https?:\/\/(?:open\.)?spotify\.com\/(?:[a-zA-Z-]+\/)?(track|album|playlist|artist)\/([a-zA-Z0-9]+)/i);
+  if (spotifyMatch) {
     try {
-      const oembedRes = await fetch(
-        `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`,
-      );
+      const oembedRes = await fetch(`https://open.spotify.com/oembed?url=${encodeURIComponent(q)}`);
       if (oembedRes.ok) {
-        const d = (await oembedRes.json()) as {
-          title?: string;
-          author_name?: string;
-          thumbnail_url?: string;
-        };
-        return c.json({
-          results: [
-            {
-              id: videoId,
-              title: d.title || 'YouTube Video',
-              author: d.author_name || 'YouTube',
-              duration: '0:00',
-              durationSeconds: 0,
-              thumbnailUrl: d.thumbnail_url || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
-              url: `https://www.youtube.com/watch?v=${videoId}`,
-            },
-          ],
-        });
+        const spotData = (await oembedRes.json()) as { title?: string };
+        if (spotData.title) {
+          searchQuery = spotData.title;
+          try {
+            const pageRes = await fetch(q, {
+              headers: { 'User-Agent': 'facebookexternalhit/1.1' },
+            });
+            if (pageRes.ok) {
+              const html = await pageRes.text();
+              const titleMatch = html.match(/<title>([^<]+)<\/title>/);
+              if (titleMatch && titleMatch[1]) {
+                const rawTitle = titleMatch[1].replace(/\s*\|\s*Spotify/i, '').trim();
+                const songLyricsMatch = rawTitle.match(/^(.+?)\s*-\s*song and lyrics by\s*(.+?)$/i);
+                if (songLyricsMatch && songLyricsMatch[1] && songLyricsMatch[2]) {
+                  searchQuery = `${songLyricsMatch[2]} - ${songLyricsMatch[1]}`;
+                } else {
+                  searchQuery = rawTitle;
+                }
+              }
+            }
+          } catch {
+            // Keep oEmbed title
+          }
+        }
       }
     } catch {
-      // Fallback
+      // Fallback to query
     }
-
-    return c.json({
-      results: [
-        {
-          id: videoId,
-          title: 'YouTube Video',
-          author: 'YouTube',
-          duration: '0:00',
-          durationSeconds: 0,
-          thumbnailUrl: `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
-          url: `https://www.youtube.com/watch?v=${videoId}`,
-        },
-      ],
-    });
   }
 
-  // 2. Keyword Search on YouTube
+  // 2. Direct YouTube URL check (only if not a Spotify URL)
+  if (!spotifyMatch) {
+    const ytUrlMatch = q.match(
+      /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:watch\?v=|embed\/|v\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/i,
+    );
+    if (ytUrlMatch && ytUrlMatch[1]) {
+      const videoId = ytUrlMatch[1];
+      try {
+        const oembedRes = await fetch(
+          `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`,
+        );
+        if (oembedRes.ok) {
+          const d = (await oembedRes.json()) as {
+            title?: string;
+            author_name?: string;
+            thumbnail_url?: string;
+          };
+          return c.json({
+            results: [
+              {
+                id: videoId,
+                title: d.title || 'YouTube Video',
+                author: d.author_name || 'YouTube',
+                duration: '0:00',
+                durationSeconds: 0,
+                thumbnailUrl: d.thumbnail_url || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
+                url: `https://www.youtube.com/watch?v=${videoId}`,
+              },
+            ],
+          });
+        }
+      } catch {
+        // Fallback
+      }
+
+      return c.json({
+        results: [
+          {
+            id: videoId,
+            title: 'YouTube Video',
+            author: 'YouTube',
+            duration: '0:00',
+            durationSeconds: 0,
+            thumbnailUrl: `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
+            url: `https://www.youtube.com/watch?v=${videoId}`,
+          },
+        ],
+      });
+    }
+  }
+
+  // 3. Keyword Search on YouTube (for search queries or resolved Spotify songs)
   try {
-    const searchUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(q)}`;
+    const searchUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(searchQuery)}`;
     const res = await fetch(searchUrl, {
       headers: {
         'User-Agent':
