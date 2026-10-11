@@ -20,7 +20,6 @@ android {
         // You can update the following values to match your application needs.
         minSdk = 24
         targetSdk = flutter.targetSdkVersion
-        multiDexEnabled = true
         // Uses the version code from pubspec.yaml. When using split APKs, 1000 * ABI_VERSION
         // is added automatically by Flutter. (https://developer.android.com/studio/build/configure-apk-splits#configure-APK-versions)
         // You can force using the value of versionCode by specifying the `-P force-version-code-ignoring-abi=true`

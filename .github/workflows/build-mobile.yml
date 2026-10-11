@@ -38,7 +38,12 @@ jobs:
 
       - name: Build Android Release APK
         working-directory: apps/mobile
-        run: flutter build apk --release
+        run: |
+          flutter build apk --release --verbose > build_verbose.log 2>&1 || {
+            echo "=================== BUILD FAILED: LOG OUTPUT ==================="
+            tail -n 150 build_verbose.log
+            exit 1
+          }
 
       - name: Copy and rename APK
         run: |
