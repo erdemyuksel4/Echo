@@ -1,0 +1,61 @@
+name: Build Mobile APK
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-apk:
+    name: Build & Release Android APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Install Flutter dependencies
+        working-directory: apps/mobile
+        run: flutter pub get
+
+      - name: Build Android Release APK
+        working-directory: apps/mobile
+        run: flutter build apk --release
+
+      - name: Rename APK
+        run: |
+          cp apps/mobile/build/app/outputs/flutter-apk/app-release.apk Echo-Mobile.apk
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Echo-Mobile-APK
+          path: Echo-Mobile.apk
+
+      - name: Attach APK to Latest Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG=$(gh release list --limit 1 --json tagName --jq '.[0].tagName')
+          if [ -n "$TAG" ]; then
+            echo "Attaching to release $TAG"
+            gh release upload "$TAG" Echo-Mobile.apk --clobber
+          fi
