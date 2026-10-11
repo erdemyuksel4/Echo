@@ -405,6 +405,16 @@ class WebRTCVoiceService {
     } else {
       // Someone else joined: Register their display name and wait for their offer
       this.peerDisplayNames.set(joinedUserId, joinedDisplayName);
+
+      // If a bot joined and we are a listener (not host), initiate an offer to receive bot audio
+      if (joinedUserId.startsWith('bot-')) {
+        const myUserId = useAuthStore.getState().identity?.userId;
+        const currentPlayback = useMusicStore.getState().getChannelPlayback(channelId);
+        const isHost = currentPlayback?.hostUserId === myUserId;
+        if (!isHost) {
+          void this.initiateOffer(joinedUserId, joinedDisplayName);
+        }
+      }
     }
     this.updateConnectionStatusGate();
   }

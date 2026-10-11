@@ -53,6 +53,8 @@ export const WsClientEvents = {
   SHARE_RC_EVENT: 'share.rc_event',
   SHARE_RC_STOP: 'share.rc_stop',
   MUSIC_ACTION: 'music.action',
+  BOT_COMMAND_INVOKE: 'bot.command_invoke',
+  BOT_STATE_UPDATE: 'bot.state_update',
 } as const;
 
 // Server to Client Events
@@ -96,6 +98,8 @@ export const WsServerEvents = {
   SHARE_RC_EVENT: 'share.rc_event',
   SHARE_RC_STOP: 'share.rc_stop',
   MUSIC_STATE: 'music.state',
+  BOT_COMMAND_INVOKE: 'bot.command_invoke',
+  BOT_STATE_UPDATE: 'bot.state_update',
 } as const;
 
 // Event Payload Schemas

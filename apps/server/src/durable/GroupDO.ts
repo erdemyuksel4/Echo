@@ -1451,6 +1451,29 @@ export class GroupDO extends DurableObject<Env> {
     const room = this.voiceRooms.get(channelId);
     if (room && room.has(userId)) {
       room.delete(userId);
+
+      const humansLeft = Array.from(room.values()).filter((p) => !p.isBot);
+      const botId = 'bot-music';
+      if (humansLeft.length === 0) {
+        if (room.has(botId)) {
+          room.delete(botId);
+          this.broadcast(WsServerEvents.VOICE_USER_LEFT, { channelId, userId: botId });
+        }
+        const mState = this.musicStates.get(channelId);
+        if (mState && mState.status !== 'stopped') {
+          mState.status = 'stopped';
+          mState.currentTrack = null;
+          this.broadcast(WsServerEvents.MUSIC_STATE, mState);
+        }
+      } else if (humansLeft.length > 0 && humansLeft[0]) {
+        const mState = this.musicStates.get(channelId);
+        if (mState && mState.hostUserId === userId) {
+          mState.hostUserId = humansLeft[0].userId;
+          mState.hostDisplayName = humansLeft[0].displayName;
+          this.broadcast(WsServerEvents.MUSIC_STATE, mState);
+        }
+      }
+
       if (room.size === 0) {
         this.voiceRooms.delete(channelId);
       }
@@ -1483,12 +1506,27 @@ export class GroupDO extends DurableObject<Env> {
     const parse = ClientVoiceSignalPayloadSchema.safeParse(envelope.d);
     if (!parse.success) return;
 
-    const { channelId, targetUserId, signal } = parse.data;
+    const { channelId, targetUserId, signal, asBotId } = parse.data;
+
+    // Relay targeting bot to the bot's current host
+    if (targetUserId.startsWith('bot-')) {
+      const mState = this.musicStates.get(channelId);
+      if (mState?.hostUserId) {
+        this.sendToUser(mState.hostUserId, WsServerEvents.VOICE_SIGNAL, {
+          channelId,
+          fromUserId: session.userId,
+          signal,
+        });
+      }
+      return;
+    }
+
+    const fromUserId = asBotId && asBotId.startsWith('bot-') ? asBotId : session.userId;
 
     // Direct relay to target user
     this.sendToUser(targetUserId, WsServerEvents.VOICE_SIGNAL, {
       channelId,
-      fromUserId: session.userId,
+      fromUserId,
       signal,
     });
   }
@@ -1845,6 +1883,75 @@ export class GroupDO extends DurableObject<Env> {
       case 'loop_mode': {
         state.loopMode = action.mode;
         break;
+      }
+    }
+
+    // Sync Bot participant in the voice room
+    const botId = 'bot-music';
+    let room = this.voiceRooms.get(channelId);
+    if (!room && state.status === 'playing') {
+      room = new Map();
+      this.voiceRooms.set(channelId, room);
+    }
+
+    if (room) {
+      if (state.status === 'playing') {
+        if (!room.has(botId)) {
+          const botParticipant: VoiceParticipant = {
+            userId: botId,
+            displayName: 'Echo Müzik',
+            muted: false,
+            deafened: false,
+            speaking: true,
+            camera: false,
+            isBot: true,
+            botId: 'bot-music',
+            botType: 'music',
+          };
+          const existingParticipants = Array.from(room.values());
+          room.set(botId, botParticipant);
+          this.broadcast(WsServerEvents.VOICE_USER_JOINED, {
+            channelId,
+            userId: botId,
+            displayName: 'Echo Müzik',
+            currentParticipants: existingParticipants,
+          });
+        } else {
+          const bp = room.get(botId)!;
+          bp.speaking = true;
+          this.broadcast(WsServerEvents.VOICE_STATE, {
+            channelId,
+            userId: botId,
+            muted: false,
+            deafened: false,
+            speaking: true,
+            camera: false,
+          });
+        }
+      } else if (state.status === 'paused') {
+        if (room.has(botId)) {
+          const bp = room.get(botId)!;
+          bp.speaking = false;
+          this.broadcast(WsServerEvents.VOICE_STATE, {
+            channelId,
+            userId: botId,
+            muted: false,
+            deafened: false,
+            speaking: false,
+            camera: false,
+          });
+        }
+      } else if (state.status === 'stopped') {
+        if (room.has(botId)) {
+          room.delete(botId);
+          this.broadcast(WsServerEvents.VOICE_USER_LEFT, {
+            channelId,
+            userId: botId,
+          });
+          if (room.size === 0) {
+            this.voiceRooms.delete(channelId);
+          }
+        }
       }
     }
 

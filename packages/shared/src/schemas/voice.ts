@@ -32,6 +32,7 @@ export const ClientVoiceSignalPayloadSchema = z.object({
   channelId: z.string(),
   targetUserId: z.string(),
   signal: VoiceSignalDataSchema,
+  asBotId: z.string().optional(),
 });
 
 export type ClientVoiceSignalPayload = z.infer<typeof ClientVoiceSignalPayloadSchema>;
@@ -78,6 +79,9 @@ export const VoiceParticipantSchema = z.object({
   deafened: z.boolean().default(false),
   speaking: z.boolean().default(false),
   camera: z.boolean().default(false),
+  isBot: z.boolean().optional(),
+  botId: z.string().optional(),
+  botType: z.string().optional(),
 });
 
 export type VoiceParticipant = z.infer<typeof VoiceParticipantSchema>;

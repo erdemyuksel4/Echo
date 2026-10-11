@@ -1,6 +1,6 @@
 {
   "name": "@echo/desktop",
-  "version": "0.1.46",
+  "version": "0.1.47",
   "private": true,
   "main": "./out/main/index.js",
   "scripts": {
@@ -83,7 +83,8 @@
       "createStartMenuShortcut": true,
       "shortcutName": "Echo",
       "uninstallDisplayName": "Echo",
-      "runAfterFinish": true
+      "runAfterFinish": true,
+      "differentialPackage": true
     },
     "nsisWeb": {
       "differentialPackage": true

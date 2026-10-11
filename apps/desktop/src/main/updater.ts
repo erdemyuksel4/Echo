@@ -9,13 +9,16 @@ let isInitialized = false;
 autoUpdater.autoDownload = true;
 autoUpdater.autoInstallOnAppQuit = true;
 autoUpdater.disableWebInstaller = true;
+autoUpdater.disableDifferentialDownload = false;
 autoUpdater.logger = console;
 
-// Use generic feed directly from GitHub Releases latest download to avoid GitHub API 60 req/hr rate limits.
-// electron-updater will fetch latest.yml and use HTTP Range requests on .blockmap for delta/differential updates.
+// Use GitHub provider so electron-updater can resolve both current and old version blockmaps by tag:
+// e.g. /releases/download/v0.1.47/... and /releases/download/v0.1.46/....blockmap
+// This enables true differential (delta) updates (~1-5MB instead of full ~86MB installer).
 autoUpdater.setFeedURL({
-  provider: 'generic',
-  url: 'https://github.com/erdemyuksel4/Echo/releases/latest/download',
+  provider: 'github',
+  owner: 'erdemyuksel4',
+  repo: 'Echo',
 });
 
 export async function checkForUpdate(): Promise<{ available: boolean; version?: string }> {

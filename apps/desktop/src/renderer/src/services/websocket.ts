@@ -33,6 +33,7 @@ import { SERVER_WS_URL } from '../config';
 import { webrtcService } from './webrtc';
 import { p2pFileTransferService } from './p2pFileTransfer';
 import { screenShareTransport } from './screenShare/transport';
+import { botManager } from './bots/BotManager';
 
 interface ManagedSocket {
   groupId: string;
@@ -230,6 +231,15 @@ class EchoWebSocketService {
         const message = envelope.d as Message;
         if (isActive) {
           chatStore.addMessage(message.channelId, message);
+        }
+
+        if (message.content && message.content.trim().startsWith('!')) {
+          void botManager.handleMessage(message.content, {
+            groupId,
+            channelId: message.channelId,
+            senderUserId: message.authorId,
+            senderDisplayName: message.authorName,
+          });
         }
 
         const currentUserId = useAuthStore.getState().identity?.userId;
@@ -432,10 +442,15 @@ class EchoWebSocketService {
           channelId: string;
           fromUserId: string;
           signal: VoiceSignalData;
+          targetBotId?: string;
         };
         const currentChannelId = useVoiceStore.getState().currentChannelId;
         if (currentChannelId && data.channelId === currentChannelId) {
-          void webrtcService.handleSignal(data.fromUserId, data.signal, data.channelId);
+          if (data.targetBotId) {
+            botManager.handleBotSignal(data.targetBotId, data.fromUserId, data.signal);
+          } else {
+            void webrtcService.handleSignal(data.fromUserId, data.signal, data.channelId);
+          }
         }
         break;
       }
@@ -550,6 +565,9 @@ class EchoWebSocketService {
       case WsServerEvents.MUSIC_STATE: {
         const data = envelope.d as MusicPlaybackState;
         useMusicStore.getState().setPlaybackState(data);
+        const myUserId = useAuthStore.getState().identity?.userId;
+        const isHost = data.hostUserId === myUserId;
+        botManager.syncHostStatus(isHost, data.channelId);
         break;
       }
 
@@ -705,13 +723,19 @@ class EchoWebSocketService {
     }
   }
 
-  sendVoiceSignal(channelId: string, targetUserId: string, signal: VoiceSignalData): void {
+  sendVoiceSignal(
+    channelId: string,
+    targetUserId: string,
+    signal: VoiceSignalData,
+    asBotId?: string,
+  ): void {
     const gId = useVoiceStore.getState().currentGroupId ?? this.activeGroupId;
     if (!gId) return;
     this.sendToGroup(gId, WsClientEvents.VOICE_SIGNAL, {
       channelId,
       targetUserId,
       signal,
+      asBotId,
     });
   }
 

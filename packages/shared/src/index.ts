@@ -11,3 +11,4 @@ export * from './markdown';
 export * from './schemas/media';
 export * from './schemas/music';
 export * from './crypto/e2ee';
+export * from './schemas/bot';

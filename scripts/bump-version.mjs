@@ -140,6 +140,9 @@ if (!isCloud) {
   const exeHyphen = resolve(distDir, `Echo-Setup-${nextVersion}.exe`);
   const blockmapHyphen = resolve(distDir, `Echo-Setup-${nextVersion}.exe.blockmap`);
   const latestYml = resolve(distDir, 'latest.yml');
+  // Delta installer files for differential updates
+  const deltaSpaced = resolve(distDir, `Echo Setup ${nextVersion}.exe.delta`);
+  const deltaHyphen = resolve(distDir, `Echo-Setup-${nextVersion}.exe.delta`);
 
   // Ensure hyphenated copies exist for electron-updater latest.yml compatibility
   try {
@@ -149,12 +152,23 @@ if (!isCloud) {
     if (existsSync(blockmapSpaced) && !existsSync(blockmapHyphen)) {
       copyFileSync(blockmapSpaced, blockmapHyphen);
     }
+    if (existsSync(deltaSpaced) && !existsSync(deltaHyphen)) {
+      copyFileSync(deltaSpaced, deltaHyphen);
+    }
   } catch (copyErr) {
     console.warn('[Uyarı] Dosya kopyalama uyarısı:', copyErr.message);
   }
 
   if (ghToken) {
-    const filesToUpload = [exeSpaced, exeHyphen, blockmapSpaced, blockmapHyphen, latestYml]
+        const filesToUpload = [
+      exeSpaced,
+      exeHyphen,
+      blockmapSpaced,
+      blockmapHyphen,
+      deltaSpaced,
+      deltaHyphen,
+      latestYml,
+    ]
       .filter((f) => existsSync(f))
       .map((f) => `"${f}"`)
       .join(' ');

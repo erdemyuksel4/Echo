@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Music, Play, Pause, SkipForward, Square, ListMusic, Volume2, Volume1, VolumeX } from 'lucide-react';
 import { useMusicStore } from '../../stores/useMusicStore';
 import { useVoiceStore } from '../../stores/useVoiceStore';
+import { useAuthStore } from '../../stores/useAuthStore';
 import { wsService } from '../../services/websocket';
 
 export const MusicPlayerWidget: React.FC = () => {
@@ -9,6 +10,7 @@ export const MusicPlayerWidget: React.FC = () => {
   const lastSyncedSeekPosRef = useRef<number>(-1);
 
   const { currentChannelId } = useVoiceStore();
+  const { identity } = useAuthStore();
   const playbackState = useMusicStore((state) =>
     currentChannelId ? state.playbackStates[currentChannelId] ?? null : null,
   );
@@ -21,6 +23,7 @@ export const MusicPlayerWidget: React.FC = () => {
   const positionSeconds = playbackState?.positionSeconds ?? 0;
   const lastUpdatedTimestamp = playbackState?.lastUpdatedTimestamp ?? Date.now();
   const durationSeconds = currentTrack?.durationSeconds || 180;
+  const isHost = Boolean(playbackState?.hostUserId && identity?.userId && playbackState.hostUserId === identity.userId);
 
   // Real-time ticking playback position for the small player
   const [currentPosition, setCurrentPosition] = useState(positionSeconds);
@@ -50,9 +53,9 @@ export const MusicPlayerWidget: React.FC = () => {
     return () => clearInterval(interval);
   }, [status, isAdPlaying, positionSeconds, lastUpdatedTimestamp, durationSeconds]);
 
-  // Handle server-side seek events
+  // Handle server-side seek events (Only host executes locally)
   useEffect(() => {
-    if (!window.echoApi?.music || !trackId) return;
+    if (!window.echoApi?.music || !trackId || !isHost) return;
 
     if (Math.abs(positionSeconds - lastSyncedSeekPosRef.current) > 2) {
       lastSyncedSeekPosRef.current = positionSeconds;
@@ -60,13 +63,14 @@ export const MusicPlayerWidget: React.FC = () => {
       const targetSec = Math.max(0, positionSeconds + elapsed);
       void window.echoApi.music.seek(targetSec);
     }
-  }, [positionSeconds, trackId, status, lastUpdatedTimestamp]);
+  }, [positionSeconds, trackId, status, lastUpdatedTimestamp, isHost]);
 
-  // 1. Sync Track loading with main process background audio engine
+  // 1. Sync Track loading with main process background audio engine (HOST ONLY)
   useEffect(() => {
     if (!window.echoApi?.music) return;
 
-    if (!trackId || !currentChannelId || status === 'stopped') {
+    // Listeners do NOT load or play YouTube locally! They hear it from Echo Müzik [BOT] via WebRTC!
+    if (!isHost || !trackId || !currentChannelId || status === 'stopped') {
       if (lastLoadedTrackIdRef.current) {
         lastLoadedTrackIdRef.current = null;
         lastSyncedSeekPosRef.current = -1;
@@ -83,11 +87,11 @@ export const MusicPlayerWidget: React.FC = () => {
       lastSyncedSeekPosRef.current = positionSeconds;
       void window.echoApi.music.loadTrack(trackId, startSec);
     }
-  }, [trackId, currentChannelId, status]);
+  }, [trackId, currentChannelId, status, isHost, positionSeconds, lastUpdatedTimestamp]);
 
-  // 2. Sync Play/Pause/Resume Status
+  // 2. Sync Play/Pause/Resume Status (HOST ONLY)
   useEffect(() => {
-    if (!window.echoApi?.music || !trackId || !currentChannelId) return;
+    if (!window.echoApi?.music || !trackId || !currentChannelId || !isHost) return;
 
     if (status === 'playing') {
       void window.echoApi.music.resume();
@@ -96,20 +100,25 @@ export const MusicPlayerWidget: React.FC = () => {
     } else if (status === 'stopped') {
       void window.echoApi.music.stop();
     }
-  }, [status, trackId, currentChannelId]);
+  }, [status, trackId, currentChannelId, isHost]);
 
-  // 3. Sync Volume & Mute
+  // 3. Sync Volume & Mute (HOST ONLY)
   useEffect(() => {
-    if (!window.echoApi?.music) return;
+    if (!window.echoApi?.music || !isHost) return;
     void window.echoApi.music.setVolume(volume, isMuted);
-  }, [volume, isMuted]);
+  }, [volume, isMuted, isHost]);
 
-  // 4. Listen for Track End event from main process -> trigger skip
+  // 4. Listen for Track End event from main process -> trigger skip (HOST ONLY)
   useEffect(() => {
-    if (!window.echoApi?.music) return;
+    if (!window.echoApi?.music || !isHost) return;
 
     const cleanup = window.echoApi.music.onEnded(() => {
       if (currentChannelId) {
+        wsService.sendMusicAction({ action: 'skip', channelId: currentChannelId });
+      }
+    });
+    return cleanup;
+  }, [currentChannelId, isHost]);
         wsService.sendMusicAction({
           action: 'skip',
           channelId: currentChannelId,
