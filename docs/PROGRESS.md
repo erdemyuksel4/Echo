@@ -937,4 +937,17 @@ Bu dosya her faz ve görev sonunda güncellenir.
   - *Kök Neden:* Chromium/Electron motorunda `HTMLMediaElement.volume` özelliği `MediaStream` (`srcObject`) canlı WebRTC akışları için desteklenmemektedir (ses seviyesi değişmez).
   - *Çözüm:* `apps/desktop/src/renderer/src/services/webrtc.ts` içinde uzaktan gelen her ses akışı `peerAudioContext.createMediaStreamSource(stream)` -> `GainNode` -> `peerAudioContext.destination` hattına bağlandı. Sağ tıklama menüsündeki ses çubuğu ve susturma artık anında ve %0'dan %200'e kadar çalışır.
 
+## Varsayılan Uçtan Uca Şifreleme (E2EE) ve YouTube Müzik Reklam Engelleme (v0.1.55)
+
+- [x] **Otomatik ve Varsayılan Uçtan Uca Şifreleme (E2EE):**
+  - `apps/desktop/src/renderer/src/components/ChatArea.tsx`: Mesaj çubuğundaki manuel E2EE açma/kapama butonu kaldırıldı.
+  - Tüm normal metin mesajları kullanıcıdan bağımsız olarak otomatik biçimde Web Crypto AES-256-GCM ile uçtan uca şifrelenir (`e2eeService.encryptMessage`).
+  - Müzik botu komutları (`!` ile başlayanlar) bot motorunun komutu algılayabilmesi için şifreleme dışında tutulur.
+- [x] **Çok Katmanlı YouTube Müzik Reklam Engelleme (Anti-Ad Multi-layer):**
+  - *Ağ Katmanı (Network Filtering):* `session.fromPartition('persist:youtube').webRequest.onBeforeRequest` ile bilinen reklam telemetri ve video reklam istekleri (`doubleclick.net`, `googleadservices.com`, `googlesyndication.com`, `/pagead/`, `/api/stats/ads*`, `/get_midroll_info*`, `/youtubei/v1/player/ad_break*`) tamamen iptal edilir (`cancel: true`).
+  - *DOM & Oynatıcı Katmanı (Instant Skip & Speedup):* `MutationObserver` ve `timeupdate` olayları ile oynatıcıda reklam belirdiği anda (`ad-showing`, `ad-interrupting`, `getAdState() > 0`) video anında sona atlatılır (`currentTime = duration`), sessize alınır (`v.muted = true`) ve 16x oynatma hızıyla mikrosaniyeler içinde atlanır. Reklam geçme butonları anında tıklanır.
+  - *WebRTC Ses Koruma Katmanı (Zero Audio Leak):* Reklam tespit edildiğinde WebRTC ses izi (`t.enabled = false`) anında devre dışı bırakılır; böylece ses kanalındaki dinleyicilere en ufak bir reklam sesi sızmaz. Şarkı devam ettiğinde iz yeniden aktif edilir (`t.enabled = true`).
+  - *Arayüz Gizleme Katmanı (CSS Injection):* Reklam yerleşimleri ve banner katmanları CSS enjeksiyonu ile görsel olarak gizlenir.
+
+
 

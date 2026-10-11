@@ -1,11 +1,10 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { Hash, Send, CornerUpLeft, X, Image, Paperclip, Users, ShieldCheck, ShieldAlert } from 'lucide-react';
+import { Hash, Send, CornerUpLeft, X, Image, Paperclip, Users } from 'lucide-react';
 import type { Attachment, GiphyItem, MusicTrack } from '@echo/shared';
 import { useChatStore } from '../stores/useChatStore';
 import { useAuthStore } from '../stores/useAuthStore';
 import { useVoiceStore } from '../stores/useVoiceStore';
 import { useMusicStore } from '../stores/useMusicStore';
-import { useE2EEStore } from '../stores/useE2EEStore';
 import { e2eeService } from '../services/e2eeService';
 import { wsService } from '../services/websocket';
 import { ChatMessageItem } from './ChatMessageItem';
@@ -28,7 +27,6 @@ export const ChatArea: React.FC = () => {
     setReplyingTo,
   } = useChatStore();
 
-  const { isE2EEEnabled, toggleE2EE } = useE2EEStore();
   const [inputContent, setInputContent] = useState('');
   const [stagedAttachments, setStagedAttachments] = useState<Attachment[]>([]);
   const [showGiphyPicker, setShowGiphyPicker] = useState(false);
@@ -158,8 +156,8 @@ export const ChatArea: React.FC = () => {
     setReplyingTo(null);
 
     let finalContent = content;
-    // Encrypt normal text messages when E2EE is enabled (skip !music bot commands)
-    if (isE2EEEnabled && content.trim() && !content.trim().startsWith('!')) {
+    // Encrypt normal text messages with E2EE (skip !bot commands so the bot can parse them)
+    if (content.trim() && !content.trim().startsWith('!')) {
       finalContent = await e2eeService.encryptMessage(activeChannelId, content);
     }
 
@@ -752,29 +750,6 @@ export const ChatArea: React.FC = () => {
             title="GIF Seç"
           >
             GIF
-          </button>
-
-          {/* E2EE Encryption Toggle button */}
-          <button
-            type="button"
-            onClick={toggleE2EE}
-            className={`flex-shrink-0 flex items-center gap-1 rounded-md px-2 py-1 text-xs font-bold transition cursor-pointer border ${
-              isE2EEEnabled
-                ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300 shadow-sm'
-                : 'border-slate-800 text-slate-500 hover:text-slate-300 hover:bg-slate-800'
-            }`}
-            title={
-              isE2EEEnabled
-                ? 'Uçtan Uca Şifreleme (E2EE) Açık - Mesajlarınız AES-256 ile şifrelenir'
-                : 'Uçtan Uca Şifreleme Kapalı - Açmak için tıklayın'
-            }
-          >
-            {isE2EEEnabled ? (
-              <ShieldCheck className="h-3.5 w-3.5 text-emerald-400" />
-            ) : (
-              <ShieldAlert className="h-3.5 w-3.5 text-slate-500" />
-            )}
-            <span className="hidden sm:inline text-[11px]">E2EE</span>
           </button>
 
           {/* Text Input */}

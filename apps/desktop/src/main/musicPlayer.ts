@@ -12,6 +12,27 @@ class MusicPlayerManager {
   public init(mainWindow: BrowserWindow): void {
     this.mainWindow = mainWindow;
 
+    // Block known YouTube and Google ad network requests to eliminate ads at network layer
+    const adFilterPatterns = [
+      '*://*.doubleclick.net/*',
+      '*://*.googleadservices.com/*',
+      '*://*.googlesyndication.com/*',
+      '*://*.youtube.com/pagead/*',
+      '*://*.youtube.com/api/stats/ads*',
+      '*://*.youtube.com/get_midroll_info*',
+      '*://static.doubleclick.net/*',
+      '*://securepubads.g.doubleclick.net/*',
+      '*://*.youtube.com/youtubei/v1/player/ad_break*',
+    ];
+    try {
+      const ytSession = session.fromPartition('persist:youtube');
+      ytSession.webRequest.onBeforeRequest({ urls: adFilterPatterns }, (_details, callback) => {
+        callback({ cancel: true });
+      });
+    } catch (e) {
+      console.warn('[MusicPlayer] Failed to register ad network filter:', e);
+    }
+
     ipcMain.handle(
       'music:loadTrack',
       async (_, { videoId, startSeconds = 0 }: { videoId: string; startSeconds?: number }) => {
@@ -230,6 +251,34 @@ class MusicPlayerManager {
     });
   }
 
+  private injectAdBlockingStyles(): void {
+    if (!this.playerWindow || this.playerWindow.isDestroyed()) return;
+    const css = `
+      .ytp-ad-overlay-container,
+      .ytp-ad-message-container,
+      .ytp-ad-action-interstitial,
+      .ytp-ad-player-overlay,
+      .ytp-ad-player-overlay-layout,
+      .ytp-ad-progress,
+      .ytp-ad-progress-list,
+      #player-ads,
+      ytd-ad-slot-renderer,
+      ytd-in-feed-ad-layout-renderer,
+      ytd-banner-promo-renderer,
+      ytd-engagement-panel-section-list-renderer[target-id="engagement-panel-ads"] {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+      }
+    `;
+    try {
+      void this.playerWindow.webContents.insertCSS(css);
+    } catch {
+      // Ignore
+    }
+  }
+
   private ensurePlayerWindow(): BrowserWindow {
     if (this.playerWindow && !this.playerWindow.isDestroyed()) {
       return this.playerWindow;
@@ -250,7 +299,13 @@ class MusicPlayerManager {
       },
     });
 
+    this.playerWindow.webContents.on('dom-ready', () => {
+      this.injectAdBlockingStyles();
+      this.syncPlaybackStateInPage();
+    });
+
     this.playerWindow.webContents.on('did-finish-load', () => {
+      this.injectAdBlockingStyles();
       this.syncPlaybackStateInPage();
     });
 
@@ -258,6 +313,11 @@ class MusicPlayerManager {
       if (message === '__ECHO_AD__:true') {
         if (!this.isAdCurrentlyActive) {
           this.isAdCurrentlyActive = true;
+          try {
+            this.playerWindow?.webContents.setAudioMuted(true);
+          } catch {
+            // Ignore
+          }
           if (this.mainWindow && !this.mainWindow.isDestroyed()) {
             this.mainWindow.webContents.send('music:onAdState', { isAd: true });
           }
@@ -265,6 +325,11 @@ class MusicPlayerManager {
       } else if (message === '__ECHO_AD__:false') {
         if (this.isAdCurrentlyActive) {
           this.isAdCurrentlyActive = false;
+          try {
+            this.playerWindow?.webContents.setAudioMuted(this.isMuted);
+          } catch {
+            // Ignore
+          }
           if (this.mainWindow && !this.mainWindow.isDestroyed()) {
             this.mainWindow.webContents.send('music:onAdState', { isAd: false });
           }
@@ -304,29 +369,22 @@ class MusicPlayerManager {
         let initialSeekDone = ${seekArg < 0};
         const targetSeek = ${seekArg};
 
-        window.__echoPlayerLoop = setInterval(function() {
+        function killAd(mp, v) {
           try {
-            const mp = document.getElementById('movie_player');
-            const v = document.querySelector('video');
-
-            // 1. Auto-dismiss any Google / YouTube confirm / consent popups
-            const confirmBtn = document.querySelector('yt-confirm-dialog-renderer #confirm-button button, .yt-spec-button-shape-next--filled');
-            if (confirmBtn) confirmBtn.click();
-
-            // 2. Comprehensive check if an advertisement is actively showing
             const isAd = Boolean(
               (mp && (mp.classList.contains('ad-showing') || mp.classList.contains('ad-interrupting'))) ||
               (mp && typeof mp.getAdState === 'function' && mp.getAdState() > 0) ||
-              document.querySelector('.ytp-ad-text, .ytp-ad-preview-text, .ytp-ad-skip-button-modern, .ytp-skip-ad-button, .ytp-ad-player-overlay-layout')
+              document.querySelector('.ytp-ad-text, .ytp-ad-preview-text, .ytp-ad-skip-button-modern, .ytp-skip-ad-button, .ytp-ad-player-overlay-layout, .videoAdUi')
             );
 
             if (isAd) {
               console.log('__ECHO_AD__:true');
-
-              // Fast-forward unskippable ads and mute audio during ad
               if (v) {
                 try {
                   v.muted = true;
+                  if (!isNaN(v.duration) && v.duration > 0) {
+                    v.currentTime = v.duration;
+                  }
                   v.playbackRate = 16.0;
                 } catch(e) {}
               }
@@ -337,9 +395,48 @@ class MusicPlayerManager {
               if (mp && typeof mp.skipAd === 'function') {
                 try { mp.skipAd(); } catch(e) {}
               }
-              return;
+              return true;
             } else {
               console.log('__ECHO_AD__:false');
+              return false;
+            }
+          } catch(e) {
+            return false;
+          }
+        }
+
+        // Install MutationObserver for instant ad detection on DOM changes
+        if (!window.__echoAdObserver && document.body) {
+          window.__echoAdObserver = new MutationObserver(function() {
+            const mp = document.getElementById('movie_player');
+            const v = document.querySelector('video');
+            killAd(mp, v);
+          });
+          window.__echoAdObserver.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
+        }
+
+        window.__echoPlayerLoop = setInterval(function() {
+          try {
+            const mp = document.getElementById('movie_player');
+            const v = document.querySelector('video');
+
+            // 1. Auto-dismiss any Google / YouTube confirm / consent popups
+            const confirmBtn = document.querySelector('yt-confirm-dialog-renderer #confirm-button button, .yt-spec-button-shape-next--filled');
+            if (confirmBtn) (confirmBtn as any).click();
+
+            // 2. Comprehensive check and instant kill if an advertisement is actively showing
+            const isAd = killAd(mp, v);
+
+            if (isAd) {
+              // Mute audio track on WebRTC so no ad sound escapes to the voice room
+              if (window.__echoBotPeers && window.__echoBotPeers.size > 0 && v && typeof v.captureStream === 'function') {
+                try {
+                  const s = v.captureStream();
+                  const t = s.getAudioTracks()[0];
+                  if (t) t.enabled = false;
+                } catch(e) {}
+              }
+              return;
             }
 
             // 3. Main song playback configuration
@@ -385,6 +482,9 @@ class MusicPlayerManager {
 
               if (!v.__echoHooked) {
                 v.__echoHooked = true;
+                v.addEventListener('timeupdate', function() {
+                  killAd(mp, v);
+                });
                 v.onended = () => {
                   const adActive = Boolean(
                     (mp && (mp.classList.contains('ad-showing') || mp.classList.contains('ad-interrupting'))) ||
@@ -403,6 +503,7 @@ class MusicPlayerManager {
                 const s = v.captureStream();
                 const t = s.getAudioTracks()[0];
                 if (t && t.readyState === 'live') {
+                  t.enabled = true; // Ensure track is audible during actual song playback
                   for (const pc of window.__echoBotPeers.values()) {
                     const senders = pc.getSenders();
                     const audioSender = senders.find((snd) => snd.track?.kind === 'audio' || !snd.track);
@@ -416,7 +517,7 @@ class MusicPlayerManager {
               } catch(e) {}
             }
           } catch(e) {}
-        }, 500);
+        }, 200);
       })();
     `);
   }
