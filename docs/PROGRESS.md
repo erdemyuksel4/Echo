@@ -895,3 +895,19 @@ Bu dosya her faz ve görev sonunda güncellenir.
 - [x] **Spotify Bağlantı Çözümleme (Zero API Keys):**
   - `apps/server/src/index.ts`: `/api/music/search` uç noktasına gelen `open.spotify.com/track/...` linkleri Spotify'ın genel oEmbed ve OpenGraph başlıkları üzerinden anında `Sanatçı - Şarkı Adı` formatına dönüştürülüp YouTube motoruna yönlendirilir. Kullanıcılar Spotify linklerini doğrudan sohbete veya arama çubuğuna yapıştırarak müzik botunda çalabilir.
 
+## Ses Kanalı Katılımcı Senkronizasyonu, Boş Kanal Bot Temizliği ve Bireysel Ses Seviyesi (v0.1.52)
+
+- [x] **Boş Kanalda Müzik Botunun Otomatik Ayrılması & Sıfırlanması:**
+  - `apps/server/src/durable/GroupDO.ts`: Kanaldaki son insan kullanıcı ayrıldığında (`humansLeft.length === 0`), `bot-music` derhal odadan çıkarılır (`VOICE_USER_LEFT`).
+  - Müzik durumu tamamen durdurulur (`status: 'stopped'`, `currentTrack: null`, `queue: []`, `positionSeconds: 0`, `hostUserId: ''`).
+  - Tüm istemcilere anında yetkili `VOICE_PARTICIPANTS` boş listesi gönderilir; böylece hayalet bot veya askıda müzik durumu kalmaz.
+- [x] **Kesintisiz Katılımcı Listesi Senkronizasyonu (Live Voice Sync):**
+  - `packages/shared/src/schemas/protocol.ts`: `WsClientEvents.VOICE_SYNC` ('voice.sync') eklendi.
+  - `apps/server/src/durable/GroupDO.ts`: `VOICE_JOIN`, `VOICE_LEAVE`, `VOICE_SYNC` ve bot hareketlerinde tüm kanallara diferansiyel olayların yanında mutlak, yetkili tam liste (`VOICE_PARTICIPANTS`) yayınlanır.
+  - `apps/desktop/src/renderer/src/components/Sidebar.tsx`: "Ana Sayfa" / DM'lere geçildiğinde aktif grup WebSocket bağlantısının koparılması (`wsService.disconnect()`) kaldırıldı; böylece ses kanalı ve durum senkronizasyonu arka planda canlı kalır.
+  - `apps/desktop/src/renderer/src/services/websocket.ts`: Gruplar veya kanallar arasında gezinirken var olan kimliği doğrulanmış soket üzerinden otomatik `syncVoiceParticipants` tetiklenir; kullanıcı listesi her geçişte anında güncellenir.
+- [x] **Sağ Tık Bireysel Ses Kısma / Açma (%0 - %200) & Susturma Düzeltmesi:**
+  - `apps/desktop/src/renderer/src/components/VoiceStageView.tsx`: `ParticipantTile` içindeki `<video>` etiketinin `muted` niteliği `true` yapıldı (`muted={true}`). Böylece uzaktaki kullanıcının kamera akışındaki ham ses doğrudan oynatılarak ses seviyesi denetimlerini atlamaz.
+  - `apps/desktop/src/renderer/src/services/webrtc.ts`: `AudioContext` ve `GainNode` Web Audio API hattı devreye alındı. Uzaktan gelen ses `MediaStreamSource` -> `GainNode` -> `MediaStreamDestination` -> `HTMLAudioElement` boru hattından geçirilir.
+  - `applyPeerGain`: Hem `GainNode.gain.setValueAtTime(targetGain, currentTime)` ile %0'dan %200'e kadar kesintisiz güçlendirme/kısma yapılır, hem de susturma ve sağırlaştırma anında sıfır gecikmeyle etki eder. Çıkış aygıtı seçimi (`setSinkId`) korunur.
+

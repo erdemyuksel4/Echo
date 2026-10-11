@@ -37,6 +37,7 @@ export const WsClientEvents = {
   PRESENCE_UPDATE: 'presence.update',
   VOICE_JOIN: 'voice.join',
   VOICE_LEAVE: 'voice.leave',
+  VOICE_SYNC: 'voice.sync',
   VOICE_SIGNAL: 'voice.signal',
   VOICE_STATE: 'voice.state',
   FILE_SIGNAL: 'file.signal',

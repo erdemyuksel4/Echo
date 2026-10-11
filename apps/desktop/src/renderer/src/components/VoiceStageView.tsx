@@ -112,7 +112,7 @@ const ParticipantTile: React.FC<ParticipantTileProps> = ({
           ref={attachVideo}
           autoPlay
           playsInline
-          muted={isLocal}
+          muted={true}
           className={`w-full h-full object-cover rounded-2xl ${isLocal ? '-scale-x-100' : ''}`}
         />
       ) : (

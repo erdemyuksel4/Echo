@@ -453,6 +453,15 @@ class WebRTCVoiceService {
         }
         this.peerAudioElements.delete(botId);
       }
+      const botGain = this.peerGainNodes.get(botId);
+      if (botGain) {
+        try {
+          botGain.disconnect();
+        } catch {
+          // Ignore
+        }
+        this.peerGainNodes.delete(botId);
+      }
     } else {
       // If we are listener, ensure we have an active WebRTC peer connection to the bot
       const voiceStore = useVoiceStore.getState();
@@ -499,6 +508,16 @@ class WebRTCVoiceService {
         // Ignore
       }
       this.peerAudioElements.delete(leftUserId);
+    }
+
+    const gainNode = this.peerGainNodes.get(leftUserId);
+    if (gainNode) {
+      try {
+        gainNode.disconnect();
+      } catch {
+        // Ignore
+      }
+      this.peerGainNodes.delete(leftUserId);
     }
 
     this.peerDisplayNames.delete(leftUserId);
@@ -797,7 +816,34 @@ class WebRTCVoiceService {
       }
       const remoteStream = event.streams[0] ?? new MediaStream([event.track]);
 
-      audio.srcObject = remoteStream;
+      if (!this.peerAudioContext || this.peerAudioContext.state === 'closed') {
+        const AudioCtx =
+          window.AudioContext ||
+          (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+        this.peerAudioContext = new AudioCtx();
+      }
+      if (this.peerAudioContext.state === 'suspended') {
+        void this.peerAudioContext.resume();
+      }
+
+      let gainNode = this.peerGainNodes.get(peerId);
+      if (!gainNode) {
+        try {
+          const source = this.peerAudioContext.createMediaStreamSource(remoteStream);
+          gainNode = this.peerAudioContext.createGain();
+          const destination = this.peerAudioContext.createMediaStreamDestination();
+          source.connect(gainNode);
+          gainNode.connect(destination);
+          this.peerGainNodes.set(peerId, gainNode);
+          audio.srcObject = destination.stream;
+        } catch (webaudioErr) {
+          console.warn('[Echo WebRTC] WebAudio pipeline error, falling back to direct audio element:', webaudioErr);
+          audio.srcObject = remoteStream;
+        }
+      } else if (!audio.srcObject) {
+        audio.srcObject = remoteStream;
+      }
+
       this.applyPeerGain(peerId);
 
       // Apply output device if set
@@ -1483,16 +1529,33 @@ class WebRTCVoiceService {
 
   applyPeerGain(peerId: string): void {
     const audio = this.peerAudioElements.get(peerId);
-    if (!audio) return;
+    const gainNode = this.peerGainNodes.get(peerId);
+
+    if (this.peerAudioContext && this.peerAudioContext.state === 'suspended') {
+      void this.peerAudioContext.resume();
+    }
 
     const store = useVoiceStore.getState();
     const isDeafened = store.isDeafened;
     const isPeerMuted = Boolean(store.peerMuted[peerId]);
     const userVolumeMultiplier = store.peerVolumes[peerId] ?? 1.0; // 0.0 to 2.0 (0% to 200%)
 
-    const effectiveVolume = (isDeafened || isPeerMuted) ? 0.0 : Math.min(1.0, userVolumeMultiplier * this.outputVolume);
-    audio.volume = effectiveVolume;
-    audio.muted = isDeafened || isPeerMuted;
+    const targetGain = (isDeafened || isPeerMuted) ? 0.0 : userVolumeMultiplier * this.outputVolume;
+
+    if (gainNode) {
+      try {
+        const now = this.peerAudioContext?.currentTime ?? 0;
+        gainNode.gain.cancelScheduledValues(now);
+        gainNode.gain.setValueAtTime(targetGain, now);
+      } catch (err) {
+        console.warn('[Echo WebRTC] Failed to set gain on GainNode:', err);
+      }
+    }
+
+    if (audio) {
+      audio.muted = isDeafened || isPeerMuted || targetGain === 0;
+      audio.volume = Math.max(0, Math.min(1.0, targetGain));
+    }
   }
 
   setPeerVolume(userId: string, volume: number): void {
@@ -1507,7 +1570,8 @@ class WebRTCVoiceService {
 
   setOutputVolume(volume: number): void {
     this.outputVolume = Math.max(0, Math.min(1, volume));
-    this.peerAudioElements.forEach((_audio, peerId) => {
+    const allPeers = new Set([...this.peerAudioElements.keys(), ...this.peerGainNodes.keys()]);
+    allPeers.forEach((peerId) => {
       this.applyPeerGain(peerId);
     });
     if (this.testMicAudioEl) {

@@ -44,7 +44,6 @@ export const Sidebar: React.FC<Props> = ({ onOpenCreateModal }) => {
         onClick={() => {
           useDmStore.getState().setActivePeer(null);
           setActiveGroup(null);
-          wsService.disconnect();
         }}
         className={`group relative flex h-12 w-12 items-center justify-center rounded-3xl transition-all duration-200 hover:rounded-2xl ${
           activeGroupId === null

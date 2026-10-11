@@ -63,6 +63,7 @@ class EchoWebSocketService {
           if (currentChanId) {
             this.fetchHistory(currentChanId);
           }
+          this.syncVoiceParticipants(groupId);
         } else {
           useChatStore.getState().setConnectionStatus('connecting');
         }
@@ -723,6 +724,10 @@ class EchoWebSocketService {
         }, 300);
       }
     }
+  }
+
+  syncVoiceParticipants(groupId: string): void {
+    this.sendToGroup(groupId, WsClientEvents.VOICE_SYNC, {});
   }
 
   sendVoiceSignal(

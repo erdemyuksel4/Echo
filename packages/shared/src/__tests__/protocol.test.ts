@@ -70,4 +70,17 @@ describe('Protocol Schemas', () => {
     const parsed = AuthPayloadSchema.safeParse(invalidAuth);
     expect(parsed.success).toBe(false);
   });
+
+  it('should validate VOICE_SYNC envelope', () => {
+    const raw = {
+      v: 1,
+      t: WsClientEvents.VOICE_SYNC,
+      id: 'sync-nonce-1',
+      d: {},
+    };
+
+    const parsed = WsEnvelopeSchema.safeParse(raw);
+    expect(parsed.success).toBe(true);
+    expect(parsed.data?.t).toBe('voice.sync');
+  });
 });

@@ -799,6 +799,9 @@ export class GroupDO extends DurableObject<Env> {
       case WsClientEvents.VOICE_STATE:
         this.handleVoiceState(session, envelope);
         break;
+      case WsClientEvents.VOICE_SYNC:
+        this.sendAllVoiceParticipants(ws);
+        break;
       case WsClientEvents.FILE_SIGNAL:
         this.handleFileSignal(session, envelope);
         break;
@@ -903,7 +906,14 @@ export class GroupDO extends DurableObject<Env> {
     const snapshot = this.getGroupSnapshot();
     this.send(ws, WsServerEvents.SNAPSHOT, snapshot);
 
-    // Send active voice participants across all voice channels (including empty ones to clear stale client state)
+    // Send active voice participants across all voice channels
+    this.sendAllVoiceParticipants(ws);
+
+    // Broadcast presence changed to online
+    this.broadcast(WsServerEvents.PRESENCE_CHANGED, { userId, status: 'online' });
+  }
+
+  private sendAllVoiceParticipants(ws: WebSocket): void {
     const voiceChanRows = [...this.sql.exec(`SELECT id FROM channels WHERE type = 'voice'`)] as {
       id: string;
     }[];
@@ -914,9 +924,6 @@ export class GroupDO extends DurableObject<Env> {
         participants: room ? Array.from(room.values()) : [],
       });
     }
-
-    // Broadcast presence changed to online
-    this.broadcast(WsServerEvents.PRESENCE_CHANGED, { userId, status: 'online' });
   }
 
   private handleMessageSend(
@@ -1424,6 +1431,12 @@ export class GroupDO extends DurableObject<Env> {
       envelope.id,
     );
 
+    // Broadcast full participants snapshot for authoritative sync across all clients
+    this.broadcast(WsServerEvents.VOICE_PARTICIPANTS, {
+      channelId,
+      participants: Array.from(room.values()),
+    });
+
     // Send currently active screen shares in this channel to the newly joined user
     const channelShares = Array.from(this.screenShares.get(channelId)?.values() ?? []);
     if (channelShares.length > 0) {
@@ -1460,9 +1473,13 @@ export class GroupDO extends DurableObject<Env> {
           this.broadcast(WsServerEvents.VOICE_USER_LEFT, { channelId, userId: botId });
         }
         const mState = this.musicStates.get(channelId);
-        if (mState && mState.status !== 'stopped') {
+        if (mState) {
           mState.status = 'stopped';
           mState.currentTrack = null;
+          mState.queue = [];
+          mState.positionSeconds = 0;
+          mState.hostUserId = '';
+          mState.hostDisplayName = '';
           this.broadcast(WsServerEvents.MUSIC_STATE, mState);
         }
       } else if (humansLeft.length > 0 && humansLeft[0]) {
@@ -1500,6 +1517,13 @@ export class GroupDO extends DurableObject<Env> {
       },
       envelopeId,
     );
+
+    // Broadcast authoritative participants update so all clients have consistent list
+    const currentRoom = this.voiceRooms.get(channelId);
+    this.broadcast(WsServerEvents.VOICE_PARTICIPANTS, {
+      channelId,
+      participants: currentRoom ? Array.from(currentRoom.values()) : [],
+    });
   }
 
   private handleVoiceSignal(session: WsSessionAttachment, envelope: WsEnvelope): void {
@@ -1916,6 +1940,10 @@ export class GroupDO extends DurableObject<Env> {
             displayName: 'Echo Müzik',
             currentParticipants: existingParticipants,
           });
+          this.broadcast(WsServerEvents.VOICE_PARTICIPANTS, {
+            channelId,
+            participants: Array.from(room.values()),
+          });
         } else {
           const bp = room.get(botId)!;
           bp.speaking = true;
@@ -1951,6 +1979,11 @@ export class GroupDO extends DurableObject<Env> {
           if (room.size === 0) {
             this.voiceRooms.delete(channelId);
           }
+          const currentRoom = this.voiceRooms.get(channelId);
+          this.broadcast(WsServerEvents.VOICE_PARTICIPANTS, {
+            channelId,
+            participants: currentRoom ? Array.from(currentRoom.values()) : [],
+          });
         }
       }
     }
