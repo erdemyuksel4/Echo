@@ -14,6 +14,8 @@
     "release:cloud": "node scripts/bump-version.mjs patch --cloud",
     "release:minor": "node scripts/bump-version.mjs minor",
     "build:exe": "pnpm --filter @echo/desktop build:exe",
+    "mobile:analyze": "node scripts/run-mobile.mjs analyze",
+    "mobile:test": "node scripts/run-mobile.mjs test",
     "typecheck": "pnpm -r run typecheck",
     "test": "pnpm -r run test",
     "lint": "eslint .",

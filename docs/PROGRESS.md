@@ -17,6 +17,7 @@ Bu dosya her faz ve görev sonunda güncellenir.
 | Faz 8 | Cilalama ve dağıtım                     | Tamamlandı | `faz-8-cilalama-dagitim`  | Bas-konuş, Windows ile başlat, boş durumlar, NSIS tek tıkla .exe kurulumu                                                                |
 | Faz 9 | Kamera (Webcam)                         | Tamamlandı | `faz-9-kamera`            | WebRTC 480p24 mesh kamera yayını, VoiceStageView video grid, Ayarlar kamera seçici & ayna testi                                          |
 | Faz 10 | Gelişmiş İşbirliği & Güvenlik Özellikleri | Tamamlandı | `main`                    | Ekran kaydetme (.webm), Ekrana çizim/beyaz tahta, Uçtan Uca Şifreleme (E2EE), Uzaktan kontrol (TeamViewer tarzı)                       |
+| Faz 11 | Echo Mobil Versiyonu (Android & iOS)    | Tamamlandı | `main`                    | Flutter tabanlı, Ed25519 kimlik, WebRTC mesh ses & kamera, ekran izleme, DM, Markdown, Giphy, çizim tahtası, sıfır lint/hata             |
 
 ## Faz 0 — Kabul Kriterleri ve Gerçekleşenler
 
@@ -948,6 +949,51 @@ Bu dosya her faz ve görev sonunda güncellenir.
   - *DOM & Oynatıcı Katmanı (Instant Skip & Speedup):* `MutationObserver` ve `timeupdate` olayları ile oynatıcıda reklam belirdiği anda (`ad-showing`, `ad-interrupting`, `getAdState() > 0`) video anında sona atlatılır (`currentTime = duration`), sessize alınır (`v.muted = true`) ve 16x oynatma hızıyla mikrosaniyeler içinde atlanır. Reklam geçme butonları anında tıklanır.
   - *WebRTC Ses Koruma Katmanı (Zero Audio Leak):* Reklam tespit edildiğinde WebRTC ses izi (`t.enabled = false`) anında devre dışı bırakılır; böylece ses kanalındaki dinleyicilere en ufak bir reklam sesi sızmaz. Şarkı devam ettiğinde iz yeniden aktif edilir (`t.enabled = true`).
   - *Arayüz Gizleme Katmanı (CSS Injection):* Reklam yerleşimleri ve banner katmanları CSS enjeksiyonu ile görsel olarak gizlenir.
+
+## Faz 11 — Echo Mobil Versiyonu (Android & iOS)
+
+- [x] **Flutter Tabanlı Tam Yerel Mimari (`apps/mobile`):**
+  - Flutter 3.47.2 / Dart 3.13.2 altyapısıyla geliştirildi.
+  - Bağımsız, modern ve Discord tarzı karanlık tema (`EchoColors`, `EchoTheme`).
+  - Kök monorepoya `pnpm mobile:test` ve `pnpm mobile:analyze` entegrasyonu sağlandı (`scripts/run-mobile.mjs`).
+- [x] **Kriptografik Kimlik & Güvenlik:**
+  - Cihazda Ed25519 anahtar çifti üretimi (`cryptography` paketi).
+  - RFC 4648 Base32 ve SHA-256 ile `userId` türetme (`packages/shared` ile %100 uyumlu).
+  - Donanım seviyesinde güvenli saklama (`flutter_secure_storage` - Android Keystore, iOS Keychain).
+  - Uçtan Uca Şifreleme (E2EE): AES-256-GCM ve PBKDF2 (`e2ee_service.dart`).
+- [x] **Gerçek Zamanlı Ağ & Protokol:**
+  - Cloudflare Workers + Durable Objects (`GroupDO`, `UserDO`) ile WebSocket hibernation tam uyumu.
+  - İmzalı kimlik doğrulama (`echo-auth|target|ts`).
+  - 15 saniyelik periyodik ping/pong döngüsü ve üstel geri çekilmeli otomatik yeniden bağlanma.
+  - REST API servisi (`api_service.dart`): Grup oluşturma, davetle katılma, Giphy proxy, TURN sunucuları, ek yükleme.
+- [x] **Zengin Mesajlaşma & Medya:**
+  - `ListView.builder` ters sıralı akıcı mesaj akışı.
+  - Markdown ayrıştırma (`flutter_markdown`): Kalın, italik, satır içi kod, kod bloğu.
+  - Dokunarak açılan Spoiler (`||gizli metin||`).
+  - Alıntılı yanıt önizlemesi ve düzenleme göstergesi (`(düzenlendi)`).
+  - Görsel sıkıştırma (`image` paketi ile mobilde otomatik WebP/JPEG optimizasyonu).
+  - Tam ekran etkileşimli Lightbox görsel görüntüleyici (`ImageViewerModal` - pinch-to-zoom).
+  - Discord tarzı alttan açılan Giphy seçici (`GiphySheet`).
+  - Emoji tepki rozetleri (tıklanabilir sayaçlar) ve basılı tutunca çıkan bağlam menüsü.
+- [x] **Direkt Mesajlaşma (DM):**
+  - Kullanıcının kişisel `UserDO` WebSocket'ine (`/ws/user`) bağlanma (`user_websocket_service.dart`).
+  - DM konuşma listesi (`DmListScreen`), okunmamış rozetleri ve ikili özel sohbet (`DmChatScreen`).
+- [x] **WebRTC Ses & Kamera Mesh Motoru:**
+  - `flutter_webrtc` doğrudan yerel libwebrtc C++ motorunu kullanır.
+  - Tam P2P mesh ses, Cloudflare STUN & TURN desteği.
+  - VAD ses aktivite algılama ve avatar etrafında parlayan yeşil halka.
+  - Mikrofon susturma (Mute), sağırlaştırma (Deafen), hoparlör/ahize geçişi.
+  - 480p24 düşük gecikmeli kamera yayını, ön/arka kamera çevirme (`switchCamera`).
+  - Discord tarzı ses sahnesi video ızgarası (`VoiceStageScreen`).
+  - Sohbette gezinirken ekranın altında sabit duran mini ses kontrol barı (`VoiceMiniBar`).
+- [x] **Ekran Paylaşımı ve Beyaz Tahta:**
+  - PC'den paylaşılan ekranları mobilde akıcı izleme (`ScreenShareService`).
+  - Ortak çizim tahtası (`WhiteboardScreen`): Parmakla çizim, renk ve fırça seçimi, WebSocket üzerinden canlı senkronizasyon.
+- [x] **Test & Kod Kalitesi:**
+  - `flutter analyze`: Sıfır hata, sıfır uyarı (`No issues found!`).
+  - `flutter test`: Ed25519 kimlik üretimi, base32 ve E2EE testleri başarıyla geçti (`All tests passed!`).
+  - Monorepo `pnpm typecheck`, `pnpm lint`, `pnpm test` hatasız tamamlandı.
+
 
 
 
