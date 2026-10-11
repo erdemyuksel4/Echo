@@ -40,9 +40,10 @@ jobs:
         working-directory: apps/mobile
         run: flutter build apk --release
 
-      - name: Rename APK
+      - name: Copy and rename APK
         run: |
           cp apps/mobile/build/app/outputs/flutter-apk/app-release.apk Echo-Mobile.apk
+          ls -lh Echo-Mobile.apk
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
@@ -50,12 +51,14 @@ jobs:
           name: Echo-Mobile-APK
           path: Echo-Mobile.apk
 
-      - name: Attach APK to Latest Release
+      - name: Attach APK to GitHub Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          TAG=$(gh release list --limit 1 --json tagName --jq '.[0].tagName')
-          if [ -n "$TAG" ]; then
-            echo "Attaching to release $TAG"
-            gh release upload "$TAG" Echo-Mobile.apk --clobber
+          TAG="v0.1.56"
+          echo "Attaching to release $TAG"
+          gh release upload "$TAG" Echo-Mobile.apk --clobber || echo "Upload to $TAG failed, trying latest release..."
+          LATEST=$(gh release list --limit 1 --json tagName --jq '.[0].tagName')
+          if [ -n "$LATEST" ]; then
+            gh release upload "$LATEST" Echo-Mobile.apk --clobber
           fi
