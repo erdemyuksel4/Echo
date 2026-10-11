@@ -11,7 +11,6 @@
     "test:dual": "node scripts/dual-test.mjs",
     "test:updater": "node scripts/test-auto-updater.mjs",
     "release": "node scripts/bump-version.mjs patch",
-    "release:cloud": "node scripts/bump-version.mjs patch --cloud",
     "release:minor": "node scripts/bump-version.mjs minor",
     "build:exe": "pnpm --filter @echo/desktop build:exe",
     "mobile:analyze": "node scripts/run-mobile.mjs analyze",
