@@ -911,3 +911,16 @@ Bu dosya her faz ve görev sonunda güncellenir.
   - `apps/desktop/src/renderer/src/services/webrtc.ts`: `AudioContext` ve `GainNode` Web Audio API hattı devreye alındı. Uzaktan gelen ses `MediaStreamSource` -> `GainNode` -> `MediaStreamDestination` -> `HTMLAudioElement` boru hattından geçirilir.
   - `applyPeerGain`: Hem `GainNode.gain.setValueAtTime(targetGain, currentTime)` ile %0'dan %200'e kadar kesintisiz güçlendirme/kısma yapılır, hem de susturma ve sağırlaştırma anında sıfır gecikmeyle etki eder. Çıkış aygıtı seçimi (`setSinkId`) korunur.
 
+## Bot Bağlantı Durumu, Saf Discord Bot Deneyimi ve Sağ Tık Ses Denetimleri (v0.1.53)
+
+- [x] **Bot Katıldığında "Bağlanıyor..." Durumuna Düşmeyi Engelleme:**
+  - `apps/desktop/src/renderer/src/services/webrtc.ts`: `updateConnectionStatusGate()` fonksiyonunda botlar (`isBot` veya `userId.startsWith('bot-')`) eş bağlantı kontrollerinden hariç tutuldu.
+  - Zaten bağlı olan ses odasının (`connectionStatus === 'connected'`) yeni bir bot veya kullanıcı katıldığında asla geri `connecting` durumuna düşürülmemesi sağlandı.
+- [x] **Görsel Müzik Oynatıcı Widget ve Butonlarının Kaldırılması (Sadece Bot):**
+  - `apps/desktop/src/renderer/src/components/music/MusicPlayerWidget.tsx`: Görsel arayüz (açılır bar, oynatıcı kontrolleri vb.) tamamen kaldırıldı (`return null;`). Arka plandaki şarkı yükleme ve parça bitişi devir mekanizması sessizce çalışmaya devam eder.
+  - `apps/desktop/src/renderer/src/components/VoiceStageView.tsx`: Üst ve alt gezinme çubuklarındaki "Birlikte Dinle / Müzik" butonları kaldırıldı. Müzik yönetimi tamamen Discord tarzı komutlar (`!play`, `!pause`, `!skip`, `!stop`) ve ses kanalındaki bot kartı üzerinden yürütülür.
+- [x] **Sağ Tık Menüsünden Bot Sesi Ayarlama ve Susturma Entegrasyonu:**
+  - `apps/desktop/src/main/musicPlayer.ts`: `music:setVolume` işleyicisine `this.playerWindow.webContents.setAudioMuted(isMuted)` eklendi; böylece susturulduğunda yerel Chromium penceresi anında ses keser.
+  - `apps/desktop/src/renderer/src/services/webrtc.ts`: `setPeerVolume`, `setPeerMuted` ve `applyPeerGain` fonksiyonları bot kimliği (`bot-`) için doğrudan `window.echoApi.music.setVolume` ile bağlandı; host kullanıcısı bota sağ tıklayıp ses kıstığında yerel müzik motorunun sesi anında kısılır veya susturulur.
+  - `apps/desktop/src/renderer/src/components/UserContextMenu.tsx`: Botlar için anlamsız olan "Direkt Mesaj Gönder" butonu gizlendi, menüdeki ses ve susturma değişiklikleri bot motoruyla anlık senkronize edildi.
+

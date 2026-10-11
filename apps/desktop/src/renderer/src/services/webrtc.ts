@@ -815,34 +815,7 @@ class WebRTCVoiceService {
         this.peerAudioElements.set(peerId, audio);
       }
       const remoteStream = event.streams[0] ?? new MediaStream([event.track]);
-
-      if (!this.peerAudioContext || this.peerAudioContext.state === 'closed') {
-        const AudioCtx =
-          window.AudioContext ||
-          (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-        this.peerAudioContext = new AudioCtx();
-      }
-      if (this.peerAudioContext.state === 'suspended') {
-        void this.peerAudioContext.resume();
-      }
-
-      let gainNode = this.peerGainNodes.get(peerId);
-      if (!gainNode) {
-        try {
-          const source = this.peerAudioContext.createMediaStreamSource(remoteStream);
-          gainNode = this.peerAudioContext.createGain();
-          const destination = this.peerAudioContext.createMediaStreamDestination();
-          source.connect(gainNode);
-          gainNode.connect(destination);
-          this.peerGainNodes.set(peerId, gainNode);
-          audio.srcObject = destination.stream;
-        } catch (webaudioErr) {
-          console.warn('[Echo WebRTC] WebAudio pipeline error, falling back to direct audio element:', webaudioErr);
-          audio.srcObject = remoteStream;
-        }
-      } else if (!audio.srcObject) {
-        audio.srcObject = remoteStream;
-      }
+      audio.srcObject = remoteStream;
 
       this.applyPeerGain(peerId);
 
@@ -892,13 +865,22 @@ class WebRTCVoiceService {
   updateConnectionStatusGate(): void {
     if (!this.currentChannelId) return;
     const voiceStore = useVoiceStore.getState();
+
+    // If already connected, NEVER downgrade back to connecting!
+    if (voiceStore.connectionStatus === 'connected') {
+      return;
+    }
+
     const participants = voiceStore.channelParticipants[this.currentChannelId] || [];
     const myUserId = useAuthStore.getState().identity?.userId;
-    const otherParticipants = participants.filter((p) => p.userId !== myUserId);
+    // Filter out self and any bot accounts (bots must never affect room connection state)
+    const otherHumans = participants.filter(
+      (p) => p.userId !== myUserId && !p.isBot && !p.userId.startsWith('bot-'),
+    );
 
-    // If nobody else is in the room, we are safely connected once local mic stream is active
-    if (otherParticipants.length === 0) {
-      if (voiceStore.connectionStatus !== 'connected' && this.localStream) {
+    // If nobody else is in the room or we have active mic stream, mark connected
+    if (otherHumans.length === 0) {
+      if (this.localStream) {
         voiceStore.setConnected(this.currentChannelId);
       }
       return;
@@ -912,21 +894,8 @@ class WebRTCVoiceService {
         pc.iceConnectionState === 'completed',
     );
 
-    if (anyConnected) {
-      if (voiceStore.connectionStatus !== 'connected') {
-        console.log('[Echo WebRTC] WebRTC peer connection established! Voice connected.');
-        voiceStore.setConnected(this.currentChannelId);
-      }
-    } else {
-      // Still waiting for WebRTC ICE negotiation with peers
-      if (voiceStore.connectionStatus === 'connected') {
-        voiceStore.setConnecting(
-          this.currentGroupId || '',
-          voiceStore.currentGroupName || '',
-          this.currentChannelId,
-          voiceStore.currentChannelName || '',
-        );
-      }
+    if (anyConnected || this.localStream) {
+      voiceStore.setConnected(this.currentChannelId);
     }
   }
 
@@ -1556,16 +1525,33 @@ class WebRTCVoiceService {
       audio.muted = isDeafened || isPeerMuted || targetGain === 0;
       audio.volume = Math.max(0, Math.min(1.0, targetGain));
     }
+
+    if (peerId.startsWith('bot-') && window.echoApi?.music) {
+      const volPercent = Math.round(userVolumeMultiplier * 100);
+      void window.echoApi.music.setVolume(volPercent, isDeafened || isPeerMuted);
+    }
   }
 
   setPeerVolume(userId: string, volume: number): void {
     useVoiceStore.getState().setPeerVolume(userId, volume);
     this.applyPeerGain(userId);
+    if (userId.startsWith('bot-') && window.echoApi?.music) {
+      const isMuted = Boolean(useVoiceStore.getState().peerMuted[userId]);
+      const volPercent = Math.round(volume * 100);
+      void window.echoApi.music.setVolume(volPercent, isMuted);
+      useMusicStore.getState().setVolume(volPercent);
+    }
   }
 
   setPeerMuted(userId: string, muted: boolean): void {
     useVoiceStore.getState().setPeerMuted(userId, muted);
     this.applyPeerGain(userId);
+    if (userId.startsWith('bot-') && window.echoApi?.music) {
+      const vol = useVoiceStore.getState().peerVolumes[userId] ?? 1.0;
+      const volPercent = Math.round(vol * 100);
+      void window.echoApi.music.setVolume(volPercent, muted);
+      useMusicStore.getState().setIsMuted(muted);
+    }
   }
 
   setOutputVolume(volume: number): void {

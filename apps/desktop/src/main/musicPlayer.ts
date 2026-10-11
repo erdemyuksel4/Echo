@@ -96,6 +96,13 @@ class MusicPlayerManager {
       async (_, { volume, isMuted }: { volume: number; isMuted: boolean }) => {
         this.volume = Math.max(0, Math.min(100, volume));
         this.isMuted = isMuted;
+        if (this.playerWindow && !this.playerWindow.isDestroyed()) {
+          try {
+            this.playerWindow.webContents.setAudioMuted(isMuted);
+          } catch {
+            // Ignore
+          }
+        }
         const targetVol = isMuted ? 0 : this.volume;
         this.executeJs(`
           (function() {

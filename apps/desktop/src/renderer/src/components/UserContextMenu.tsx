@@ -14,7 +14,6 @@ import { useAuthStore } from '../stores/useAuthStore';
 import { useChatStore } from '../stores/useChatStore';
 import { useDmStore } from '../stores/useDmStore';
 import { webrtcService } from '../services/webrtc';
-import { wsService } from '../services/websocket';
 
 export interface ContextMenuUser {
   userId: string;
@@ -89,10 +88,17 @@ export const UserContextMenu: React.FC<Props> = ({ user, position, onClose }) =>
   const handleVolumeChange = (newPercent: number) => {
     const vol = newPercent / 100;
     webrtcService.setPeerVolume(user.userId, vol);
+    if (user.userId.startsWith('bot-') && window.echoApi?.music) {
+      void window.echoApi.music.setVolume(newPercent, isMuted);
+    }
   };
 
   const handleToggleMute = () => {
-    webrtcService.setPeerMuted(user.userId, !isMuted);
+    const newMuted = !isMuted;
+    webrtcService.setPeerMuted(user.userId, newMuted);
+    if (user.userId.startsWith('bot-') && window.echoApi?.music) {
+      void window.echoApi.music.setVolume(volumePercent, newMuted);
+    }
   };
 
   const handleOpenDm = () => {
@@ -104,7 +110,6 @@ export const UserContextMenu: React.FC<Props> = ({ user, position, onClose }) =>
     useChatStore.getState().setActiveGroup(null);
     useChatStore.getState().setActiveChannel(null);
     useChatStore.setState({ activeGroupMeta: null });
-    wsService.disconnect();
     onClose();
   };
 
@@ -246,7 +251,7 @@ export const UserContextMenu: React.FC<Props> = ({ user, position, onClose }) =>
 
       {/* Action Buttons */}
       <div className="space-y-0.5">
-        {!isLocal && (
+        {!isLocal && !user.userId.startsWith('bot-') && (
           <button
             type="button"
             onClick={handleOpenDm}

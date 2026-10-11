@@ -14,6 +14,7 @@ interface MusicStoreState {
   setPlaybackState: (state: MusicPlaybackState) => void;
   setVolume: (volume: number) => void;
   toggleMute: () => void;
+  setIsMuted: (isMuted: boolean) => void;
   setPanelOpen: (open: boolean) => void;
   setExpandedStage: (expanded: boolean) => void;
   setIsAdPlaying: (isAd: boolean) => void;
@@ -51,6 +52,8 @@ export const useMusicStore = create<MusicStoreState>((set, get) => ({
   },
 
   toggleMute: () => set((prev) => ({ isMuted: !prev.isMuted })),
+
+  setIsMuted: (isMuted) => set({ isMuted }),
 
   setPanelOpen: (isPanelOpen) => set({ isPanelOpen }),
 
