@@ -848,4 +848,14 @@ Bu dosya her faz ve görev sonunda güncellenir.
 - [x] **Sağlam Konsol Mesajı Tabanlı Reklam & Bitiş Algılama:**
   - `apps/desktop/src/main/musicPlayer.ts`: Güvensiz URL hash manipülasyonu yerine Chromium `console.log('__ECHO_AD__:true')` / `console.log('__ECHO_AD__:false')` ve `console.log('__ECHO_ENDED__')` IPC mekanizmasına geçildi. Reklam tespiti YouTube'un en güncel DOM sınıflarını ve API'lerini (`.ad-showing`, `.ad-interrupting`, `.ytp-ad-text`, `getAdState`) kapsayacak şekilde güçlendirildi.
 
+## Diferansiyel (Delta) Güncelleme & Tam 86 MB İndirme Kök Neden Çözümü (v0.1.47)
+
+- [x] **86 MB Tam Kurulum Dosyası İndirilme Sorununun Kök Neden Çözümü:**
+  - *Kök Neden:* `apps/desktop/src/main/updater.ts` içinde `autoUpdater.setFeedURL` generic provider (`https://github.com/erdemyuksel4/Echo/releases/latest/download`) olarak yapılandırılmıştı. `electron-updater` diferansiyel güncelleme yaparken eski sürümün `.blockmap` dosyasını ararken URL'deki yeni sürüm numarasını eski sürümle değiştirir. Ancak generic provider ile `releases/latest/download` URL'i kullanıldığında GitHub yalnızca en son sürümün varlıklarını barındırdığından, eski sürümün `.blockmap` isteği (`Echo-Setup-0.1.46.exe.blockmap`) 404 Not Found ile sonuçlanıyordu. Eski blockmap bulunamayınca `electron-updater` diferansiyel indirmeden mecburi olarak tam indirmeye (fallback to full download) düşüyor ve her güncellemede ~86-90 MB'lık tam installer'ı baştan indiriyordu.
+  - *Çözüm:*
+    1. `apps/desktop/src/main/updater.ts`: Generic provider yerine doğrudan GitHub Provider (`provider: 'github'`, `owner: 'erdemyuksel4'`, `repo: 'Echo'`) yapılandırıldı. Bu sayede hem yeni sürümün hem de eski sürümün `.blockmap` dosyaları GitHub Release etiketlerinden (`/releases/download/v0.1.47/...` ve `/releases/download/v0.1.46/...`) HTTP 200 ile başarıyla çekilir.
+    2. `apps/desktop/package.json`: `nsis` derleme ayarlarına `"differentialPackage": true` eklendi.
+    3. `scripts/bump-version.mjs`: Hatalı `.map` sözdizimi temizlendi, `.exe.delta` dosyası kopyalama ve yükleme akışına dahil edildi.
+    4. HTTP Range istekleri (`Accept-Ranges: bytes`, HTTP 206 Partial Content) GitHub Release altyapısında doğrulandı. Değişen bloklar artık karşılaştırılarak tüm 86 MB yerine yalnızca değişen birkaç megabaytlık delta parçası indirilir.
+
 
