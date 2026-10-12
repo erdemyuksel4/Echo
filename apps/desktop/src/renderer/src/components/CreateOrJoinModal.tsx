@@ -39,6 +39,8 @@ export const CreateOrJoinModal: React.FC<Props> = ({ isOpen, onClose }) => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: groupName.trim(),
+          displayName: identity.displayName,
+          pubkey: identity.publicKeyHex,
           ownerDisplayName: identity.displayName,
           ownerPubkey: identity.publicKeyHex,
           ts,
@@ -52,7 +54,7 @@ export const CreateOrJoinModal: React.FC<Props> = ({ isOpen, onClose }) => {
       }
 
       useDmStore.getState().setActivePeer(null);
-      addGroup({ id: data.groupId, name: data.name });
+      addGroup({ id: data.groupId, name: data.name, ownerId: data.ownerId });
       setActiveGroup(data.groupId);
       setDefaultInviteCode(data.inviteCode);
       wsService.connect(data.groupId);

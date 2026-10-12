@@ -168,6 +168,11 @@ app.post('/api/groups', async (c) => {
     }),
   });
 
+  if (!initRes.ok) {
+    const errData = (await initRes.json().catch(() => ({}))) as { error?: string };
+    return c.json({ error: errData.error ?? 'Grup başlatılamadı' }, 500);
+  }
+
   const initData = (await initRes.json()) as { defaultInviteCode: string };
 
   // 5. Add membership to owner's UserDO

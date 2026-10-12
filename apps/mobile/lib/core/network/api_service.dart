@@ -23,6 +23,8 @@ class ApiService {
       headers: {'Content-Type': 'application/json'},
       body: jsonEncode({
         'name': name.trim(),
+        'displayName': identity.displayName,
+        'pubkey': identity.publicKeyHex,
         'ownerDisplayName': identity.displayName,
         'ownerPubkey': identity.publicKeyHex,
         'ts': ts,

@@ -14,7 +14,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Release")]
 [assembly: System.Reflection.AssemblyDescriptionAttribute("Echo Windows Updater")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+54dfa33ce1a13b69c29858a51a2f0316887fe0f0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+3f0d8d717d808adfd75efec4dafd05c940f85144")]
 [assembly: System.Reflection.AssemblyProductAttribute("EchoUpdater")]
 [assembly: System.Reflection.AssemblyTitleAttribute("EchoUpdater")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

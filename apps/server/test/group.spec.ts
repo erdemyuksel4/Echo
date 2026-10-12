@@ -25,6 +25,28 @@ describe('Server Group Routes', () => {
     expect(body.error).toBe('İmza doğrulanamadı');
   });
 
+  it('POST /api/groups should accept legacy ownerDisplayName & ownerPubkey and perform signature verification', async () => {
+    const keypair = generateKeyPair();
+    const ts = Date.now();
+    const wrongSig = '0'.repeat(128);
+
+    const res = await app.request('/api/groups', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: 'Legacy Grubu',
+        ownerDisplayName: 'Erdem Owner',
+        ownerPubkey: keypair.publicKeyHex,
+        ts,
+        sig: wrongSig,
+      }),
+    });
+
+    expect(res.status).toBe(401);
+    const body = (await res.json()) as { error?: string };
+    expect(body.error).toBe('İmza doğrulanamadı');
+  });
+
   it('POST /api/groups should reject expired timestamp', async () => {
     const keypair = generateKeyPair();
     const oldTs = Date.now() - 100_000; // 100 sec ago

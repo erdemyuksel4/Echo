@@ -998,6 +998,12 @@ Bu dosya her faz ve görev sonunda güncellenir.
   - İndirme bağlantısı: `https://github.com/erdemyuksel4/Echo/releases/download/mobile-v0.1.0/Echo-Mobile.apk`
   - Patron talimatıyla her git push işleminde gereksiz çalışan GitHub Actions iş akışları (`.github/workflows`) ve bulut derleme betiği tamamen kaldırıldı. Dağıtım ve derlemeler yerel `pnpm release` ile yönetilmektedir.
 
+## Grup Oluşturma Hatası Düzeltmesi (Grup Açamama Sorunu Çözümü)
 
-
-
+- [x] **Şema & İstemci Parametre Uyuşmazlığı Giderildi:**
+  - `CreateOrJoinModal.tsx` (Masaüstü) ve `api_service.dart` (Mobil) grup oluştururken `ownerDisplayName` ve `ownerPubkey` anahtarlarını gönderirken; `CreateGroupRequestSchema` ve sunucu tarafı `displayName` ile `pubkey` alanlarını bekliyordu.
+  - Bu uyuşmazlık nedeniyle sunucu `400: Geçersiz grup oluşturma parametreleri` hatası döndürüyor ve kullanıcılar yeni grup oluşturamıyordu.
+  - `packages/shared/src/schemas/auth.ts`: `CreateGroupRequestSchema` `z.preprocess` katmanı ile hem `displayName` / `pubkey` hem de `ownerDisplayName` / `ownerPubkey` adlandırmalarını otomatik eşleyecek ve doğrulayacak şekilde güncellendi.
+  - `CreateOrJoinModal.tsx` ve `api_service.dart`: İstek gövdesine hem `displayName`/`pubkey` hem `ownerDisplayName`/`ownerPubkey` alanları eklenerek geriye ve ileriye dönük tam uyumluluk sağlandı.
+  - `apps/server/src/index.ts`: `POST /api/groups` uç noktasına `initRes.ok` hata denetimi eklendi.
+  - `packages/shared/src/__tests__/protocol.test.ts` ve `apps/server/test/group.spec.ts`: Yeni davranışları doğrulayan birim testleri eklendi. Tüm testler (96/96) sıfır hata ile geçti.

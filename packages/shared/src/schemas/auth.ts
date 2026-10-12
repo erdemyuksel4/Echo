@@ -18,13 +18,26 @@ export const UserProfileSchema = z.object({
 
 export type UserProfile = z.infer<typeof UserProfileSchema>;
 
-export const CreateGroupRequestSchema = z.object({
-  name: z.string().min(2).max(50).trim(),
-  displayName: z.string().min(2).max(32).trim(),
-  pubkey: z.string().length(64),
-  ts: z.number().int().positive(),
-  sig: z.string().length(128),
-});
+export const CreateGroupRequestSchema = z.preprocess(
+  (val: unknown) => {
+    if (typeof val === 'object' && val !== null) {
+      const obj = val as Record<string, unknown>;
+      return {
+        ...obj,
+        displayName: obj.displayName ?? obj.ownerDisplayName,
+        pubkey: obj.pubkey ?? obj.ownerPubkey,
+      };
+    }
+    return val;
+  },
+  z.object({
+    name: z.string().min(2).max(50).trim(),
+    displayName: z.string().min(2).max(32).trim(),
+    pubkey: z.string().length(64),
+    ts: z.number().int().positive(),
+    sig: z.string().length(128),
+  }),
+);
 
 export type CreateGroupRequest = z.infer<typeof CreateGroupRequestSchema>;
 
