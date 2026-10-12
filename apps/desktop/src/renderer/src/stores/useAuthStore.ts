@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { UserProfile } from '@echo/shared';
+import type { UserProfile, TransferredIdentity } from '@echo/shared';
 
 export type StoredIdentityProfile = UserProfile & { publicKeyHex: string };
 
@@ -8,6 +8,7 @@ interface AuthState {
   isLoaded: boolean;
   loadIdentity: () => Promise<void>;
   createIdentity: (displayName: string, avatarColor: string) => Promise<void>;
+  importTransferredIdentity: (data: TransferredIdentity) => Promise<void>;
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
@@ -32,5 +33,11 @@ export const useAuthStore = create<AuthState>((set) => ({
     if (!window.echoApi?.createIdentity) throw new Error('echoApi unavailable');
     const newId = await window.echoApi.createIdentity(displayName, avatarColor);
     set({ identity: newId });
+  },
+
+  importTransferredIdentity: async (data: TransferredIdentity) => {
+    if (!window.echoApi?.importIdentity) throw new Error('echoApi unavailable');
+    const imported = await window.echoApi.importIdentity(data);
+    set({ identity: imported });
   },
 }));

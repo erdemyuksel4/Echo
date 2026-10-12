@@ -12,3 +12,5 @@ export * from './schemas/media';
 export * from './schemas/music';
 export * from './crypto/e2ee';
 export * from './schemas/bot';
+export * from './schemas/deviceLink';
+export * from './crypto/deviceLinkCrypto';

@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import type { UserProfile, ScreenShareSource } from '@echo/shared';
+import type { UserProfile, ScreenShareSource, TransferredIdentity } from '@echo/shared';
 
 export interface AppInfo {
   appName: string;
@@ -26,6 +26,8 @@ export interface EchoApi {
   getAppInfo: () => Promise<AppInfo>;
   getIdentity: () => Promise<StoredIdentityProfile | null>;
   createIdentity: (displayName: string, avatarColor: string) => Promise<StoredIdentityProfile>;
+  importIdentity: (data: TransferredIdentity) => Promise<StoredIdentityProfile>;
+  exportFullIdentity: () => Promise<TransferredIdentity | null>;
   signAuth: (targetId: string, timestamp: number) => Promise<SignedAuthResult | null>;
   signPayload: (payload: string) => Promise<SignedAuthResult | null>;
   showNotification: (options: {
@@ -87,6 +89,12 @@ const echoApi: EchoApi = {
   },
   createIdentity: (displayName: string, avatarColor: string): Promise<StoredIdentityProfile> => {
     return ipcRenderer.invoke('identity:create', { displayName, avatarColor });
+  },
+  importIdentity: (data: TransferredIdentity): Promise<StoredIdentityProfile> => {
+    return ipcRenderer.invoke('identity:import', { data });
+  },
+  exportFullIdentity: (): Promise<TransferredIdentity | null> => {
+    return ipcRenderer.invoke('identity:exportFull');
   },
   signAuth: (targetId: string, timestamp: number): Promise<SignedAuthResult | null> => {
     return ipcRenderer.invoke('identity:signAuth', { targetId, timestamp });

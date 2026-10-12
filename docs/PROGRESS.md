@@ -18,6 +18,7 @@ Bu dosya her faz ve görev sonunda güncellenir.
 | Faz 9 | Kamera (Webcam)                         | Tamamlandı | `faz-9-kamera`            | WebRTC 480p24 mesh kamera yayını, VoiceStageView video grid, Ayarlar kamera seçici & ayna testi                                          |
 | Faz 10 | Gelişmiş İşbirliği & Güvenlik Özellikleri | Tamamlandı | `main`                    | Ekran kaydetme (.webm), Ekrana çizim/beyaz tahta, Uçtan Uca Şifreleme (E2EE), Uzaktan kontrol (TeamViewer tarzı)                       |
 | Faz 11 | Echo Mobil Versiyonu (Android & iOS)    | Tamamlandı | `main`                    | Flutter tabanlı, Ed25519 kimlik, WebRTC mesh ses & kamera, ekran izleme, DM, Markdown, Giphy, çizim tahtası, sıfır lint/hata             |
+| Faz 12 | Cihaz Eşleme (QR & Kod ile Oturum Açma) | Tamamlandı | `main`                    | X25519 Diffie-Hellman + AES-256-GCM E2EE kimlik transferi, QR Kod, 6 haneli eşleme kodu, OnboardingModal ve SettingsModal entegrasyonu |
 
 ## Faz 0 — Kabul Kriterleri ve Gerçekleşenler
 
@@ -1007,3 +1008,37 @@ Bu dosya her faz ve görev sonunda güncellenir.
   - `CreateOrJoinModal.tsx` ve `api_service.dart`: İstek gövdesine hem `displayName`/`pubkey` hem `ownerDisplayName`/`ownerPubkey` alanları eklenerek geriye ve ileriye dönük tam uyumluluk sağlandı.
   - `apps/server/src/index.ts`: `POST /api/groups` uç noktasına `initRes.ok` hata denetimi eklendi.
   - `packages/shared/src/__tests__/protocol.test.ts` ve `apps/server/test/group.spec.ts`: Yeni davranışları doğrulayan birim testleri eklendi. Tüm testler (96/96) sıfır hata ile geçti.
+
+## Faz 12 — Cihaz Eşleme & QR Kod / Giriş Kodu ile Oturum Aktarımı
+
+- [x] **Ortak Şemalar ve Kripto Motoru (`@echo/shared`):**
+  - `DeviceLinkStatusSchema`, `DeviceLinkInitRequestSchema`, `DeviceLinkInitResponseSchema`, `DeviceLinkClaimRequestSchema`, `DeviceLinkClaimResponseSchema`, `DeviceLinkApproveRequestSchema`, `DeviceLinkRejectRequestSchema`, `DeviceLinkSessionStateSchema`, `TransferredIdentitySchema`.
+  - `deviceLinkCrypto.ts`: X25519 Diffie-Hellman (`@noble/curves/ed25519`) ve Web Crypto AES-256-GCM tabanlı sıfır sızıntılı (Zero-Knowledge / E2EE) oturum şifreleme ve anahtar türetme.
+  - Birim testleri: `deviceLink.test.ts` (anahtar üretimi, Diffie-Hellman ortak sır türetme, şifreleme/çözme ve şema doğrulamaları).
+- [x] **Sunucu Mimarisi (`apps/server`):**
+  - `UserDO.ts`: SQLite `device_links` tablosu (`session_id`, `link_code`, `temp_public_key`, `target_device`, `status`, `expires_at`, vb.).
+  - Uç noktalar:
+    - `POST /api/auth/link/init`: Yeni cihaz için 5 dakikalık geçici oturum ve 6 haneli benzersiz eşleme kodu (`849-213`) üretimi.
+    - `POST /api/auth/link/claim`: Giriş yapmış cihazın kodu girerek hedef cihaz oturumunu talep etmesi.
+    - `POST /api/auth/link/approve`: Giriş yapmış cihazın E2EE şifrelenmiş kimliği yükleyip onaylaması.
+    - `POST /api/auth/link/reject`: Giriş yapmış cihazın talebi reddetmesi.
+    - `GET /api/auth/link/status/:sessionId`: Yeni cihazın anlık durum sorgulaması (Polling).
+  - Birim testleri: `deviceLink.spec.ts` (hatalı parametreler ve tam uçtan uca döngü testi).
+- [x] **Masaüstü Entegrasyonu ve Arayüz (`apps/desktop`):**
+  - Electron Ana Süreç (`identity.ts`, `index.ts`): `importIdentity` ve `exportFullIdentity` metodları (safeStorage DPAPI ile güvenli kaydetme).
+  - Preload: Tipli `importIdentity` ve `exportFullIdentity` metotları.
+  - `deviceLinkService.ts`: QR kod veri URL'si üretimi (`qrcode`), oturum başlatma, kod doğrulama, onaylama ve şifreli aktarım çözme.
+  - `OnboardingModal.tsx`:
+    - "Yeni Hesap Aç" ve "Cihaz Eşle (QR / Kod)" sekmeleri.
+    - Büyük QR kod gösterimi, okunaklı 6 haneli kod kutusu (`849-213`), kopyalama butonu, 5 dakikalık geri sayım sayacı.
+    - Canlı durum bildirimleri (Kod girildiğinde "İzin bekleniyor", onaylandığında "İzin verildi! Hesaba giriliyor...").
+  - `SettingsModal.tsx`:
+    - "📱 Cihaz Eşle" sekmesi.
+    - 6 haneli kod girme alanı, "Cihazı Doğrula" butonu.
+    - Kod girildiğinde çıkan net onay kartı ("Yeni Cihaz Giriş İsteği — Hedef Cihaz, Kod, İzin Ver / Reddet").
+    - İzin verildiğinde anında E2EE şifreli aktarım ve "İşlem Başarılı" geri bildirimi.
+- [x] **Test & Kalite Doğrulamaları:**
+  - `pnpm typecheck`: Monorepo genelinde sıfır hata ile geçti.
+  - `pnpm lint`: Monorepo genelinde sıfır hata ile geçti.
+  - `pnpm test`: 19 test dosyası, 104 testin tamamı (%100) başarıyla geçti.
+  - `pnpm --filter @echo/desktop build`: Sıfır hata ile tamamlandı.

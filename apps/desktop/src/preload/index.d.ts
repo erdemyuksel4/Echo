@@ -1,4 +1,4 @@
-import type { UserProfile, ScreenShareSource } from '@echo/shared';
+import type { UserProfile, ScreenShareSource, TransferredIdentity } from '@echo/shared';
 export interface AppInfo {
     appName: string;
     protocolVersion: number;
@@ -21,6 +21,8 @@ export interface EchoApi {
     getAppInfo: () => Promise<AppInfo>;
     getIdentity: () => Promise<StoredIdentityProfile | null>;
     createIdentity: (displayName: string, avatarColor: string) => Promise<StoredIdentityProfile>;
+    importIdentity: (data: TransferredIdentity) => Promise<StoredIdentityProfile>;
+    exportFullIdentity: () => Promise<TransferredIdentity | null>;
     signAuth: (targetId: string, timestamp: number) => Promise<SignedAuthResult | null>;
     signPayload: (payload: string) => Promise<SignedAuthResult | null>;
     showNotification: (options: {

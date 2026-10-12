@@ -16,7 +16,7 @@ import {
   dialog,
 } from 'electron';
 import { electronApp, optimizer, is } from '@electron-toolkit/utils';
-import { APP_NAME, PROTOCOL_VERSION } from '@echo/shared';
+import { APP_NAME, PROTOCOL_VERSION, type TransferredIdentity } from '@echo/shared';
 import { IdentityManager } from './identity';
 import { initAutoUpdater } from './updater';
 import { musicPlayerManager } from './musicPlayer';
@@ -351,6 +351,14 @@ if (!gotTheLock) {
 
     ipcMain.handle('identity:signPayload', (_, { payload }: { payload: string }) => {
       return identityManager.signPayload(payload);
+    });
+
+    ipcMain.handle('identity:import', (_, { data }: { data: TransferredIdentity }) => {
+      return identityManager.importIdentity(data);
+    });
+
+    ipcMain.handle('identity:exportFull', () => {
+      return identityManager.exportFullIdentity();
     });
 
     // Handle Notification & Badge IPC

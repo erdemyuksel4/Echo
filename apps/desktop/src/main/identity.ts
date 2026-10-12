@@ -7,6 +7,7 @@ import {
   signMessage,
   buildAuthPayload,
   type UserProfile,
+  type TransferredIdentity,
 } from '@echo/shared';
 
 interface StoredIdentity {
@@ -75,6 +76,50 @@ export class IdentityManager {
       avatarColor,
       publicKeyHex: keypair.publicKeyHex,
       createdAt: now,
+    };
+  }
+
+  importIdentity(data: TransferredIdentity): UserProfile & { publicKeyHex: string } {
+    let encryptedPrivKeyHex: string;
+    if (safeStorage.isEncryptionAvailable()) {
+      const encryptedBuffer = safeStorage.encryptString(data.privateKeyHex);
+      encryptedPrivKeyHex = encryptedBuffer.toString('hex');
+    } else {
+      encryptedPrivKeyHex = Buffer.from(data.privateKeyHex).toString('base64');
+    }
+
+    const stored: StoredIdentity = {
+      userId: data.userId,
+      displayName: data.displayName,
+      avatarColor: data.avatarColor,
+      publicKeyHex: data.publicKeyHex,
+      encryptedPrivateKeyHex: encryptedPrivKeyHex,
+      createdAt: data.createdAt,
+    };
+
+    writeFileSync(this.identityPath, JSON.stringify(stored, null, 2), 'utf8');
+
+    return {
+      userId: data.userId,
+      displayName: data.displayName,
+      avatarColor: data.avatarColor,
+      publicKeyHex: data.publicKeyHex,
+      createdAt: data.createdAt,
+    };
+  }
+
+  exportFullIdentity(): TransferredIdentity | null {
+    const identity = this.getIdentity();
+    const privKeyHex = this.getPrivateKeyHex();
+    if (!identity || !privKeyHex) return null;
+
+    return {
+      userId: identity.userId,
+      displayName: identity.displayName,
+      avatarColor: identity.avatarColor,
+      publicKeyHex: identity.publicKeyHex,
+      privateKeyHex: privKeyHex,
+      createdAt: identity.createdAt,
     };
   }
 

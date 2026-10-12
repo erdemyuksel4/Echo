@@ -14,6 +14,10 @@ import {
   verifySignature,
   DEFAULT_FALLBACK_ICE_SERVERS,
   TurnResponseSchema,
+  DeviceLinkInitRequestSchema,
+  DeviceLinkClaimRequestSchema,
+  DeviceLinkApproveRequestSchema,
+  DeviceLinkRejectRequestSchema,
   type HealthResponse,
 } from '@echo/shared';
 import { GroupDO } from './durable/GroupDO';
@@ -118,6 +122,86 @@ app.get('/api/health', (c) => {
 
   const parsed = HealthResponseSchema.parse(healthData);
   return c.json(parsed);
+});
+
+// ── Device Link API (QR & Code Transfer) ───────────────────────────────────
+
+function getDeviceLinkDO(env: Env) {
+  const doId = env.USER_DO.idFromName('global-device-link');
+  return env.USER_DO.get(doId);
+}
+
+// 1. Yeni Cihaz (Cihaz B): Oturum başlatır (6 haneli kod & oturum id alır)
+app.post('/api/auth/link/init', async (c) => {
+  const rawBody = await c.req.json();
+  const parse = DeviceLinkInitRequestSchema.safeParse(rawBody);
+  if (!parse.success) {
+    return c.json({ error: 'Geçersiz parametreler' }, 400);
+  }
+
+  const stub = getDeviceLinkDO(c.env);
+  return stub.fetch('http://do/internal/device-link/init', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(parse.data),
+  });
+});
+
+// 2. Giriş Yapılmış Cihaz (Cihaz A): 6 haneli kodu girer ve oturumu sorgulayıp talep eder
+app.post('/api/auth/link/claim', async (c) => {
+  const rawBody = await c.req.json();
+  const parse = DeviceLinkClaimRequestSchema.safeParse(rawBody);
+  if (!parse.success) {
+    return c.json({ error: 'Geçersiz kod veya parametre' }, 400);
+  }
+
+  const stub = getDeviceLinkDO(c.env);
+  return stub.fetch('http://do/internal/device-link/claim', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(parse.data),
+  });
+});
+
+// 3. Giriş Yapılmış Cihaz (Cihaz A): Onay verir ve şifreli kimliği yükler
+app.post('/api/auth/link/approve', async (c) => {
+  const rawBody = await c.req.json();
+  const parse = DeviceLinkApproveRequestSchema.safeParse(rawBody);
+  if (!parse.success) {
+    return c.json({ error: 'Geçersiz onay parametresi' }, 400);
+  }
+
+  const stub = getDeviceLinkDO(c.env);
+  return stub.fetch('http://do/internal/device-link/approve', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(parse.data),
+  });
+});
+
+// 4. Giriş Yapılmış Cihaz (Cihaz A): Talebi reddeder
+app.post('/api/auth/link/reject', async (c) => {
+  const rawBody = await c.req.json();
+  const parse = DeviceLinkRejectRequestSchema.safeParse(rawBody);
+  if (!parse.success) {
+    return c.json({ error: 'Geçersiz istek' }, 400);
+  }
+
+  const stub = getDeviceLinkDO(c.env);
+  return stub.fetch('http://do/internal/device-link/reject', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(parse.data),
+  });
+});
+
+// 5. Cihaz B: Oturum durumunu sorgular (Polling)
+app.get('/api/auth/link/status/:sessionId', async (c) => {
+  const sessionId = c.req.param('sessionId');
+  const stub = getDeviceLinkDO(c.env);
+  return stub.fetch(`http://do/internal/device-link/status?sessionId=${encodeURIComponent(sessionId)}`, {
+    method: 'GET',
+  });
 });
 
 // Create Group

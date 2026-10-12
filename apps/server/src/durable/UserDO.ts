@@ -78,6 +78,22 @@ export class UserDO extends DurableObject<Env> {
         peer_id      TEXT PRIMARY KEY,
         last_read_id TEXT NOT NULL DEFAULT ''
       );
+
+      CREATE TABLE IF NOT EXISTS device_links (
+        session_id        TEXT PRIMARY KEY,
+        link_code         TEXT UNIQUE,
+        temp_public_key   TEXT NOT NULL,
+        target_device     TEXT NOT NULL,
+        status            TEXT NOT NULL DEFAULT 'pending',
+        claimer_name      TEXT,
+        claimer_device    TEXT,
+        claimer_pubkey    TEXT,
+        encrypted_payload TEXT,
+        iv                TEXT,
+        created_at        INTEGER NOT NULL,
+        expires_at        INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_device_links_code ON device_links(link_code);
     `);
   }
 
@@ -111,6 +127,170 @@ export class UserDO extends DurableObject<Env> {
     if (url.pathname === '/internal/memberships' && request.method === 'GET') {
       const rows = [...this.sql.exec(`SELECT * FROM memberships ORDER BY joined_at DESC`)];
       return Response.json(rows);
+    }
+
+    // ── Device Linking (QR & Code Transfer) ──────────────────────────────────
+
+    if (url.pathname === '/internal/device-link/init' && request.method === 'POST') {
+      const now = Date.now();
+      // Clean expired sessions
+      this.sql.exec(`DELETE FROM device_links WHERE expires_at < ?`, now);
+
+      const body = (await request.json()) as { tempPublicKeyHex: string; deviceInfo?: string };
+      const sessionId = generateId();
+
+      // Generate a unique 6-digit link code (e.g. 849213)
+      let linkCode = '';
+      let attempts = 0;
+      while (attempts < 10) {
+        const rand = Math.floor(100000 + Math.random() * 900000).toString();
+        const existing = [...this.sql.exec(`SELECT session_id FROM device_links WHERE link_code = ?`, rand)];
+        if (existing.length === 0) {
+          linkCode = rand;
+          break;
+        }
+        attempts++;
+      }
+      if (!linkCode) {
+        linkCode = Math.floor(100000 + Math.random() * 900000).toString();
+      }
+
+      const formattedCode = `${linkCode.slice(0, 3)}-${linkCode.slice(3)}`;
+      const expiresAt = now + 5 * 60 * 1000; // 5 minutes TTL
+
+      this.sql.exec(
+        `INSERT INTO device_links (
+          session_id, link_code, temp_public_key, target_device, status, created_at, expires_at
+        ) VALUES (?, ?, ?, ?, 'pending', ?, ?)`,
+        sessionId,
+        linkCode,
+        body.tempPublicKeyHex,
+        body.deviceInfo || 'Yeni Cihaz',
+        now,
+        expiresAt,
+      );
+
+      return Response.json({
+        sessionId,
+        linkCode: formattedCode,
+        expiresAt,
+      });
+    }
+
+    if (url.pathname === '/internal/device-link/claim' && request.method === 'POST') {
+      const now = Date.now();
+      const body = (await request.json()) as {
+        linkCode: string;
+        claimerDisplayName: string;
+        claimerDeviceInfo?: string;
+      };
+
+      const cleanCode = body.linkCode.replace(/[^0-9]/g, '');
+      const rows = [
+        ...this.sql.exec(
+          `SELECT * FROM device_links WHERE link_code = ? AND expires_at > ?`,
+          cleanCode,
+          now,
+        ),
+      ];
+
+      if (rows.length === 0) {
+        return Response.json({ error: 'Geçersiz veya süresi dolmuş kod' }, { status: 404 });
+      }
+
+      const row = rows[0]!;
+      const sessionId = row.session_id as string;
+
+      this.sql.exec(
+        `UPDATE device_links SET status = 'claimed', claimer_name = ?, claimer_device = ? WHERE session_id = ?`,
+        body.claimerDisplayName,
+        body.claimerDeviceInfo || 'Echo Masaüstü',
+        sessionId,
+      );
+
+      return Response.json({
+        sessionId,
+        targetTempPublicKeyHex: row.temp_public_key as string,
+        targetDeviceInfo: row.target_device as string,
+        expiresAt: row.expires_at as number,
+      });
+    }
+
+    if (url.pathname === '/internal/device-link/approve' && request.method === 'POST') {
+      const now = Date.now();
+      const body = (await request.json()) as {
+        sessionId: string;
+        claimerTempPublicKeyHex: string;
+        encryptedPayload: { iv: string; cipherText: string };
+      };
+
+      const rows = [
+        ...this.sql.exec(
+          `SELECT * FROM device_links WHERE session_id = ? AND expires_at > ?`,
+          body.sessionId,
+          now,
+        ),
+      ];
+
+      if (rows.length === 0) {
+        return Response.json({ error: 'Oturum bulunamadı veya süresi doldu' }, { status: 404 });
+      }
+
+      this.sql.exec(
+        `UPDATE device_links
+         SET status = 'approved',
+             claimer_pubkey = ?,
+             encrypted_payload = ?,
+             iv = ?
+         WHERE session_id = ?`,
+        body.claimerTempPublicKeyHex,
+        body.encryptedPayload.cipherText,
+        body.encryptedPayload.iv,
+        body.sessionId,
+      );
+
+      return Response.json({ success: true });
+    }
+
+    if (url.pathname === '/internal/device-link/reject' && request.method === 'POST') {
+      const body = (await request.json()) as { sessionId: string };
+      this.sql.exec(`UPDATE device_links SET status = 'rejected' WHERE session_id = ?`, body.sessionId);
+      return Response.json({ success: true });
+    }
+
+    if (url.pathname === '/internal/device-link/status' && request.method === 'GET') {
+      const now = Date.now();
+      const sessionId = url.searchParams.get('sessionId') || '';
+      const rows = [...this.sql.exec(`SELECT * FROM device_links WHERE session_id = ?`, sessionId)];
+
+      if (rows.length === 0) {
+        return Response.json({ error: 'Oturum bulunamadı' }, { status: 404 });
+      }
+
+      const row = rows[0]!;
+      const expiresAt = row.expires_at as number;
+      let status = row.status as string;
+
+      if (expiresAt <= now && status !== 'approved') {
+        status = 'expired';
+      }
+
+      return Response.json({
+        sessionId: row.session_id,
+        status,
+        expiresAt,
+        targetDeviceInfo: row.target_device,
+        claimerDisplayName: row.claimer_name || undefined,
+        claimerDeviceInfo: row.claimer_device || undefined,
+        claimerTempPublicKeyHex: row.claimer_pubkey || undefined,
+        encryptedPayload:
+          row.encrypted_payload && row.iv
+            ? {
+                iv: row.iv,
+                cipherText: row.encrypted_payload,
+              }
+            : undefined,
+      });
     }
 
     // ── WebSocket ─────────────────────────────────────────────────────────────
