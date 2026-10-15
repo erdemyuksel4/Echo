@@ -49,13 +49,16 @@ export class IdentityManager {
     const userId = deriveUserId(keypair.publicKey);
     const now = Date.now();
 
-    // Encrypt private key with safeStorage if available
+    // Encrypt private key with safeStorage if available (with fallback on Linux/headless environments)
     let encryptedPrivKeyHex: string;
-    if (safeStorage.isEncryptionAvailable()) {
-      const encryptedBuffer = safeStorage.encryptString(keypair.privateKeyHex);
-      encryptedPrivKeyHex = encryptedBuffer.toString('hex');
-    } else {
-      // Fallback for environments where safeStorage is unavailable
+    try {
+      if (safeStorage.isEncryptionAvailable()) {
+        const encryptedBuffer = safeStorage.encryptString(keypair.privateKeyHex);
+        encryptedPrivKeyHex = encryptedBuffer.toString('hex');
+      } else {
+        encryptedPrivKeyHex = Buffer.from(keypair.privateKeyHex).toString('base64');
+      }
+    } catch {
       encryptedPrivKeyHex = Buffer.from(keypair.privateKeyHex).toString('base64');
     }
 
@@ -81,10 +84,14 @@ export class IdentityManager {
 
   importIdentity(data: TransferredIdentity): UserProfile & { publicKeyHex: string } {
     let encryptedPrivKeyHex: string;
-    if (safeStorage.isEncryptionAvailable()) {
-      const encryptedBuffer = safeStorage.encryptString(data.privateKeyHex);
-      encryptedPrivKeyHex = encryptedBuffer.toString('hex');
-    } else {
+    try {
+      if (safeStorage.isEncryptionAvailable()) {
+        const encryptedBuffer = safeStorage.encryptString(data.privateKeyHex);
+        encryptedPrivKeyHex = encryptedBuffer.toString('hex');
+      } else {
+        encryptedPrivKeyHex = Buffer.from(data.privateKeyHex).toString('base64');
+      }
+    } catch {
       encryptedPrivKeyHex = Buffer.from(data.privateKeyHex).toString('base64');
     }
 
@@ -129,12 +136,15 @@ export class IdentityManager {
       const raw = readFileSync(this.identityPath, 'utf8');
       const data = JSON.parse(raw) as StoredIdentity;
 
-      if (safeStorage.isEncryptionAvailable()) {
-        const encryptedBuffer = Buffer.from(data.encryptedPrivateKeyHex, 'hex');
-        return safeStorage.decryptString(encryptedBuffer);
-      } else {
-        return Buffer.from(data.encryptedPrivateKeyHex, 'base64').toString('utf8');
+      try {
+        if (safeStorage.isEncryptionAvailable()) {
+          const encryptedBuffer = Buffer.from(data.encryptedPrivateKeyHex, 'hex');
+          return safeStorage.decryptString(encryptedBuffer);
+        }
+      } catch {
+        // Fallback to base64 plain decoding if safeStorage decryption fails (e.g. Linux keyring unlinked)
       }
+      return Buffer.from(data.encryptedPrivateKeyHex, 'base64').toString('utf8');
     } catch {
       return null;
     }

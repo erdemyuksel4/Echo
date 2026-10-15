@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, existsSync, copyFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, copyFileSync, readdirSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execSync } from 'node:child_process';
@@ -79,27 +79,34 @@ const ghToken = process.env.GH_TOKEN || getGitHubToken();
 
 let buildDuration = '0';
 if (!isCloud) {
-  // 3. Compile EchoUpdater
-  console.log('\n[1/4] 🔨 EchoUpdater (C# .NET) Bağımsız Güncelleyici Derleniyor...');
-  try {
-    execSync(
-      'dotnet publish apps/updater/EchoUpdater.csproj -c Release -r win-x64 --no-self-contained -o apps/updater/bin/Release/publish',
-      {
-        cwd: rootDir,
-        stdio: 'inherit',
-      }
-    );
-    console.log('✓ EchoUpdater başarıyla derlendi!\n');
-  } catch (err) {
-    console.error('\n❌ EchoUpdater derleme hatası:', err.message);
-    process.exit(1);
+  // 3. Compile EchoUpdater (Windows only)
+  if (process.platform === 'win32') {
+    console.log('\n[1/4] 🔨 EchoUpdater (C# .NET) Bağımsız Güncelleyici Derleniyor...');
+    try {
+      execSync(
+        'dotnet publish apps/updater/EchoUpdater.csproj -c Release -r win-x64 --no-self-contained -o apps/updater/bin/Release/publish',
+        {
+          cwd: rootDir,
+          stdio: 'inherit',
+        }
+      );
+      console.log('✓ EchoUpdater başarıyla derlendi!\n');
+    } catch (err) {
+      console.error('\n❌ EchoUpdater derleme hatası:', err.message);
+      process.exit(1);
+    }
+  } else {
+    console.log('\n[1/4] 🐧 Linux / macOS ortamı tespit edildi: Windows EchoUpdater derlemesi atlandı.\n');
   }
 
   // 4. Local Fast Build for Echo
   console.log('[2/4] 🔨 Masaüstü Kurulum Paketi Yerelde Hızlıca Derleniyor...');
   const startTime = Date.now();
+  const buildCmd = process.platform === 'win32'
+    ? 'pnpm --filter @echo/desktop run build:exe'
+    : 'pnpm --filter @echo/desktop run build:linux';
   try {
-    execSync('pnpm --filter @echo/desktop run build:exe', {
+    execSync(buildCmd, {
       cwd: rootDir,
       stdio: 'inherit',
       env: { ...process.env, GH_TOKEN: ghToken || undefined },
@@ -140,6 +147,7 @@ if (!isCloud) {
   const exeHyphen = resolve(distDir, `Echo-Setup-${nextVersion}.exe`);
   const blockmapHyphen = resolve(distDir, `Echo-Setup-${nextVersion}.exe.blockmap`);
   const latestYml = resolve(distDir, 'latest.yml');
+  const latestLinuxYml = resolve(distDir, 'latest-linux.yml');
   // Delta installer files for differential updates
   const deltaSpaced = resolve(distDir, `Echo Setup ${nextVersion}.exe.delta`);
   const deltaHyphen = resolve(distDir, `Echo-Setup-${nextVersion}.exe.delta`);
@@ -159,16 +167,39 @@ if (!isCloud) {
     console.warn('[Uyarı] Dosya kopyalama uyarısı:', copyErr.message);
   }
 
+  // Scan dist folder for all distribution assets (both Windows and Linux packages)
+  const candidateFiles = new Set([
+    exeSpaced,
+    exeHyphen,
+    blockmapSpaced,
+    blockmapHyphen,
+    deltaSpaced,
+    deltaHyphen,
+    latestYml,
+    latestLinuxYml,
+  ]);
+
+  if (existsSync(distDir)) {
+    try {
+      const files = readdirSync(distDir);
+      for (const file of files) {
+        if (
+          file.endsWith('.AppImage') ||
+          file.endsWith('.deb') ||
+          file.endsWith('.tar.gz') ||
+          file.endsWith('.zip') ||
+          file.startsWith('latest')
+        ) {
+          candidateFiles.add(resolve(distDir, file));
+        }
+      }
+    } catch (scanErr) {
+      console.warn('[Uyarı] Dist dizini tarama uyarısı:', scanErr.message);
+    }
+  }
+
   if (ghToken) {
-        const filesToUpload = [
-      exeSpaced,
-      exeHyphen,
-      blockmapSpaced,
-      blockmapHyphen,
-      deltaSpaced,
-      deltaHyphen,
-      latestYml,
-    ]
+    const filesToUpload = Array.from(candidateFiles)
       .filter((f) => existsSync(f))
       .map((f) => `"${f}"`)
       .join(' ');

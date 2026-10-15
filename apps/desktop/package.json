@@ -1,6 +1,8 @@
 {
   "name": "@echo/desktop",
-  "version": "0.1.58",
+  "version": "0.1.59",
+  "description": "Echo - Real-time Voice, Video and Chat",
+  "author": "Echo Team",
   "private": true,
   "main": "./out/main/index.js",
   "scripts": {
@@ -8,6 +10,7 @@
     "dev:user2": "cross-env ECHO_PROFILE=user2 electron-vite dev",
     "build": "electron-vite build",
     "build:exe": "electron-vite build && electron-builder --win nsis",
+    "build:linux": "electron-vite build && electron-builder --linux AppImage deb tar.gz",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "preview": "electron-vite preview"
   },
@@ -60,12 +63,6 @@
         "to": "resources"
       }
     ],
-    "extraFiles": [
-      {
-        "from": "../updater/bin/Release/publish/EchoUpdater.exe",
-        "to": "EchoUpdater.exe"
-      }
-    ],
     "win": {
       "target": [
         {
@@ -75,7 +72,40 @@
           ]
         }
       ],
-      "icon": "resources/icon.ico"
+      "icon": "resources/icon.ico",
+      "extraFiles": [
+        {
+          "from": "../updater/bin/Release/publish/EchoUpdater.exe",
+          "to": "EchoUpdater.exe"
+        }
+      ]
+    },
+    "linux": {
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "deb",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "tar.gz",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "resources/icon.png",
+      "category": "Network;Chat",
+      "maintainer": "Echo Team <erdemyuksel.dev@gmail.com>",
+      "synopsis": "Echo - P2P & Real-time Voice, Video and Chat Platform",
+      "description": "Echo is a secure, decentralized real-time voice, video, screen share and messaging application."
     },
     "nsis": {
       "oneClick": true,

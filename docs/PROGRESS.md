@@ -1042,3 +1042,20 @@ Bu dosya her faz ve görev sonunda güncellenir.
   - `pnpm lint`: Monorepo genelinde sıfır hata ile geçti.
   - `pnpm test`: 19 test dosyası, 104 testin tamamı (%100) başarıyla geçti.
   - `pnpm --filter @echo/desktop build`: Sıfır hata ile tamamlandı.
+
+## Linux Desteği ve Çoklu Platform Dağıtımı
+
+- [x] **Linux Paketleme ve Derleme Yapılandırması (`apps/desktop/package.json`):**
+  - Windows ikilisi `EchoUpdater.exe` sadece Windows derlemesine sınırlandırıldı (`build.win.extraFiles`), Linux derlemelerindeki çakışma ve dosya yok hataları önlendi.
+  - `build.linux`: `AppImage`, `.deb` ve `.tar.gz` hedefleri, masaüstü simgesi (`resources/icon.png`), masaüstü kategorileri (`Network;InstantMessaging;Chat;AudioVideo`) ve metadatalar eklendi.
+  - `"build:linux"` script'i `apps/desktop` ve kök `package.json` dosyalarına eklendi.
+- [x] **Linux Sistem ve Masaüstü Entegrasyonu:**
+  - **Wayland & PipeWire Desteği:** `apps/desktop/src/main/index.ts` dosyasına Linux altında ekran paylaşımının siyah ekran vermesini önlemek için `WebRTCPipeWireCapturer` ve `ozone-platform-hint=auto` Chromium bayrakları eklendi.
+  - **SafeStorage Güvenliği:** `apps/desktop/src/main/identity.ts` içinde `safeStorage` çağrıları `try...catch` ile güçlendirilerek Secret Service / KWallet bulunmayan veya kilitli Linux masaüstü ortamlarında çökmeden taban64 yedeklemeye geçmesi sağlandı.
+  - **İkon & Tepsi Önceliği:** Linux masaüstü ortamları ve dock/tepsi sistemleri için `.png` formatı önceliklendirildi.
+  - **Arayüz Etiketleri:** `SettingsModal.tsx` içindeki "Windows ile Birlikte Başlat" ve "Windows sistem bildirimleri" etiketleri platforma duyarlı hale getirildi ("Sistemle Birlikte Başlat" / "Sistem bildirimleri").
+- [x] **Çoklu Platform CI/CD & Otomatik Dağıtım:**
+  - `.github/workflows/release.yml`: Hem `windows-latest` (NSIS .exe) hem `ubuntu-latest` (AppImage, deb, tar.gz) üzerinde otomatik derleme ve GitHub Releases yükleme iş akışı oluşturuldu.
+  - `scripts/bump-version.mjs`: İşletim sistemine duyarlı derleme adımları eklendi, Linux dağıtım paketleri (`.AppImage`, `.deb`, `.tar.gz`, `latest-linux.yml`) GitHub Release varlıklarına dahil edildi.
+  - `README.md`: Linux için önkoşullar, bağımlılıklar, AppImage çalıştırma izinleri ve Wayland notları eklendi.
+

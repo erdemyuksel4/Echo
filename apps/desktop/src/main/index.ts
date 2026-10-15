@@ -30,6 +30,12 @@ app.commandLine.appendSwitch('disable-background-timer-throttling');
 app.commandLine.appendSwitch('disable-backgrounding-occluded-windows');
 app.commandLine.appendSwitch('disable-renderer-backgrounding');
 
+// Linux screen share and display server compatibility (PipeWire & Wayland/X11 auto-detection)
+if (process.platform === 'linux') {
+  app.commandLine.appendSwitch('enable-features', 'WebRTCPipeWireCapturer');
+  app.commandLine.appendSwitch('ozone-platform-hint', 'auto');
+}
+
 // Custom profile support for multi-user simulation (e.g. --profile=user2 or ECHO_PROFILE=user2)
 const profileArg = process.argv.find((a) => a.startsWith('--profile='));
 const profileName = process.env.ECHO_PROFILE || (profileArg ? profileArg.split('=')[1] : undefined);
@@ -60,16 +66,25 @@ function getPreloadPath(): string {
 }
 
 function getAppIcon(): Electron.NativeImage {
-  const candidates = [
-    join(__dirname, '../../resources/icon.ico'),
-    join(__dirname, '../../resources/icon.png'),
-    join(process.resourcesPath, 'resources/icon.ico'),
-    join(process.resourcesPath, 'resources/icon.png'),
-    join(process.resourcesPath, 'icon.ico'),
-    join(process.resourcesPath, 'icon.png'),
-    join(app.getAppPath(), 'resources/icon.ico'),
-    join(app.getAppPath(), 'resources/icon.png'),
-  ];
+  const isLinux = process.platform === 'linux';
+  const candidates = isLinux
+    ? [
+        join(__dirname, '../../resources/icon.png'),
+        join(process.resourcesPath, 'resources/icon.png'),
+        join(process.resourcesPath, 'icon.png'),
+        join(app.getAppPath(), 'resources/icon.png'),
+        join(__dirname, '../../resources/icon.ico'),
+      ]
+    : [
+        join(__dirname, '../../resources/icon.ico'),
+        join(__dirname, '../../resources/icon.png'),
+        join(process.resourcesPath, 'resources/icon.ico'),
+        join(process.resourcesPath, 'resources/icon.png'),
+        join(process.resourcesPath, 'icon.ico'),
+        join(process.resourcesPath, 'icon.png'),
+        join(app.getAppPath(), 'resources/icon.ico'),
+        join(app.getAppPath(), 'resources/icon.png'),
+      ];
 
   for (const candidate of candidates) {
     if (existsSync(candidate)) {

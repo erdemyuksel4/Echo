@@ -1,6 +1,6 @@
 {
   "name": "echo-monorepo",
-  "version": "0.1.58",
+  "version": "0.1.59",
   "private": true,
   "type": "module",
   "scripts": {
@@ -13,6 +13,7 @@
     "release": "node scripts/bump-version.mjs patch",
     "release:minor": "node scripts/bump-version.mjs minor",
     "build:exe": "pnpm --filter @echo/desktop build:exe",
+    "build:linux": "pnpm --filter @echo/desktop build:linux",
     "mobile:analyze": "node scripts/run-mobile.mjs analyze",
     "mobile:test": "node scripts/run-mobile.mjs test",
     "typecheck": "pnpm -r run typecheck",

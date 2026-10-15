@@ -1012,7 +1012,7 @@ export const SettingsModal: React.FC<Props> = ({ isOpen, onClose, initialTab = '
               </div>
 
               <div className="space-y-3">
-                {/* Windows Auto-Start Toggle */}
+                {/* Auto-Start Toggle */}
                 <div className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-950/60 p-4">
                   <div className="flex items-center gap-3">
                     <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-sky-600/20 text-sky-400">
@@ -1020,7 +1020,7 @@ export const SettingsModal: React.FC<Props> = ({ isOpen, onClose, initialTab = '
                     </div>
                     <div>
                       <h3 className="text-sm font-semibold text-white">
-                        Windows ile Birlikte Başlat
+                        {appInfo?.platform === 'linux' ? 'Sistemle Birlikte Başlat' : 'Windows ile Birlikte Başlat'}
                       </h3>
                       <p className="text-xs text-slate-400">
                         Bilgisayar açıldığında Echo otomatik başlasın
@@ -1074,7 +1074,7 @@ export const SettingsModal: React.FC<Props> = ({ isOpen, onClose, initialTab = '
                     </div>
                     <div>
                       <h3 className="text-sm font-semibold text-white">Masaüstü Bildirimleri</h3>
-                      <p className="text-xs text-slate-400">Windows sistem bildirimleri gönder</p>
+                      <p className="text-xs text-slate-400">Sistem bildirimleri gönder</p>
                     </div>
                   </div>
                   <button
@@ -1156,8 +1156,13 @@ export const SettingsModal: React.FC<Props> = ({ isOpen, onClose, initialTab = '
                       <Cpu className="h-3 w-3 text-emerald-400" />
                       <span>İşletim Sistemi &amp; Mimari</span>
                     </div>
-                    <div className="font-mono text-xs font-bold text-white capitalize">
-                      {appInfo?.platform || 'Windows'} ({appInfo?.arch || 'x64'})
+                    <div className="font-mono text-xs font-bold text-white">
+                      {appInfo?.platform === 'win32'
+                        ? 'Windows'
+                        : appInfo?.platform === 'linux'
+                          ? 'Linux'
+                          : appInfo?.platform || 'Bilinmiyor'}{' '}
+                      ({appInfo?.arch || 'x64'})
                     </div>
                   </div>
 
