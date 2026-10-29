@@ -45,7 +45,7 @@ Aşağıdakilerden biri olursa işi durdur, durumu kısaca anlat, önerini ver, 
 - Native modül (C++ derleme gerektiren paket) ekleme
 - `ARCHITECTURE.md`'deki bir kararı değiştirme ihtiyacı
 - Güvenlik ile kolaylık arasında bir tercih
-- `wrangler deploy` (canlıya alma; sürüm yayınlama ve git push ise Bölüm 8 Kural 6 uyarınca onaylıdır)
+- `wrangler deploy` (Patronun 29.10.2026 açık talimatıyla onaylıdır; izin istemeden deploy edilebilir)
 - Aynı sorunu 2 denemede çözememe
 - Gereksinimin birden fazla anlama gelmesi
 
