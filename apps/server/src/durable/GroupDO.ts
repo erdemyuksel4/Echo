@@ -2764,6 +2764,16 @@ export class GroupDO extends DurableObject<Env> {
         }
       }
 
+      for (const dc of validChannels) {
+        if (dc.type === 0) {
+          try {
+            await this.getOrCreateChannelWebhook(dc.id, botToken);
+          } catch {
+            // ignore
+          }
+        }
+      }
+
       if (channelsChanged) {
         const snapshot = this.getGroupSnapshot();
         this.broadcast(WsServerEvents.SNAPSHOT, snapshot);
@@ -3098,6 +3108,13 @@ export class GroupDO extends DurableObject<Env> {
             discordChannelId,
           );
           return webhookUrl;
+        }
+      } else {
+        const errText = await createRes.text();
+        console.warn('[Discord Webhook Auto-Create Failed]:', createRes.status, errText);
+        if (createRes.status === 403 && this.cachedDiscordState) {
+          this.cachedDiscordState.error = "Bot'un Discord'da webhook oluşturma izni yok. Mesajların doğrudan adınızla görünmesi için Discord Sunucu Ayarları -> Roller kısmından Botunuza 'Webhook'ları Yönet' (Manage Webhooks) yetkisi verin.";
+          this.broadcast(WsServerEvents.DISCORD_STATE, this.cachedDiscordState);
         }
       }
     } catch (err) {
