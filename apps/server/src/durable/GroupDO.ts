@@ -2485,7 +2485,21 @@ export class GroupDO extends DurableObject<Env> {
         },
       });
 
-      if (!res.ok) return;
+      if (!res.ok) {
+        let msg = `Discord kanalları çekilemedi (HTTP ${res.status})`;
+        if (res.status === 401) {
+          msg = 'Girdiğiniz Discord Bot Token geçersiz veya hatalı.';
+        } else if (res.status === 403) {
+          msg = 'Discord Bot henüz sunucunuza eklenmemiş veya kanalları görme yetkisi yok. Lütfen botu sunucunuza davet edin.';
+        } else if (res.status === 404) {
+          msg = 'Discord Sunucu ID (Guild ID) bulunamadı. Lütfen ID numarasını kontrol edin.';
+        }
+        if (this.cachedDiscordState) {
+          this.cachedDiscordState.error = msg;
+          this.broadcast(WsServerEvents.DISCORD_STATE, this.cachedDiscordState);
+        }
+        return;
+      }
 
       const dcChannels = (await res.json()) as Array<{
         id: string;
