@@ -287,6 +287,12 @@ export class GroupDO extends DurableObject<Env> {
     }
 
     try {
+      this.sql.exec(`ALTER TABLE discord_channel_mappings ADD COLUMN webhook_url TEXT`);
+    } catch {
+      // Column already exists
+    }
+
+    try {
       this.sql.exec(`ALTER TABLE discord_channel_mappings ADD COLUMN has_more_discord INTEGER DEFAULT 1`);
     } catch {
       // Column already exists
@@ -3039,6 +3045,68 @@ export class GroupDO extends DurableObject<Env> {
     }
   }
 
+  private async getOrCreateChannelWebhook(discordChannelId: string, botToken: string): Promise<string | null> {
+    const rows = [
+      ...this.sql.exec(`SELECT webhook_url FROM discord_channel_mappings WHERE discord_channel_id = ?`, discordChannelId),
+    ] as { webhook_url?: string | null }[];
+
+    if (rows[0]?.webhook_url) {
+      return rows[0].webhook_url;
+    }
+
+    try {
+      // 1. Query existing webhooks for this Discord channel
+      const getRes = await fetch(`https://discord.com/api/v10/channels/${encodeURIComponent(discordChannelId)}/webhooks`, {
+        headers: {
+          Authorization: `Bot ${botToken}`,
+          'User-Agent': 'Echo-App/1.0',
+        },
+      });
+
+      if (getRes.ok) {
+        const webhooks = (await getRes.json()) as Array<{ id: string; token?: string; name: string }>;
+        const existing = webhooks.find((w) => w.token && w.name === 'Echo Bridge') || webhooks.find((w) => w.token);
+        if (existing && existing.token) {
+          const webhookUrl = `https://discord.com/api/webhooks/${existing.id}/${existing.token}`;
+          this.sql.exec(
+            `UPDATE discord_channel_mappings SET webhook_url = ? WHERE discord_channel_id = ?`,
+            webhookUrl,
+            discordChannelId,
+          );
+          return webhookUrl;
+        }
+      }
+
+      // 2. Create an automatic webhook named "Echo Bridge" for dynamic username sending
+      const createRes = await fetch(`https://discord.com/api/v10/channels/${encodeURIComponent(discordChannelId)}/webhooks`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bot ${botToken}`,
+          'Content-Type': 'application/json',
+          'User-Agent': 'Echo-App/1.0',
+        },
+        body: JSON.stringify({ name: 'Echo Bridge' }),
+      });
+
+      if (createRes.ok) {
+        const created = (await createRes.json()) as { id: string; token?: string };
+        if (created.id && created.token) {
+          const webhookUrl = `https://discord.com/api/webhooks/${created.id}/${created.token}`;
+          this.sql.exec(
+            `UPDATE discord_channel_mappings SET webhook_url = ? WHERE discord_channel_id = ?`,
+            webhookUrl,
+            discordChannelId,
+          );
+          return webhookUrl;
+        }
+      }
+    } catch (err) {
+      console.warn('[Discord Webhook Auto-Create] Hata:', err);
+    }
+
+    return null;
+  }
+
   private async forwardToDiscordWebhook(
     channelId: string,
     displayName: string,
@@ -3079,7 +3147,30 @@ export class GroupDO extends DurableObject<Env> {
     if (!plainText && attachments.length === 0) return;
     if (plainText.startsWith('!') || plainText.startsWith('/')) return;
 
-    // 1. If Webhook URL matches channel
+    // 1. Primary: Dynamic Webhook delivery (shows the sender's actual display name directly as author!)
+    if (config.botToken && discordChannelId) {
+      try {
+        const webhookUrl = await this.getOrCreateChannelWebhook(discordChannelId, config.botToken);
+        if (webhookUrl) {
+          const hookRes = await fetch(webhookUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'User-Agent': 'Echo-App/1.0',
+            },
+            body: JSON.stringify({
+              content: plainText || (attachments.length > 0 ? '📷 [Görsel / Ek]' : ''),
+              username: displayName,
+            }),
+          });
+          if (hookRes.ok) return;
+        }
+      } catch (err) {
+        console.warn('[Discord Dynamic Webhook Delivery] Hata:', err);
+      }
+    }
+
+    // 2. Fallback: Manual webhook URL if configured
     if (config.webhookUrl && config.echoChannelId === channelId) {
       try {
         await fetch(config.webhookUrl, {
@@ -3090,7 +3181,7 @@ export class GroupDO extends DurableObject<Env> {
           },
           body: JSON.stringify({
             content: plainText || (attachments.length > 0 ? '📷 [Görsel / Ek]' : ''),
-            username: `${displayName} [Echo]`,
+            username: displayName,
           }),
         });
         return;
@@ -3099,7 +3190,7 @@ export class GroupDO extends DurableObject<Env> {
       }
     }
 
-    // 2. If Bot Token is set and channel is mapped
+    // 3. Fallback: Bot Token direct message post (with bold name prefix)
     if (config.botToken && discordChannelId) {
       try {
         await fetch(`https://discord.com/api/v10/channels/${encodeURIComponent(discordChannelId)}/messages`, {
@@ -3110,7 +3201,7 @@ export class GroupDO extends DurableObject<Env> {
             'User-Agent': 'Echo-App/1.0',
           },
           body: JSON.stringify({
-            content: `**${displayName} [Echo]:** ${plainText || (attachments.length > 0 ? '📷 [Görsel / Ek]' : '')}`,
+            content: `**${displayName}:** ${plainText || (attachments.length > 0 ? '📷 [Görsel / Ek]' : '')}`,
           }),
         });
       } catch (err) {
