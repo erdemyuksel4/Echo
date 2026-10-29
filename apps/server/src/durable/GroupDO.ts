@@ -67,11 +67,13 @@ interface WsSessionAttachment {
 }
 
 interface SqlChannelRow {
+  discord_channel_id?: string | null;
   id: string;
   name: string;
   type: 'text' | 'voice';
   position: number;
   created_at: number;
+
 }
 
 interface SqlMemberRow {
@@ -94,6 +96,7 @@ interface SqlMessageRow {
   reply_to_content?: string | null;
   attachments_json?: string | null;
   created_at: number;
+
   edited_at: number | null;
   deleted: number;
   external_source?: string | null;
@@ -211,6 +214,12 @@ export class GroupDO extends DurableObject<Env> {
         PRIMARY KEY(channel_id, user_id)
       );
 
+      CREATE TABLE IF NOT EXISTS discord_channel_mappings (
+        echo_channel_id TEXT PRIMARY KEY,
+        discord_channel_id TEXT NOT NULL,
+        last_discord_msg_id TEXT
+      );
+
       CREATE TABLE IF NOT EXISTS discord_config (
         guild_id TEXT PRIMARY KEY,
         echo_channel_id TEXT,
@@ -218,6 +227,7 @@ export class GroupDO extends DurableObject<Env> {
         bot_token TEXT,
         discord_channel_id TEXT,
         last_discord_msg_id TEXT,
+        sync_all_channels INTEGER DEFAULT 1,
         enabled INTEGER NOT NULL DEFAULT 1
       );
     `);
@@ -248,6 +258,18 @@ export class GroupDO extends DurableObject<Env> {
 
     try {
       this.sql.exec(`ALTER TABLE messages ADD COLUMN external_avatar_url TEXT`);
+    } catch {
+      // Column already exists
+    }
+
+    try {
+      this.sql.exec(`ALTER TABLE channels ADD COLUMN discord_channel_id TEXT`);
+    } catch {
+      // Column already exists
+    }
+
+    try {
+      this.sql.exec(`ALTER TABLE discord_config ADD COLUMN sync_all_channels INTEGER DEFAULT 1`);
     } catch {
       // Column already exists
     }
@@ -701,10 +723,12 @@ export class GroupDO extends DurableObject<Env> {
     const channels: Channel[] = ([...channelsCursor] as unknown as SqlChannelRow[]).map((r) => ({
       id: r.id,
       groupId: groupMeta.id,
+      discordChannelId: r.discord_channel_id || undefined,
       name: r.name,
       type: r.type,
       position: r.position,
       createdAt: r.created_at,
+
     }));
 
     const membersCursor = this.sql.exec(`SELECT * FROM members WHERE banned = 0`);
@@ -1374,6 +1398,7 @@ export class GroupDO extends DurableObject<Env> {
         replyToContent: r.reply_to_content ?? null,
         attachments,
         createdAt: r.created_at,
+
         editedAt: r.edited_at,
         deleted: Boolean(r.deleted),
         reactions: reactionMap[r.id] ?? {},
@@ -2220,6 +2245,7 @@ export class GroupDO extends DurableObject<Env> {
     botToken: string;
     discordChannelId: string;
     lastDiscordMsgId: string;
+    syncAllChannels: boolean;
     enabled: boolean;
   } | null {
     const rows = [...this.sql.exec(`SELECT * FROM discord_config LIMIT 1`)] as {
@@ -2229,6 +2255,7 @@ export class GroupDO extends DurableObject<Env> {
       bot_token: string;
       discord_channel_id: string;
       last_discord_msg_id: string;
+      sync_all_channels?: number;
       enabled: number;
     }[];
     if (rows.length === 0 || !rows[0]) return null;
@@ -2240,6 +2267,7 @@ export class GroupDO extends DurableObject<Env> {
       botToken: r.bot_token || '',
       discordChannelId: r.discord_channel_id || '',
       lastDiscordMsgId: r.last_discord_msg_id || '',
+      syncAllChannels: (r as unknown as { sync_all_channels?: number }).sync_all_channels !== 0,
       enabled: Boolean(r.enabled),
     };
   }
@@ -2254,6 +2282,7 @@ export class GroupDO extends DurableObject<Env> {
       hasWebhook: Boolean(config.webhookUrl),
       hasBotToken: Boolean(config.botToken),
       discordChannelId: config.discordChannelId || undefined,
+      syncAllChannels: config.syncAllChannels,
       enabled: config.enabled,
     });
 
@@ -2278,18 +2307,19 @@ export class GroupDO extends DurableObject<Env> {
       return;
     }
 
-    const { guildId, echoChannelId, webhookUrl, botToken, discordChannelId, enabled } = parse.data;
+    const { guildId, echoChannelId, webhookUrl, botToken, discordChannelId, syncAllChannels, enabled } = parse.data;
 
     this.sql.exec(`DELETE FROM discord_config`);
     if (guildId) {
       this.sql.exec(
-        `INSERT INTO discord_config (guild_id, echo_channel_id, webhook_url, bot_token, discord_channel_id, last_discord_msg_id, enabled)
-         VALUES (?, ?, ?, ?, ?, '', ?)`,
+        `INSERT INTO discord_config (guild_id, echo_channel_id, webhook_url, bot_token, discord_channel_id, last_discord_msg_id, sync_all_channels, enabled)
+         VALUES (?, ?, ?, ?, ?, '', ?, ?)`,
         guildId,
         echoChannelId || '',
         webhookUrl || '',
         botToken || '',
         discordChannelId || '',
+        syncAllChannels !== false ? 1 : 0,
         enabled ? 1 : 0,
       );
     }
@@ -2300,10 +2330,14 @@ export class GroupDO extends DurableObject<Env> {
       hasWebhook: Boolean(webhookUrl),
       hasBotToken: Boolean(botToken),
       discordChannelId: discordChannelId || undefined,
+      syncAllChannels: syncAllChannels !== false,
       enabled,
     });
 
     if (guildId && enabled) {
+      if (botToken && syncAllChannels !== false) {
+        await this.syncDiscordAllChannels(guildId, botToken);
+      }
       await this.syncDiscordState(true);
     } else {
       this.cachedDiscordState = null;
@@ -2399,15 +2433,34 @@ export class GroupDO extends DurableObject<Env> {
 
         this.broadcast(WsServerEvents.DISCORD_STATE, this.cachedDiscordState);
       } else if (widgetRes.status === 403 || widgetRes.status === 404) {
+        let guildName = 'Discord Sunucusu';
+        if (config.botToken) {
+          try {
+            const gRes = await fetch(`https://discord.com/api/v10/guilds/${encodeURIComponent(config.guildId)}`, {
+              headers: {
+                Authorization: `Bot ${config.botToken}`,
+                'User-Agent': 'Echo-App/1.0',
+              },
+            });
+            if (gRes.ok) {
+              const gData = (await gRes.json()) as { name?: string };
+              if (gData.name) guildName = gData.name;
+            }
+          } catch {
+            // ignore
+          }
+        }
+
         this.cachedDiscordState = {
           guildId: config.guildId,
-          guildName: 'Discord Sunucusu',
+          guildName,
           instantInvite: null,
           onlineMembers: [],
           voiceChannels: [],
           lastSyncedAt: now,
-          error:
-            "Discord sunucu ayarlarında 'Sunucu Widget'ı' henüz etkinleştirilmemiş. Lütfen Discord Sunucu Ayarları -> Widget menüsünden 'Sunucu Widget'ını Etkinleştir' seçeneğini açın.",
+          error: config.botToken
+            ? null
+            : "Discord sunucu ayarlarında 'Sunucu Widget'ı' henüz etkinleştirilmemiş. Lütfen Discord Sunucu Ayarları -> Widget menüsünden 'Sunucu Widget'ını Etkinleştir' seçeneğini açın veya Bot Token girin.",
         };
         this.broadcast(WsServerEvents.DISCORD_STATE, this.cachedDiscordState);
       }
@@ -2415,8 +2468,74 @@ export class GroupDO extends DurableObject<Env> {
       console.warn('[Discord Sync] Widget sorgulama hatası:', err);
     }
 
-    if (config.botToken && config.discordChannelId && config.echoChannelId) {
+    if (config.botToken && config.guildId) {
+      if (config.syncAllChannels) {
+        await this.syncDiscordAllChannels(config.guildId, config.botToken);
+      }
       await this.syncDiscordMessages(config);
+    }
+  }
+
+  private async syncDiscordAllChannels(guildId: string, botToken: string): Promise<void> {
+    try {
+      const res = await fetch(`https://discord.com/api/v10/guilds/${encodeURIComponent(guildId)}/channels`, {
+        headers: {
+          Authorization: `Bot ${botToken}`,
+          'User-Agent': 'Echo-App/1.0',
+        },
+      });
+
+      if (!res.ok) return;
+
+      const dcChannels = (await res.json()) as Array<{
+        id: string;
+        name: string;
+        type: number;
+        position?: number;
+      }>;
+
+      if (!Array.isArray(dcChannels)) return;
+
+      let channelsChanged = false;
+      const validChannels = dcChannels.filter((c) => c.type === 0 || c.type === 2);
+
+      for (const dc of validChannels) {
+        const existing = [
+          ...this.sql.exec(`SELECT id FROM channels WHERE discord_channel_id = ?`, dc.id),
+        ] as { id: string }[];
+
+        const chanType = dc.type === 2 ? 'voice' : 'text';
+
+        if (existing.length === 0) {
+          const chanId = ulid();
+          this.sql.exec(
+            `INSERT INTO channels (id, name, type, position, created_at, discord_channel_id)
+             VALUES (?, ?, ?, ?, ?, ?)`,
+            chanId,
+            dc.name,
+            chanType,
+            dc.position || 0,
+            Date.now(),
+            dc.id,
+          );
+          this.sql.exec(
+            `INSERT OR REPLACE INTO discord_channel_mappings (echo_channel_id, discord_channel_id, last_discord_msg_id)
+             VALUES (?, ?, '')`,
+            chanId,
+            dc.id,
+          );
+          channelsChanged = true;
+        } else if (existing[0]) {
+          this.sql.exec(`UPDATE channels SET name = ? WHERE id = ?`, dc.name, existing[0].id);
+        }
+      }
+
+      if (channelsChanged) {
+        const snapshot = this.getGroupSnapshot();
+        this.broadcast(WsServerEvents.SNAPSHOT, snapshot);
+      }
+    } catch (err) {
+      console.warn('[Discord All Channels Sync] Hata:', err);
     }
   }
 
@@ -2427,118 +2546,136 @@ export class GroupDO extends DurableObject<Env> {
     botToken: string;
     discordChannelId: string;
     lastDiscordMsgId: string;
+    syncAllChannels: boolean;
     enabled: boolean;
   }): Promise<void> {
-    try {
-      let url = `https://discord.com/api/v10/channels/${encodeURIComponent(config.discordChannelId)}/messages?limit=10`;
-      if (config.lastDiscordMsgId) {
-        url += `&after=${encodeURIComponent(config.lastDiscordMsgId)}`;
-      }
+    if (!config.botToken) return;
 
-      const res = await fetch(url, {
-        headers: {
-          Authorization: `Bot ${config.botToken}`,
-          'User-Agent': 'Echo-App/1.0',
-        },
-      });
+    let mappings = [
+      ...this.sql.exec(`SELECT echo_channel_id, discord_channel_id, last_discord_msg_id FROM discord_channel_mappings`),
+    ] as { echo_channel_id: string; discord_channel_id: string; last_discord_msg_id: string }[];
 
-      if (!res.ok) return;
+    if (mappings.length === 0 && config.discordChannelId && config.echoChannelId) {
+      mappings = [{
+        echo_channel_id: config.echoChannelId,
+        discord_channel_id: config.discordChannelId,
+        last_discord_msg_id: config.lastDiscordMsgId,
+      }];
+    }
 
-      const messages = (await res.json()) as Array<{
-        id: string;
-        content: string;
-        webhook_id?: string;
-        author: {
+    for (const mapping of mappings) {
+      try {
+        let url = `https://discord.com/api/v10/channels/${encodeURIComponent(mapping.discord_channel_id)}/messages?limit=10`;
+        if (mapping.last_discord_msg_id) {
+          url += `&after=${encodeURIComponent(mapping.last_discord_msg_id)}`;
+        }
+
+        const res = await fetch(url, {
+          headers: {
+            Authorization: `Bot ${config.botToken}`,
+            'User-Agent': 'Echo-App/1.0',
+          },
+        });
+
+        if (!res.ok) continue;
+
+        const messages = (await res.json()) as Array<{
           id: string;
-          username: string;
-          global_name?: string | null;
-          avatar?: string | null;
-          bot?: boolean;
-        };
-        attachments?: Array<{
-          id: string;
-          filename: string;
-          url: string;
-          size: number;
-          content_type?: string;
-          width?: number;
-          height?: number;
+          content: string;
+          webhook_id?: string;
+          author: {
+            id: string;
+            username: string;
+            global_name?: string | null;
+            avatar?: string | null;
+            bot?: boolean;
+          };
+          attachments?: Array<{
+            id: string;
+            filename: string;
+            url: string;
+            size: number;
+            content_type?: string;
+            width?: number;
+            height?: number;
+          }>;
+          timestamp: string;
         }>;
-        timestamp: string;
-      }>;
 
-      if (!Array.isArray(messages) || messages.length === 0) return;
+        if (!Array.isArray(messages) || messages.length === 0) continue;
 
-      const sorted = messages.sort((a, b) => a.id.localeCompare(b.id));
-      let newestId = config.lastDiscordMsgId;
+        const sorted = messages.sort((a, b) => a.id.localeCompare(b.id));
+        let newestId = mapping.last_discord_msg_id;
 
-      for (const msg of sorted) {
-        newestId = msg.id;
-        if (msg.webhook_id) continue;
+        for (const msg of sorted) {
+          newestId = msg.id;
+          if (msg.webhook_id) continue;
+          if (msg.author.bot && msg.content.includes('[Echo]')) continue;
 
-        const echoMsgId = ulid();
-        const authorName = msg.author.global_name || msg.author.username;
-        const authorId = `discord-${msg.author.id}`;
-        const avatarUrl = msg.author.avatar
-          ? `https://cdn.discordapp.com/avatars/${msg.author.id}/${msg.author.avatar}.png?size=128`
-          : undefined;
+          const echoMsgId = ulid();
+          const authorName = msg.author.global_name || msg.author.username;
+          const authorId = `discord-${msg.author.id}`;
+          const avatarUrl = msg.author.avatar
+            ? `https://cdn.discordapp.com/avatars/${msg.author.id}/${msg.author.avatar}.png?size=128`
+            : undefined;
 
-        const attachments: Attachment[] = (msg.attachments || []).map((att) => ({
-          id: ulid(),
-          name: att.filename,
-          size: att.size,
-          mimeType: att.content_type || 'application/octet-stream',
-          url: att.url,
-          type: att.content_type?.startsWith('image/gif') ? 'gif' : 'image',
-          width: att.width,
-          height: att.height,
-        }));
+          const attachments: Attachment[] = (msg.attachments || []).map((att) => ({
+            id: ulid(),
+            name: att.filename,
+            size: att.size,
+            mimeType: att.content_type || 'application/octet-stream',
+            url: att.url,
+            type: att.content_type?.startsWith('image/gif') ? 'gif' : 'image',
+            width: att.width,
+            height: att.height,
+          }));
 
-        const createdAt = new Date(msg.timestamp).getTime() || Date.now();
+          const createdAt = new Date(msg.timestamp).getTime() || Date.now();
 
-        this.sql.exec(
-          `INSERT INTO messages (id, channel_id, author_id, author_name, content, attachments_json, created_at, deleted, external_source, external_avatar_url)
-           VALUES (?, ?, ?, ?, ?, ?, ?, 0, 'discord', ?)`,
-          echoMsgId,
-          config.echoChannelId,
-          authorId,
-          authorName,
-          msg.content,
-          JSON.stringify(attachments),
-          createdAt,
-          avatarUrl || null,
-        );
+          this.sql.exec(
+            `INSERT INTO messages (id, channel_id, author_id, author_name, content, attachments_json, created_at, deleted, external_source, external_avatar_url)
+             VALUES (?, ?, ?, ?, ?, ?, ?, 0, 'discord', ?)`,
+            echoMsgId,
+            mapping.echo_channel_id,
+            authorId,
+            authorName,
+            msg.content,
+            JSON.stringify(attachments),
+            createdAt,
+            avatarUrl || null,
+          );
 
-        const newEchoMsg: Message = {
-          id: echoMsgId,
-          channelId: config.echoChannelId,
-          authorId,
-          authorName,
-          content: msg.content,
-          replyTo: null,
-          replyToAuthorName: null,
-          replyToContent: null,
-          attachments,
-          createdAt,
-          editedAt: null,
-          deleted: false,
-          reactions: {},
-          externalSource: 'discord',
-          externalAvatarUrl: avatarUrl,
-        };
+          const newEchoMsg: Message = {
+            id: echoMsgId,
+            channelId: mapping.echo_channel_id,
+            authorId,
+            authorName,
+            content: msg.content,
+            replyTo: null,
+            replyToAuthorName: null,
+            replyToContent: null,
+            attachments,
+            createdAt,
+            editedAt: null,
+            deleted: false,
+            reactions: {},
+            externalSource: 'discord',
+            externalAvatarUrl: avatarUrl,
+          };
 
-        this.broadcast(WsServerEvents.MSG_NEW, newEchoMsg);
+          this.broadcast(WsServerEvents.MSG_NEW, newEchoMsg);
+        }
+
+        if (newestId && newestId !== mapping.last_discord_msg_id) {
+          this.sql.exec(
+            `UPDATE discord_channel_mappings SET last_discord_msg_id = ? WHERE echo_channel_id = ?`,
+            newestId,
+            mapping.echo_channel_id,
+          );
+        }
+      } catch (err) {
+        console.warn('[Discord Sync] Mesaj sorgulama hatası:', err);
       }
-
-      if (newestId && newestId !== config.lastDiscordMsgId) {
-        this.sql.exec(
-          `UPDATE discord_config SET last_discord_msg_id = ? WHERE guild_id = ?`,
-          newestId,
-          config.guildId,
-        );
-      }
-    } catch (err) {
-      console.warn('[Discord Sync] Mesaj sorgulama hatası:', err);
     }
   }
 
@@ -2549,8 +2686,13 @@ export class GroupDO extends DurableObject<Env> {
     attachments: Attachment[],
   ): Promise<void> {
     const config = this.getDiscordConfig();
-    if (!config || !config.enabled || !config.webhookUrl) return;
-    if (config.echoChannelId && config.echoChannelId !== channelId) return;
+    if (!config || !config.enabled) return;
+
+    const mappingRows = [
+      ...this.sql.exec(`SELECT discord_channel_id FROM discord_channel_mappings WHERE echo_channel_id = ?`, channelId),
+    ] as { discord_channel_id: string }[];
+
+    const discordChannelId = mappingRows[0]?.discord_channel_id || (config.echoChannelId === channelId ? config.discordChannelId : null);
 
     let plainText = content;
     if (isE2EEMessage(content)) {
@@ -2568,20 +2710,43 @@ export class GroupDO extends DurableObject<Env> {
     if (!plainText && attachments.length === 0) return;
     if (plainText.startsWith('!') || plainText.startsWith('/')) return;
 
-    try {
-      await fetch(config.webhookUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'User-Agent': 'Echo-App/1.0',
-        },
-        body: JSON.stringify({
-          content: plainText || (attachments.length > 0 ? '📷 [Görsel / Ek]' : ''),
-          username: `${displayName} [Echo]`,
-        }),
-      });
-    } catch (err) {
-      console.warn('[Discord Webhook] İletim başarısız:', err);
+    // 1. If Webhook URL matches channel
+    if (config.webhookUrl && config.echoChannelId === channelId) {
+      try {
+        await fetch(config.webhookUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'User-Agent': 'Echo-App/1.0',
+          },
+          body: JSON.stringify({
+            content: plainText || (attachments.length > 0 ? '📷 [Görsel / Ek]' : ''),
+            username: `${displayName} [Echo]`,
+          }),
+        });
+        return;
+      } catch (err) {
+        console.warn('[Discord Webhook] İletim başarısız:', err);
+      }
+    }
+
+    // 2. If Bot Token is set and channel is mapped
+    if (config.botToken && discordChannelId) {
+      try {
+        await fetch(`https://discord.com/api/v10/channels/${encodeURIComponent(discordChannelId)}/messages`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bot ${config.botToken}`,
+            'Content-Type': 'application/json',
+            'User-Agent': 'Echo-App/1.0',
+          },
+          body: JSON.stringify({
+            content: `**${displayName} [Echo]:** ${plainText || (attachments.length > 0 ? '📷 [Görsel / Ek]' : '')}`,
+          }),
+        });
+      } catch (err) {
+        console.warn('[Discord Bot Post] İletim başarısız:', err);
+      }
     }
   }
 }

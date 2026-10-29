@@ -37,10 +37,11 @@ export type DiscordState = z.infer<typeof DiscordStateSchema>;
 
 export const DiscordConfigSchema = z.object({
   guildId: z.string().trim().default(''),
-  echoChannelId: z.string().trim().default(''),
+  echoChannelId: z.string().trim().optional().default(''),
   webhookUrl: z.string().trim().optional().default(''),
   botToken: z.string().trim().optional().default(''),
   discordChannelId: z.string().trim().optional().default(''),
+  syncAllChannels: z.boolean().default(true),
   enabled: z.boolean().default(false),
 });
 export type DiscordConfig = z.infer<typeof DiscordConfigSchema>;
@@ -51,6 +52,7 @@ export const ClientDiscordConfigSetPayloadSchema = z.object({
   webhookUrl: z.string().trim().optional(),
   botToken: z.string().trim().optional(),
   discordChannelId: z.string().trim().optional(),
+  syncAllChannels: z.boolean().default(true),
   enabled: z.boolean().default(true),
 });
 export type ClientDiscordConfigSetPayload = z.infer<typeof ClientDiscordConfigSetPayloadSchema>;
@@ -65,10 +67,11 @@ export type ServerDiscordStatePayload = z.infer<typeof ServerDiscordStatePayload
 
 export const ServerDiscordConfigPayloadSchema = z.object({
   guildId: z.string(),
-  echoChannelId: z.string(),
+  echoChannelId: z.string().optional(),
   hasWebhook: z.boolean(),
   hasBotToken: z.boolean(),
   discordChannelId: z.string().optional(),
+  syncAllChannels: z.boolean().default(true),
   enabled: z.boolean(),
 });
 export type ServerDiscordConfigPayload = z.infer<typeof ServerDiscordConfigPayloadSchema>;

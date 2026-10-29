@@ -1062,32 +1062,29 @@ Bu dosya her faz ve görev sonunda güncellenir.
 
 ## Faz 13 — Discord Senkronizasyonu & Mesaj Köprüsü
 
-- [x] **Ortak Şemalar ve Protokol (`@echo/shared`):**
-  - `packages/shared/src/schemas/discord.ts`: `DiscordMemberSchema`, `DiscordVoiceChannelSchema`, `DiscordStateSchema`, `DiscordConfigSchema`, `ClientDiscordConfigSetPayloadSchema`, `ClientDiscordSyncNowPayloadSchema`, `ServerDiscordStatePayloadSchema`, `ServerDiscordConfigPayloadSchema`.
-  - `packages/shared/src/schemas/protocol.ts`: `DISCORD_CONFIG_SET`, `DISCORD_SYNC_NOW`, `DISCORD_STATE`, `DISCORD_CONFIG` protokol olayları tanımlandı.
-  - `packages/shared/src/schemas/message.ts`: `externalSource: 'discord'` ve `externalAvatarUrl` alanları eklendi.
-  - `packages/shared/src/__tests__/discord.test.ts`: Tüm şemalar ve yük doğrulamaları birim testleriyle doğrulandı (79/79 test geçti).
-- [x] **Sunucu Mimarisi & Cloudflare Free Hibernation (`apps/server`):**
-  - `GroupDO.ts`:
-    - SQLite `discord_config` tablosu (`guild_id`, `echo_channel_id`, `webhook_url`, `bot_token`, `discord_channel_id`, `last_discord_msg_id`, `enabled`).
-    - Discord Sunucu Widget API (`/api/guilds/{guildId}/widget.json`) entegrasyonu: Cloudflare Worker üzerinden engelsiz, sıfır token'lı aktif üye ve ses kanalları senkronizasyonu (15 sn akıllı önbellekleme, Cloudflare Free kotasını korur).
-    - Echo ➔ Discord Mesaj İletimi: Echo metin kanalına yazılan mesajların E2EE şifresini grup anahtarıyla çözüp yazarın Echo adıyla (`Erdem [Echo]`) Discord Webhook'a iletme.
-    - Discord ➔ Echo Mesaj Alma: Discord kanalında yazılan mesajları ve görselleri Cloudflare üzerinden çekip Echo'ya kaydetme, sonsuz döngü koruması (Echo webhook mesajlarını atlama) ve `[DISCORD]` rozetiyle anlık `msg.new` yayını.
-    - `apps/server/test/discord.spec.ts`: 3 yeni birim testi eklendi; toplam 32 sunucu testi hatasız geçti.
-- [x] **Masaüstü Arayüzü & Kullanıcı Deneyimi (`apps/desktop`):**
-  - `DiscordSyncModal.tsx`: Grup başlığındaki menüden açılan, Discord Sunucu ID (Guild ID), Webhook URL, Eşlenecek Echo Kanalı ve Bot Token/Kanal ID alanlarını içeren modern ayar modalı. Canlı bağlantı testi ve sunucu durumu göstergesi.
-  - `ChannelList.tsx`:
-    - Grup menüsüne Discord moruyla parlayan "Discord'la Eşle" butonu eklendi.
-    - Sol kanal listesinde ses kanallarının hemen altına "Discord Ses Odaları" paneli eklendi; Discord'daki hangi ses odasında kimlerin olduğunu, kullanıcı adlarını, avatarlarını, kulaklık/mikrofon durumlarını anlık listeler.
-  - `MemberList.tsx`:
-    - Sağ üye listesine "Discord'da Aktif — N" bölümü eklendi; Discord'da çevrimiçi, boşta veya rahatsız etmeyin durumundaki arkadaşlar, profil fotoğrafları ve oynadıkları oyun bilgisiyle (`🎮 Oyun Adı`) canlı görüntülenir.
-  - `ChatMessageItem.tsx`:
-    - Discord'dan gelen mesajlarda yazarın Discord profil fotoğrafı, adı ve yanında Discord morunda şık `[DISCORD]` rozetiyle sanki yerel bir mesaj gibi akması sağlandı.
-  - `useChatStore.ts` & `websocket.ts`: `discordState` ve `discordConfig` durum yönetimi bağlandı.
+- [x] **Ortak Şemalar ve Protokol (@echo/shared):**
+  - packages/shared/src/schemas/discord.ts: DiscordMemberSchema, DiscordVoiceChannelSchema, DiscordStateSchema, DiscordConfigSchema, ClientDiscordConfigSetPayloadSchema, ClientDiscordSyncNowPayloadSchema, ServerDiscordStatePayloadSchema, ServerDiscordConfigPayloadSchema. syncAllChannels desteği eklendi.
+  - packages/shared/src/schemas/group.ts: ChannelSchema içine discordChannelId?: string alanı eklendi.
+  - packages/shared/src/schemas/protocol.ts: DISCORD_CONFIG_SET, DISCORD_SYNC_NOW, DISCORD_STATE, DISCORD_CONFIG protokol olayları tanımlandı.
+  - packages/shared/src/schemas/message.ts: externalSource: 'discord' ve externalAvatarUrl alanları eklendi.
+  - packages/shared/src/__tests__/discord.test.ts: Tüm şemalar ve yük doğrulamaları birim testleriyle doğrulandı (80/80 test geçti).
+- [x] **Sunucu Mimarisi & Çoklu Kanal Senkronizasyonu (apps/server):**
+  - GroupDO.ts:
+    - SQLite discord_config tablosu (guild_id, echo_channel_id, webhook_url, bot_token, discord_channel_id, last_discord_msg_id, sync_all_channels, enabled).
+    - SQLite discord_channel_mappings tablosu (echo_channel_id, discord_channel_id, last_discord_msg_id).
+    - SQLite channels tablosunda discord_channel_id sütunu.
+    - Otomatik Tüm Kanal Senkronizasyonu (syncDiscordAllChannels): Discord Bot REST API ile sunucudaki tüm metin ve ses kanalları taranıp Echo'da otomatik oluşturulur, SNAPSHOT yayınıyla istemcilere iletilir.
+    - Çoklu Kanal Mesaj Senkronizasyonu: Eşlenen tüm kanallardan yeni mesajlar çekilip Echo'daki karşılıklarına [DISCORD] rozetiyle kaydedilir.
+    - Echo -> Discord Bot İletimi: Echo'da herhangi bir kanala yazılan mesaj bot üzerinden Discord'daki ilgili kanala iletilir.
+    - Özel/Gizli Sunucu Desteği: Widget kapalı olsa dahi Bot Token ile sunucu adı ve kanallar hatasız senkronize edilir.
+    - apps/server/test/discord.spec.ts: 3 birim testi; toplam 32 sunucu testi hatasız geçti.
+- [x] **Masaüstü Arayüzü & Kullanıcı Deneyimi (apps/desktop):**
+  - DiscordSyncModal.tsx: Sadeleştirildi; yalnızca Guild ID ve Bot Token girilerek 'Tüm Kanalları Eşle & Başlat' ile tek tıkla kurulum. İsteğe bağlı tek kanal webhook akordeonu.
+  - ChannelList.tsx: Discord ses odaları ve katılımcıları canlı gösterimi.
+  - MemberList.tsx: Discord çevrimiçi üyeleri ve oyun aktiviteleri gösterimi.
+  - ChatMessageItem.tsx: Discord avatarları ve mor [DISCORD] rozeti ile mesaj gösterimi.
 - [x] **Test & Kalite Doğrulamaları:**
-  - `pnpm typecheck`: Monorepo genelinde sıfır hata ile geçti.
-  - `pnpm lint`: ESLint sıfır hata ile geçti.
-  - `pnpm test`: 21 test dosyası, 111 testin tamamı (%100) başarıyla geçti.
-  - `pnpm --filter @echo/desktop build`: Electron ve Vite derlemesi sıfır hata ile tamamlandı.
-
-
+  - pnpm typecheck: Monorepo genelinde sıfır hata ile geçti.
+  - pnpm lint: ESLint sıfır hata ile geçti.
+  - pnpm test: 21 test dosyası, 112 testin tamamı (%100) başarıyla geçti.
+  - pnpm --filter @echo/desktop build: Electron ve Vite derlemesi sıfır hata ile tamamlandı.

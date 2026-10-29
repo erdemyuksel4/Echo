@@ -11,6 +11,10 @@ import {
   ChevronDown,
   ChevronUp,
   RefreshCw,
+  Eye,
+  EyeOff,
+  Bot,
+  Layers,
 } from 'lucide-react';
 import { useChatStore } from '../stores/useChatStore';
 import { wsService } from '../services/websocket';
@@ -24,12 +28,17 @@ export const DiscordSyncModal: React.FC<DiscordSyncModalProps> = ({ isOpen, onCl
   const { activeGroupMeta, channels, discordConfig, discordState } = useChatStore();
 
   const [guildId, setGuildId] = useState('');
+  const [botToken, setBotToken] = useState('');
+  const [syncAllChannels, setSyncAllChannels] = useState(true);
+  const [showBotToken, setShowBotToken] = useState(false);
+  const [enabled, setEnabled] = useState(true);
+
+  // Advanced / Single channel manual fallback
   const [echoChannelId, setEchoChannelId] = useState('');
   const [webhookUrl, setWebhookUrl] = useState('');
-  const [botToken, setBotToken] = useState('');
   const [discordChannelId, setDiscordChannelId] = useState('');
-  const [enabled, setEnabled] = useState(true);
   const [showAdvanced, setShowAdvanced] = useState(false);
+
   const [isSaving, setIsSaving] = useState(false);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
@@ -37,12 +46,15 @@ export const DiscordSyncModal: React.FC<DiscordSyncModalProps> = ({ isOpen, onCl
     if (isOpen) {
       if (discordConfig) {
         setGuildId(discordConfig.guildId || '');
+        setBotToken(discordConfig.hasBotToken ? '••••••••••••••••' : '');
+        setSyncAllChannels(discordConfig.syncAllChannels !== false);
         setEchoChannelId(discordConfig.echoChannelId || '');
         setDiscordChannelId(discordConfig.discordChannelId || '');
         setEnabled(discordConfig.enabled);
       } else {
         const firstText = channels.find((c) => c.type === 'text');
         if (firstText) setEchoChannelId(firstText.id);
+        setSyncAllChannels(true);
       }
       setFeedback(null);
     }
@@ -61,12 +73,15 @@ export const DiscordSyncModal: React.FC<DiscordSyncModalProps> = ({ isOpen, onCl
     setIsSaving(true);
     setFeedback(null);
 
+    const actualBotToken = botToken.startsWith('••••') ? undefined : botToken.trim() || undefined;
+
     wsService.setDiscordConfig({
       guildId: guildId.trim(),
       echoChannelId: echoChannelId || (textChannels[0]?.id ?? ''),
       webhookUrl: webhookUrl.trim() || undefined,
-      botToken: botToken.trim() || undefined,
+      botToken: actualBotToken,
       discordChannelId: discordChannelId.trim() || undefined,
+      syncAllChannels,
       enabled,
     });
 
@@ -74,7 +89,7 @@ export const DiscordSyncModal: React.FC<DiscordSyncModalProps> = ({ isOpen, onCl
       setIsSaving(false);
       setFeedback({
         type: 'success',
-        message: 'Discord senkronizasyon ayarları başarıyla kaydedildi!',
+        message: 'Discord ayarları kaydedildi ve tüm kanallar senkronize ediliyor!',
       });
       wsService.syncDiscordNow();
     }, 600);
@@ -90,7 +105,7 @@ export const DiscordSyncModal: React.FC<DiscordSyncModalProps> = ({ isOpen, onCl
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm select-none">
-      <div className="relative w-full max-w-lg rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+      <div className="relative w-full max-w-lg rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-800/80 px-6 py-4 bg-slate-950/40">
           <div className="flex items-center gap-2.5">
@@ -101,11 +116,11 @@ export const DiscordSyncModal: React.FC<DiscordSyncModalProps> = ({ isOpen, onCl
               <h2 className="text-base font-bold text-white flex items-center gap-2">
                 <span>Discord Sunucusuyla Eşle</span>
                 <span className="rounded bg-[#5865F2] px-1.5 py-0.5 text-[10px] font-black uppercase text-white">
-                  EN TEGRASYON
+                  ENTEGRASYON
                 </span>
               </h2>
               <p className="text-xs text-slate-400">
-                {activeGroupMeta?.name || 'Grup'} için aktif kullanıcı, ses ve mesaj köprüsü
+                {activeGroupMeta?.name || 'Grup'} için tüm Discord kanalları ve mesaj köprüsü
               </p>
             </div>
           </div>
@@ -174,11 +189,11 @@ export const DiscordSyncModal: React.FC<DiscordSyncModalProps> = ({ isOpen, onCl
           )}
 
           {/* Form */}
-          <div className="space-y-3.5">
-            {/* Discord Server ID */}
+          <div className="space-y-4">
+            {/* 1. Discord Server ID */}
             <div>
               <label className="block text-xs font-semibold text-slate-300 mb-1 flex items-center justify-between">
-                <span>Discord Sunucu ID (Guild ID) *</span>
+                <span>1. Discord Sunucu ID (Guild ID) *</span>
                 <span className="text-[10px] text-slate-500 font-normal">Zorunlu</span>
               </label>
               <input
@@ -189,57 +204,71 @@ export const DiscordSyncModal: React.FC<DiscordSyncModalProps> = ({ isOpen, onCl
                 className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-white placeholder-slate-600 focus:border-indigo-500 focus:outline-none"
               />
               <p className="mt-1 text-[11px] text-slate-400 leading-tight">
-                💡 Discord'da sunucu adına sağ tıklayıp <b>Sunucu Kimliğini Kopyala</b> diyebilirsiniz.
-                Sunucu Ayarları → <b>Widget</b> menüsünden <b>"Sunucu Widget'ını Etkinleştir"</b> açık olmalıdır.
+                💡 Discord'da sunucu simgesine/adına sağ tıklayıp <b>Sunucu Kimliğini Kopyala</b> deyin. (Geliştirici Modu açık olmalıdır).
               </p>
             </div>
 
-            {/* Echo Text Channel to Bridge */}
-            <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1">
-                Eşlenecek Echo Yazı Kanalı
-              </label>
-              <select
-                value={echoChannelId}
-                onChange={(e) => setEchoChannelId(e.target.value)}
-                className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-white focus:border-indigo-500 focus:outline-none"
-              >
-                {textChannels.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    #{c.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Echo -> Discord Webhook */}
+            {/* 2. Discord Bot Token */}
             <div>
               <label className="block text-xs font-semibold text-slate-300 mb-1 flex items-center justify-between">
-                <span>Echo → Discord Webhook URL (Mesaj Göndermek İçin)</span>
-                <span className="text-[10px] text-indigo-400">Önerilen</span>
+                <span className="flex items-center gap-1.5">
+                  <Bot className="h-3.5 w-3.5 text-indigo-400" />
+                  <span>2. Discord Bot Token (Önerilen)</span>
+                </span>
+                <span className="text-[10px] text-indigo-400 font-normal">Tüm Kanallar İçin</span>
               </label>
-              <input
-                type="text"
-                value={webhookUrl}
-                onChange={(e) => setWebhookUrl(e.target.value)}
-                placeholder="https://discord.com/api/webhooks/..."
-                className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-white placeholder-slate-600 focus:border-indigo-500 focus:outline-none"
-              />
+              <div className="relative">
+                <input
+                  type={showBotToken ? 'text' : 'password'}
+                  value={botToken}
+                  onChange={(e) => setBotToken(e.target.value)}
+                  placeholder="Discord Developer Portal Bot Token..."
+                  className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 pr-9 text-xs text-white placeholder-slate-600 focus:border-indigo-500 focus:outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowBotToken(!showBotToken)}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 transition"
+                  title={showBotToken ? 'Gizle' : 'Göster'}
+                >
+                  {showBotToken ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
               <p className="mt-1 text-[11px] text-slate-400 leading-tight">
-                Echo'dan yazılan mesajların Discord'a düşmesi için: Discord'da eşlemek istediğin kanala sağ tıkla →{' '}
-                <b>Kanalı Düzenle</b> → <b>Entegrasyonlar</b> → <b>Webhook Oluştur</b> → <b>Webhook URL'sini Kopyala</b>.
+                Discord Developer Portal'dan aldığınız Bot Token. Discord sunucunuz özel/gizli kalsa bile tüm kanalları otomatik bağlar.
               </p>
             </div>
 
-            {/* Advanced: Discord -> Echo Bot settings */}
-            <div className="pt-2">
+            {/* 3. Auto-sync All Channels Checkbox */}
+            <div className="rounded-xl border border-indigo-500/30 bg-indigo-950/20 p-3.5">
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={syncAllChannels}
+                  onChange={(e) => setSyncAllChannels(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 rounded border-slate-700 bg-slate-950 text-indigo-600 focus:ring-0 focus:ring-offset-0 cursor-pointer"
+                />
+                <div>
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-white">
+                    <Layers className="h-3.5 w-3.5 text-indigo-400" />
+                    <span>Tüm Discord Kanallarını Otomatik Echo'ya Aktar ve Eşle</span>
+                  </div>
+                  <p className="mt-1 text-[11px] text-slate-300 leading-relaxed">
+                    Discord sunucunuzdaki tüm yazı ve ses odaları Echo'da otomatik oluşturulur. Echo'daki kanallardan yazdığınız mesajlar Discord'daki aynı kanala, Discord'daki mesajlar da Echo'daki kanala anında iletilir.
+                  </p>
+                </div>
+              </label>
+            </div>
+
+            {/* Advanced: Manual single-channel Webhook fallback */}
+            <div className="pt-1">
               <button
                 type="button"
                 onClick={() => setShowAdvanced(!showAdvanced)}
-                className="flex items-center gap-1.5 text-xs font-semibold text-indigo-400 hover:text-indigo-300 transition"
+                className="flex items-center gap-1.5 text-xs font-medium text-slate-400 hover:text-slate-300 transition"
               >
                 {showAdvanced ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                <span>Gelişmiş: Discord → Echo Mesaj Köprüsü (Bot Token)</span>
+                <span>İsteğe Bağlı: Manuel Tek Kanal Webhook Ayarları</span>
               </button>
 
               {showAdvanced && (
@@ -247,26 +276,43 @@ export const DiscordSyncModal: React.FC<DiscordSyncModalProps> = ({ isOpen, onCl
                   <div className="flex items-start gap-2 text-[11px] text-slate-400">
                     <HelpCircle className="h-4 w-4 text-indigo-400 shrink-0 mt-0.5" />
                     <span>
-                      Discord'da yazılan mesajların da Echo'ya düşmesi için bir Discord Bot Token'ı ve hedef Discord Kanal ID'si gereklidir.
+                      Bot Token kullanmak istemiyorsanız yalnızca tek bir kanal için Webhook URL girerek Echo'dan Discord'a tek yönlü mesaj iletebilirsiniz.
                     </span>
                   </div>
 
                   <div>
                     <label className="block text-[11px] font-medium text-slate-300 mb-1">
-                      Discord Bot Token (Opsiyonel)
+                      Eşlenecek Echo Yazı Kanalı
+                    </label>
+                    <select
+                      value={echoChannelId}
+                      onChange={(e) => setEchoChannelId(e.target.value)}
+                      className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-xs text-white focus:border-indigo-500 focus:outline-none"
+                    >
+                      {textChannels.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          #{c.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-medium text-slate-300 mb-1">
+                      Discord Webhook URL
                     </label>
                     <input
-                      type="password"
-                      value={botToken}
-                      onChange={(e) => setBotToken(e.target.value)}
-                      placeholder="MTAx... (Bot Token)"
+                      type="text"
+                      value={webhookUrl}
+                      onChange={(e) => setWebhookUrl(e.target.value)}
+                      placeholder="https://discord.com/api/webhooks/..."
                       className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-xs text-white placeholder-slate-600 focus:border-indigo-500 focus:outline-none"
                     />
                   </div>
 
                   <div>
                     <label className="block text-[11px] font-medium text-slate-300 mb-1">
-                      Discord Kanal ID (Opsiyonel)
+                      Tekil Discord Kanal ID
                     </label>
                     <input
                       type="text"
@@ -314,7 +360,7 @@ export const DiscordSyncModal: React.FC<DiscordSyncModalProps> = ({ isOpen, onCl
             className="flex items-center gap-2 rounded-lg bg-indigo-600 px-5 py-2 text-xs font-bold text-white shadow-lg shadow-indigo-600/30 hover:bg-indigo-500 disabled:opacity-50 transition"
           >
             {isSaving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-            <span>Kaydet & Eşle</span>
+            <span>Tüm Kanalları Eşle & Başlat</span>
           </button>
         </div>
       </div>

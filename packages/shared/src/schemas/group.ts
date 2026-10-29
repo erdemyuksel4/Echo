@@ -13,6 +13,7 @@ export const ChannelSchema = z.object({
   type: ChannelTypeSchema,
   position: z.number().int().nonnegative(),
   createdAt: z.number().int().positive(),
+  discordChannelId: z.string().optional(),
 });
 
 export type Channel = z.infer<typeof ChannelSchema>;
