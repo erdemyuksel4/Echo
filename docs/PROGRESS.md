@@ -19,7 +19,7 @@ Bu dosya her faz ve görev sonunda güncellenir.
 | Faz 10 | Gelişmiş İşbirliği & Güvenlik Özellikleri | Tamamlandı | `main`                    | Ekran kaydetme (.webm), Ekrana çizim/beyaz tahta, Uçtan Uca Şifreleme (E2EE), Uzaktan kontrol (TeamViewer tarzı)                       |
 | Faz 11 | Echo Mobil Versiyonu (Android & iOS)    | Tamamlandı | `main`                    | Flutter tabanlı, Ed25519 kimlik, WebRTC mesh ses & kamera, ekran izleme, DM, Markdown, Giphy, çizim tahtası, sıfır lint/hata             |
 | Faz 12 | Cihaz Eşleme (QR & Kod ile Oturum Açma) | Tamamlandı | `main`                    | X25519 Diffie-Hellman + AES-256-GCM E2EE kimlik transferi, QR Kod, 6 haneli eşleme kodu, OnboardingModal ve SettingsModal entegrasyonu |
-| Faz 13 | Discord Senkronizasyonu & Mesaj Köprüsü | Tamamlandı | `faz-13-discord-sync`     | Discord Sunucu Widget aktif kişiler & ses odaları gösterimi, çift yönlü Echo ↔ Discord sohbet köprüsü, DiscordSyncModal |
+| Faz 13 | Discord Senkronizasyonu & Mesaj Köprüsü | Tamamlandı | `faz-13-discord-sync`     | Discord Sunucu Widget aktif kişiler & ses odaları gösterimi, çift yönlü Echo ↔ Discord sohbet köprüsü, DiscordSyncModal, dinamik webhook ile yazar adı gösterimi ve izin rehberliği |
 | Faz 14 | Discord Tarzı Alt Mesaj (Thread) Sistemi | Tamamlandı | `faz-14-alt-mesaj-thread` | Mesajdan alt başlık açma, 'X Yanıt' göstergesi, sağ ThreadPanel bağımsız alt mesajlaşma, canlı sayaç güncellemesi |
 
 ## Faz 0 — Kabul Kriterleri ve Gerçekleşenler
