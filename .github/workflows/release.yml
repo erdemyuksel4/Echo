@@ -1,9 +1,6 @@
 name: Build & Release Echo
 
 on:
-  push:
-    tags:
-      - 'v*'
   workflow_dispatch:
 
 permissions:
@@ -25,7 +22,7 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: 10
+          version: 12
 
       - name: Setup .NET (for EchoUpdater)
         uses: actions/setup-dotnet@v4
@@ -33,7 +30,7 @@ jobs:
           dotnet-version: '9.0.x'
 
       - name: Install Dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --no-frozen-lockfile
 
       - name: Run Typecheck & Tests
         run: |
@@ -74,7 +71,7 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: 10
+          version: 12
 
       - name: Install Linux Build Dependencies
         run: |
@@ -82,7 +79,7 @@ jobs:
           sudo apt-get install -y libarchive-tools libsecret-1-dev
 
       - name: Install Dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --no-frozen-lockfile
 
       - name: Build Linux Packages
         env:
@@ -100,31 +97,29 @@ jobs:
             apps/desktop/dist/*.tar.gz
             apps/desktop/dist/latest-linux.yml
 
-  publish-release:
-    name: Publish GitHub Release
+  create-release:
+    name: Create GitHub Release
     needs: [build-windows, build-linux]
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
       - name: Download Windows Artifacts
         uses: actions/download-artifact@v4
         with:
           name: windows-dist
-          path: dist-release
+          path: dist
 
       - name: Download Linux Artifacts
         uses: actions/download-artifact@v4
         with:
           name: linux-dist
-          path: dist-release
+          path: dist
 
       - name: Publish Release to GitHub
         uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          draft: false
+          prerelease: false
+          generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          files: |
-            dist-release/*
-          generate_release_notes: true
