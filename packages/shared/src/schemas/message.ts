@@ -41,6 +41,9 @@ export const MessageSchema = z.object({
   reactions: z.record(z.string(), z.array(z.string())).default({}),
   externalSource: z.enum(['discord']).optional(),
   externalAvatarUrl: z.string().optional(),
+  threadId: z.string().nullable().default(null),
+  threadCount: z.number().int().nonnegative().default(0),
+  threadLastReplyAt: z.number().int().positive().nullable().default(null),
 });
 
 export type Message = z.infer<typeof MessageSchema>;

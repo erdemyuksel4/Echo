@@ -309,10 +309,19 @@ class EchoWebSocketService {
           const data = envelope.d as {
             channelId: string;
             messageId: string;
-            content: string;
-            editedAt: number;
+            content?: string;
+            editedAt?: number | null;
+            threadCount?: number;
+            threadLastReplyAt?: number | null;
           };
-          chatStore.updateMessage(data.channelId, data.messageId, data.content, data.editedAt);
+          chatStore.updateMessage(
+            data.channelId,
+            data.messageId,
+            data.content,
+            data.editedAt,
+            data.threadCount,
+            data.threadLastReplyAt,
+          );
         }
         break;
       }
@@ -342,6 +351,19 @@ class EchoWebSocketService {
         if (isActive) {
           const data = envelope.d as { channelId: string; messages: Message[] };
           chatStore.setHistory(data.channelId, data.messages);
+        }
+        break;
+      }
+
+      case WsServerEvents.THREAD_DATA: {
+        if (isActive) {
+          const data = envelope.d as {
+            channelId: string;
+            threadId: string;
+            messages: Message[];
+            hasMore: boolean;
+          };
+          chatStore.setThreadHistory(data.threadId, data.messages);
         }
         break;
       }
@@ -678,6 +700,7 @@ class EchoWebSocketService {
     content: string,
     replyTo?: string,
     attachments?: Attachment[],
+    threadId?: string,
   ): void {
     const trimmed = content.trim();
     if (!trimmed && (!attachments || attachments.length === 0)) return;
@@ -686,6 +709,7 @@ class EchoWebSocketService {
       content: trimmed,
       replyTo: replyTo ?? null,
       attachments: attachments ?? [],
+      threadId: threadId ?? null,
     });
   }
 
@@ -731,6 +755,15 @@ class EchoWebSocketService {
   fetchHistory(channelId: string, before?: string): void {
     this.send(WsClientEvents.HISTORY_FETCH, {
       channelId,
+      before,
+      limit: 50,
+    });
+  }
+
+  fetchThread(channelId: string, threadId: string, before?: string): void {
+    this.send(WsClientEvents.THREAD_FETCH, {
+      channelId,
+      threadId,
       before,
       limit: 50,
     });

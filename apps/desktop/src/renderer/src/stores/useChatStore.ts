@@ -50,6 +50,11 @@ interface ChatState {
   unreadCounts: Record<string, number>; // channelId -> unread count
   discordState: DiscordState | null;
   discordConfig: ServerDiscordConfigPayload | null;
+  threadMessages: Record<string, Message[]>; // threadId -> Message[]
+  activeThreadMessage: Message | null;
+  setActiveThreadMessage: (message: Message | null) => void;
+  setThreadHistory: (threadId: string, messages: Message[]) => void;
+  addThreadMessage: (threadId: string, message: Message) => void;
 
   setGroups: (groups: GroupItem[]) => void;
   addGroup: (group: GroupItem) => void;
@@ -63,7 +68,14 @@ interface ChatState {
   setActiveChannel: (channelId: string | null) => void;
   setConnectionStatus: (status: 'disconnected' | 'connecting' | 'connected') => void;
   addMessage: (channelId: string, message: Message) => void;
-  updateMessage: (channelId: string, messageId: string, content: string, editedAt: number) => void;
+  updateMessage: (
+    channelId: string,
+    messageId: string,
+    content?: string,
+    editedAt?: number | null,
+    threadCount?: number,
+    threadLastReplyAt?: number | null,
+  ) => void;
   deleteMessage: (channelId: string, messageId: string) => void;
   updateReactions: (
     channelId: string,
@@ -104,6 +116,30 @@ export const useChatStore = create<ChatState>((set) => ({
   unreadCounts: {},
   discordState: null,
   discordConfig: null,
+  threadMessages: {},
+  activeThreadMessage: null,
+
+  setActiveThreadMessage: (activeThreadMessage) => set({ activeThreadMessage }),
+
+  setThreadHistory: (threadId, messages) =>
+    set((state) => ({
+      threadMessages: {
+        ...state.threadMessages,
+        [threadId]: messages,
+      },
+    })),
+
+  addThreadMessage: (threadId, message) =>
+    set((state) => {
+      const list = state.threadMessages[threadId] ?? [];
+      if (list.some((m) => m.id === message.id)) return state;
+      return {
+        threadMessages: {
+          ...state.threadMessages,
+          [threadId]: [...list, message],
+        },
+      };
+    }),
 
   setDiscordState: (discordState) => set({ discordState }),
   setDiscordConfig: (discordConfig) => set({ discordConfig }),
@@ -298,12 +334,25 @@ export const useChatStore = create<ChatState>((set) => ({
         : state.unreadCounts,
       replyingTo: null,
       editingMessageId: null,
+      activeThreadMessage: null,
     })),
 
   setConnectionStatus: (connectionStatus) => set({ connectionStatus }),
 
   addMessage: (channelId, message) =>
     set((state) => {
+      // If it's a thread message, add to threadMessages instead of main channel messages
+      if (message.threadId) {
+        const threadList = state.threadMessages[message.threadId] ?? [];
+        if (threadList.some((m) => m.id === message.id)) return state;
+        return {
+          threadMessages: {
+            ...state.threadMessages,
+            [message.threadId]: [...threadList, message],
+          },
+        };
+      }
+
       const list = state.messages[channelId] ?? [];
       if (list.some((m) => m.id === message.id)) return state;
       const currentTyping = state.typingUsers[channelId] ?? [];
@@ -326,14 +375,52 @@ export const useChatStore = create<ChatState>((set) => ({
       };
     }),
 
-  updateMessage: (channelId, messageId, content, editedAt) =>
+  updateMessage: (channelId, messageId, content, editedAt, threadCount, threadLastReplyAt) =>
     set((state) => {
       const list = state.messages[channelId] ?? [];
+      const updatedMessages = list.map((m) => {
+        if (m.id !== messageId) return m;
+        return {
+          ...m,
+          ...(content !== undefined ? { content } : {}),
+          ...(editedAt !== undefined ? { editedAt } : {}),
+          ...(threadCount !== undefined ? { threadCount } : {}),
+          ...(threadLastReplyAt !== undefined ? { threadLastReplyAt } : {}),
+        };
+      });
+
+      // Also update inside threadMessages if present
+      const updatedThreadMessages = { ...state.threadMessages };
+      for (const [tId, tMsgs] of Object.entries(updatedThreadMessages)) {
+        if (tMsgs.some((m) => m.id === messageId)) {
+          updatedThreadMessages[tId] = tMsgs.map((m) => {
+            if (m.id !== messageId) return m;
+            return {
+              ...m,
+              ...(content !== undefined ? { content } : {}),
+              ...(editedAt !== undefined ? { editedAt } : {}),
+            };
+          });
+        }
+      }
+
+      const updatedActiveThread =
+        state.activeThreadMessage?.id === messageId
+          ? {
+              ...state.activeThreadMessage,
+              ...(content !== undefined ? { content } : {}),
+              ...(threadCount !== undefined ? { threadCount } : {}),
+              ...(threadLastReplyAt !== undefined ? { threadLastReplyAt } : {}),
+            }
+          : state.activeThreadMessage;
+
       return {
         messages: {
           ...state.messages,
-          [channelId]: list.map((m) => (m.id === messageId ? { ...m, content, editedAt } : m)),
+          [channelId]: updatedMessages,
         },
+        threadMessages: updatedThreadMessages,
+        activeThreadMessage: updatedActiveThread,
       };
     }),
 
@@ -351,11 +438,18 @@ export const useChatStore = create<ChatState>((set) => ({
   updateReactions: (channelId, messageId, reactions) =>
     set((state) => {
       const list = state.messages[channelId] ?? [];
+      const updatedThreadMessages = { ...state.threadMessages };
+      for (const [tId, tMsgs] of Object.entries(updatedThreadMessages)) {
+        if (tMsgs.some((m) => m.id === messageId)) {
+          updatedThreadMessages[tId] = tMsgs.map((m) => (m.id === messageId ? { ...m, reactions } : m));
+        }
+      }
       return {
         messages: {
           ...state.messages,
           [channelId]: list.map((m) => (m.id === messageId ? { ...m, reactions } : m)),
         },
+        threadMessages: updatedThreadMessages,
       };
     }),
 

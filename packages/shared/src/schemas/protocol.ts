@@ -34,6 +34,7 @@ export const WsClientEvents = {
   CHANNEL_DELETE: 'channel.delete',
   INVITE_CREATE: 'invite.create',
   HISTORY_FETCH: 'history.fetch',
+  THREAD_FETCH: 'thread.fetch',
   PRESENCE_UPDATE: 'presence.update',
   VOICE_JOIN: 'voice.join',
   VOICE_LEAVE: 'voice.leave',
@@ -79,6 +80,7 @@ export const WsServerEvents = {
   PRESENCE_CHANGED: 'presence.changed',
   INVITE_CREATED: 'invite.created',
   HISTORY_DATA: 'history.data',
+  THREAD_DATA: 'thread.data',
   VOICE_USER_JOINED: 'voice.user_joined',
   VOICE_USER_LEFT: 'voice.user_left',
   VOICE_SIGNAL: 'voice.signal',
@@ -114,6 +116,7 @@ export const ClientMsgSendPayloadSchema = z
     content: z.string().max(4000).default(''),
     attachments: z.array(AttachmentSchema).default([]),
     replyTo: z.string().nullable().optional(),
+    threadId: z.string().nullable().optional(),
   })
   .refine(
     (data) => data.content.trim().length > 0 || (data.attachments && data.attachments.length > 0),
@@ -155,8 +158,10 @@ export const ServerReactUpdatedPayloadSchema = z.object({
 export const ServerMsgUpdatedPayloadSchema = z.object({
   channelId: z.string(),
   messageId: z.string(),
-  content: z.string(),
-  editedAt: z.number(),
+  content: z.string().optional(),
+  editedAt: z.number().nullable().optional(),
+  threadCount: z.number().optional(),
+  threadLastReplyAt: z.number().nullable().optional(),
 });
 
 export const ServerMsgDeletedPayloadSchema = z.object({
@@ -186,6 +191,20 @@ export const ClientHistoryFetchPayloadSchema = z.object({
   channelId: z.string(),
   before: z.string().optional(),
   limit: z.number().int().min(1).max(100).default(50),
+});
+
+export const ClientThreadFetchPayloadSchema = z.object({
+  channelId: z.string(),
+  threadId: z.string(),
+  before: z.string().optional(),
+  limit: z.number().int().min(1).max(100).default(50),
+});
+
+export const ServerThreadDataPayloadSchema = z.object({
+  channelId: z.string(),
+  threadId: z.string(),
+  messages: z.array(MessageSchema),
+  hasMore: z.boolean(),
 });
 
 export const ServerErrorPayloadSchema = z.object({

@@ -20,6 +20,7 @@ Bu dosya her faz ve görev sonunda güncellenir.
 | Faz 11 | Echo Mobil Versiyonu (Android & iOS)    | Tamamlandı | `main`                    | Flutter tabanlı, Ed25519 kimlik, WebRTC mesh ses & kamera, ekran izleme, DM, Markdown, Giphy, çizim tahtası, sıfır lint/hata             |
 | Faz 12 | Cihaz Eşleme (QR & Kod ile Oturum Açma) | Tamamlandı | `main`                    | X25519 Diffie-Hellman + AES-256-GCM E2EE kimlik transferi, QR Kod, 6 haneli eşleme kodu, OnboardingModal ve SettingsModal entegrasyonu |
 | Faz 13 | Discord Senkronizasyonu & Mesaj Köprüsü | Tamamlandı | `faz-13-discord-sync`     | Discord Sunucu Widget aktif kişiler & ses odaları gösterimi, çift yönlü Echo ↔ Discord sohbet köprüsü, DiscordSyncModal |
+| Faz 14 | Discord Tarzı Alt Mesaj (Thread) Sistemi | Tamamlandı | `faz-14-alt-mesaj-thread` | Mesajdan alt başlık açma, 'X Yanıt' göstergesi, sağ ThreadPanel bağımsız alt mesajlaşma, canlı sayaç güncellemesi |
 
 ## Faz 0 — Kabul Kriterleri ve Gerçekleşenler
 
@@ -1091,3 +1092,40 @@ Bu dosya her faz ve görev sonunda güncellenir.
   - pnpm lint: ESLint sıfır hata ile geçti.
   - pnpm test: 21 test dosyası, 112 testin tamamı (%100) başarıyla geçti.
   - pnpm --filter @echo/desktop build: Electron ve Vite derlemesi sıfır hata ile tamamlandı.
+
+
+## Faz 14 — Kabul Kriterleri ve Gerçekleşenler
+
+- [x] **Ortak Protokol ve Zod Şemaları (`@echo/shared`):**
+  - `MessageSchema`'ya `threadId` (string | null), `threadCount` (number, varsayılan 0) ve `threadLastReplyAt` (number | null) alanları eklendi.
+  - `ClientThreadFetchPayloadSchema` ve `ServerThreadDataPayloadSchema` şemaları tanımlandı.
+  - `WsClientEvents.THREAD_FETCH` ve `WsServerEvents.THREAD_DATA` olayları eklendi.
+  - `ClientMsgSendPayloadSchema` içine `threadId` desteği eklendi.
+  - `thread.test.ts` birim testleri yazılarak tüm doğrulama senaryoları test edildi.
+
+- [x] **Sunucu Mimarisi (`apps/server`):**
+  - Cloudflare Durable Object `GroupDO` SQLite `messages` tablosu `thread_id`, `thread_count`, `thread_last_reply_at` kolonları ile genişletildi.
+  - Performans için `idx_messages_thread_id` indeksi kuruldu.
+  - Ana kanal geçmişi sorgularında (`history.fetch`) `thread_id IS NULL OR thread_id = ''` filtresi getirilerek alt mesajların ana kanal akışını kirletmesi engellendi.
+  - `handleMessageSend` içinde alt mesaj gönderiminde ana mesajın `thread_count` ve `thread_last_reply_at` sayaçları güncellenerek tüm bağlı kullanıcılara anlık `msg.updated` yayını yapıldı.
+  - `handleThreadFetch` işleyicisi ile alt başlığa ait mesaj geçmişi (`thread.data`) istemciye iletildi.
+  - `test/thread.spec.ts` entegrasyon testi eklendi ve başarıyla geçti.
+
+- [x] **Masaüstü Arayüzü (`apps/desktop`):**
+  - `ChatMessageItem`:
+    - Mesaj üzerine gelindiğinde çıkan aksiyon çubuğuna Discord tarzı "Alt Başlık Başlat" butonu (`MessageSquare`) eklendi.
+    - `threadCount > 0` olan mesajların altında şık Discord tarzı `🧵 X Yanıt • Son yanıt zamanı →` çubuğu render edildi.
+  - `ThreadPanel`:
+    - Sağ tarafta açılan bağımsız alt başlık paneli geliştirildi.
+    - Üstte sabitlenen kök mesaj önizleme kartı.
+    - Alt başlığa özel mesaj akışı ve boş durum gösterimi.
+    - Alt başlığa özel mesaj giriş kutusu ve emoji desteği.
+  - `ChatArea`:
+    - `activeThreadMessage` durumu yönetildi; bir mesaja tıklandığında sağda panelin açılması sağlandı.
+  - `useChatStore` & `websocket.ts`:
+    - `threadMessages`, `activeThreadMessage`, `fetchThread` fonksiyonları ve anlık WebSocket dinleyicileri entegre edildi.
+
+- [x] **Test Doğrulamaları:**
+  - `pnpm typecheck`: Monorepo genelinde sıfır hata ile geçti.
+  - `pnpm lint`: Sıfır hata ile geçti.
+  - `pnpm test`: 23 test dosyası, 121 testin tamamı (%100) başarıyla geçti.

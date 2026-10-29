@@ -8,6 +8,7 @@ import { useMusicStore } from '../stores/useMusicStore';
 import { e2eeService } from '../services/e2eeService';
 import { wsService } from '../services/websocket';
 import { ChatMessageItem } from './ChatMessageItem';
+import { ThreadPanel } from './ThreadPanel';
 import { GiphyPicker } from './GiphyPicker';
 import { uploadImageAttachment } from '../services/imageCompression';
 import { p2pFileTransferService } from '../services/p2pFileTransfer';
@@ -25,6 +26,8 @@ export const ChatArea: React.FC = () => {
     members,
     replyingTo,
     setReplyingTo,
+    activeThreadMessage,
+    setActiveThreadMessage,
   } = useChatStore();
 
   const [inputContent, setInputContent] = useState('');
@@ -492,8 +495,9 @@ export const ChatArea: React.FC = () => {
   }
 
   return (
-    <div
-      className="flex flex-1 flex-col h-full bg-slate-900 relative"
+    <div className="flex flex-1 h-full w-full overflow-hidden">
+      <div
+        className="flex flex-1 flex-col h-full bg-slate-900 relative min-w-0"
       onDragEnter={handleDragEnter}
       onDragLeave={handleDragLeave}
       onDragOver={handleDragOver}
@@ -576,6 +580,7 @@ export const ChatArea: React.FC = () => {
                 channelId={activeChannel.id}
                 member={member}
                 currentUserRole={myMember?.role ?? 'member'}
+                onOpenThread={(threadMsg) => setActiveThreadMessage(threadMsg)}
               />
             );
           })
@@ -810,5 +815,17 @@ export const ChatArea: React.FC = () => {
         </form>
       </div>
     </div>
+
+    {activeThreadMessage && activeChannel && (
+      <ThreadPanel
+        channelId={activeChannel.id}
+        rootMessage={activeThreadMessage}
+        channelName={activeChannel.name}
+        members={members}
+        currentUserRole={myMember?.role ?? 'member'}
+        onClose={() => setActiveThreadMessage(null)}
+      />
+    )}
+  </div>
   );
 };

@@ -10,6 +10,7 @@ import {
   AlertCircle,
   Loader2,
   ShieldCheck,
+  MessageSquare,
 } from 'lucide-react';
 import {
   type Message,
@@ -27,6 +28,18 @@ import { p2pFileTransferService, type P2PTransferProgress } from '../services/p2
 import { ImageViewerModal } from './ImageViewerModal';
 import { SERVER_HTTP_URL } from '../config';
 import { UserContextMenu, type ContextMenuUser } from './UserContextMenu';
+
+function formatRelativeTime(timestamp: number): string {
+  const diffMs = Date.now() - timestamp;
+  const diffSec = Math.floor(diffMs / 1000);
+  if (diffSec < 60) return 'az önce';
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) return `${diffMin} dk önce`;
+  const diffHour = Math.floor(diffMin / 60);
+  if (diffHour < 24) return `${diffHour} sa önce`;
+  const diffDay = Math.floor(diffHour / 24);
+  return `${diffDay} gün önce`;
+}
 
 function formatBytes(bytes: number, decimals = 1): string {
   if (bytes === 0) return '0 B';
@@ -152,6 +165,8 @@ interface Props {
   channelId: string;
   member?: GroupMember;
   currentUserRole?: 'owner' | 'admin' | 'member';
+  onOpenThread?: (message: Message) => void;
+  isInThreadPanel?: boolean;
 }
 
 export const ChatMessageItem: React.FC<Props> = ({
@@ -159,6 +174,8 @@ export const ChatMessageItem: React.FC<Props> = ({
   channelId,
   member,
   currentUserRole = 'member',
+  onOpenThread,
+  isInThreadPanel = false,
 }) => {
   const { identity } = useAuthStore();
   const { setReplyingTo } = useChatStore();
@@ -444,6 +461,17 @@ export const ChatMessageItem: React.FC<Props> = ({
           )}
         </div>
 
+        {/* Thread Button */}
+        {!isInThreadPanel && onOpenThread && (
+          <button
+            onClick={() => onOpenThread(message)}
+            className="rounded p-1 hover:bg-slate-800 hover:text-indigo-400 transition"
+            title="Alt Başlık Başlat"
+          >
+            <MessageSquare className="h-4 w-4" />
+          </button>
+        )}
+
         {/* Reply Button */}
         <button
           onClick={() => setReplyingTo(message)}
@@ -688,6 +716,29 @@ export const ChatMessageItem: React.FC<Props> = ({
                 </button>
               );
             })}
+          </div>
+        )}
+
+        {/* Thread replies banner */}
+        {!isInThreadPanel && (message.threadCount ?? 0) > 0 && onOpenThread && (
+          <div className="mt-2 flex items-center">
+            <button
+              type="button"
+              onClick={() => onOpenThread(message)}
+              className="inline-flex items-center gap-2 rounded-lg bg-indigo-950/40 hover:bg-indigo-900/50 border border-indigo-800/40 px-2.5 py-1 text-xs text-indigo-300 hover:text-white transition cursor-pointer group shadow-sm"
+              title="Alt başlığı görüntüle"
+            >
+              <MessageSquare className="h-3.5 w-3.5 text-indigo-400 group-hover:scale-110 transition-transform" />
+              <span className="font-semibold">{message.threadCount} Yanıt</span>
+              {message.threadLastReplyAt && (
+                <span className="text-[10px] text-slate-400 font-normal">
+                  • Son yanıt {formatRelativeTime(message.threadLastReplyAt)}
+                </span>
+              )}
+              <span className="text-slate-400 group-hover:text-white group-hover:translate-x-0.5 transition-transform text-[11px]">
+                →
+              </span>
+            </button>
           </div>
         )}
       </div>

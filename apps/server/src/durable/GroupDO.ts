@@ -20,6 +20,7 @@ import {
   ClientChannelRenamePayloadSchema,
   ClientChannelDeletePayloadSchema,
   ClientHistoryFetchPayloadSchema,
+  ClientThreadFetchPayloadSchema,
   ClientTypingPayloadSchema,
   ClientVoiceJoinPayloadSchema,
   ClientVoiceLeavePayloadSchema,
@@ -96,6 +97,9 @@ interface SqlMessageRow {
   reply_to_content?: string | null;
   attachments_json?: string | null;
   created_at: number;
+  thread_id?: string | null;
+  thread_count?: number;
+  thread_last_reply_at?: number | null;
 
   edited_at: number | null;
   deleted: number;
@@ -520,6 +524,9 @@ export class GroupDO extends DurableObject<Env> {
           editedAt: null,
           deleted: false,
           reactions: {},
+          threadId: null,
+          threadCount: 0,
+          threadLastReplyAt: null,
         };
         this.broadcast(WsServerEvents.MSG_NEW, welcomeMsg);
       }
@@ -887,6 +894,9 @@ export class GroupDO extends DurableObject<Env> {
       case WsClientEvents.HISTORY_FETCH:
         await this.handleHistoryFetch(ws, envelope);
         break;
+      case WsClientEvents.THREAD_FETCH:
+        this.handleThreadFetch(ws, envelope);
+        break;
       case WsClientEvents.TYPING:
         this.handleTyping(session, envelope);
         break;
@@ -1127,7 +1137,7 @@ export class GroupDO extends DurableObject<Env> {
       return;
     }
 
-    const { channelId, content = '', replyTo, attachments = [] } = parse.data;
+    const { channelId, content = '', replyTo, threadId, attachments = [] } = parse.data;
 
     // Check if channel exists
     const chanRows = [...this.sql.exec(`SELECT id FROM channels WHERE id = ?`, channelId)];
@@ -1152,9 +1162,17 @@ export class GroupDO extends DurableObject<Env> {
       }
     }
 
+    let rootMessageFound = false;
+    if (threadId) {
+      const rootRows = [...this.sql.exec(`SELECT id FROM messages WHERE id = ? AND channel_id = ?`, threadId, channelId)];
+      if (rootRows.length > 0) {
+        rootMessageFound = true;
+      }
+    }
+
     this.sql.exec(
-      `INSERT INTO messages (id, channel_id, author_id, author_name, content, reply_to, reply_to_author_name, reply_to_content, attachments_json, created_at, deleted)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
+      `INSERT INTO messages (id, channel_id, author_id, author_name, content, reply_to, reply_to_author_name, reply_to_content, attachments_json, created_at, deleted, thread_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
       id,
       channelId,
       session.userId,
@@ -1165,7 +1183,21 @@ export class GroupDO extends DurableObject<Env> {
       replyToContent,
       JSON.stringify(attachments),
       now,
+      threadId ?? null,
     );
+
+    let updatedThreadCount = 0;
+    if (threadId && rootMessageFound) {
+      this.sql.exec(
+        `UPDATE messages SET thread_count = COALESCE(thread_count, 0) + 1, thread_last_reply_at = ? WHERE id = ?`,
+        now,
+        threadId,
+      );
+      const updatedRows = [...this.sql.exec(`SELECT thread_count FROM messages WHERE id = ?`, threadId)];
+      if (updatedRows.length > 0 && updatedRows[0]) {
+        updatedThreadCount = Number(updatedRows[0].thread_count) || 0;
+      }
+    }
 
     const message: Message = {
       id,
@@ -1181,10 +1213,23 @@ export class GroupDO extends DurableObject<Env> {
       editedAt: null,
       deleted: false,
       reactions: {},
+      threadId: threadId ?? null,
+      threadCount: 0,
+      threadLastReplyAt: null,
     };
 
     // Broadcast to all connected group members with client nonce echo
     this.broadcast(WsServerEvents.MSG_NEW, message, envelope.id);
+
+    // If it was a thread message, broadcast root message update so the thread badge in main chat updates live
+    if (threadId && rootMessageFound) {
+      this.broadcast(WsServerEvents.MSG_UPDATED, {
+        channelId,
+        messageId: threadId,
+        threadCount: updatedThreadCount,
+        threadLastReplyAt: now,
+      });
+    }
 
     // Forward to Discord webhook if configured for this channel
     this.ctx.waitUntil(
@@ -1377,7 +1422,7 @@ export class GroupDO extends DurableObject<Env> {
     if (before) {
       rows = [
         ...this.sql.exec(
-          `SELECT * FROM messages WHERE channel_id = ? AND id < ? AND deleted = 0 ORDER BY id DESC LIMIT ?`,
+          `SELECT * FROM messages WHERE channel_id = ? AND (thread_id IS NULL OR thread_id = '') AND id < ? AND deleted = 0 ORDER BY id DESC LIMIT ?`,
           channelId,
           before,
           limit + 1,
@@ -1386,7 +1431,7 @@ export class GroupDO extends DurableObject<Env> {
     } else {
       rows = [
         ...this.sql.exec(
-          `SELECT * FROM messages WHERE channel_id = ? AND deleted = 0 ORDER BY id DESC LIMIT ?`,
+          `SELECT * FROM messages WHERE channel_id = ? AND (thread_id IS NULL OR thread_id = '') AND deleted = 0 ORDER BY id DESC LIMIT ?`,
           channelId,
           limit + 1,
         ),
@@ -1445,6 +1490,9 @@ export class GroupDO extends DurableObject<Env> {
         reactions: reactionMap[r.id] ?? {},
         externalSource: (r.external_source as 'discord') || undefined,
         externalAvatarUrl: r.external_avatar_url || undefined,
+        threadId: r.thread_id ?? null,
+        threadCount: r.thread_count ?? 0,
+        threadLastReplyAt: r.thread_last_reply_at ?? null,
       };
     });
 
@@ -1454,6 +1502,107 @@ export class GroupDO extends DurableObject<Env> {
       {
         channelId,
         messages: messages.reverse(), // chronologically ascending
+        hasMore,
+      },
+      envelope.id,
+    );
+  }
+
+  private handleThreadFetch(ws: WebSocket, envelope: WsEnvelope): void {
+    const parse = ClientThreadFetchPayloadSchema.safeParse(envelope.d);
+    if (!parse.success) {
+      this.sendError(ws, 'INVALID_PAYLOAD', 'Alt mesaj sorgu parametreleri hatalı');
+      return;
+    }
+
+    const { channelId, threadId, before, limit } = parse.data;
+
+    let rows: SqlMessageRow[];
+    if (before) {
+      rows = [
+        ...this.sql.exec(
+          `SELECT * FROM messages WHERE channel_id = ? AND thread_id = ? AND id < ? AND deleted = 0 ORDER BY id DESC LIMIT ?`,
+          channelId,
+          threadId,
+          before,
+          limit + 1,
+        ),
+      ] as unknown as SqlMessageRow[];
+    } else {
+      rows = [
+        ...this.sql.exec(
+          `SELECT * FROM messages WHERE channel_id = ? AND thread_id = ? AND deleted = 0 ORDER BY id DESC LIMIT ?`,
+          channelId,
+          threadId,
+          limit + 1,
+        ),
+      ] as unknown as SqlMessageRow[];
+    }
+
+    const hasMore = rows.length > limit;
+    const slice = hasMore ? rows.slice(0, limit) : rows;
+
+    const messageIds = slice.map((m) => m.id);
+    const reactionMap: Record<string, Record<string, string[]>> = {};
+    if (messageIds.length > 0) {
+      const placeholders = messageIds.map(() => '?').join(',');
+      const reactRows = [
+        ...this.sql.exec(
+          `SELECT message_id, user_id, emoji FROM reactions WHERE message_id IN (${placeholders})`,
+          ...messageIds,
+        ),
+      ] as { message_id: string; user_id: string; emoji: string }[];
+      for (const r of reactRows) {
+        if (!reactionMap[r.message_id]) {
+          reactionMap[r.message_id] = {};
+        }
+        const emojiMap = reactionMap[r.message_id]!;
+        if (!emojiMap[r.emoji]) {
+          emojiMap[r.emoji] = [];
+        }
+        emojiMap[r.emoji]!.push(r.user_id);
+      }
+    }
+
+    const messages: Message[] = slice.map((r) => {
+      let attachments: Attachment[] = [];
+      if (r.attachments_json) {
+        try {
+          attachments = JSON.parse(r.attachments_json);
+        } catch {
+          attachments = [];
+        }
+      }
+
+      return {
+        id: r.id,
+        channelId: r.channel_id,
+        authorId: r.author_id,
+        authorName: r.author_name,
+        content: r.content,
+        replyTo: r.reply_to,
+        replyToAuthorName: r.reply_to_author_name ?? null,
+        replyToContent: r.reply_to_content ?? null,
+        attachments,
+        createdAt: r.created_at,
+        editedAt: r.edited_at,
+        deleted: Boolean(r.deleted),
+        reactions: reactionMap[r.id] ?? {},
+        externalSource: (r.external_source as 'discord') || undefined,
+        externalAvatarUrl: r.external_avatar_url || undefined,
+        threadId: r.thread_id ?? null,
+        threadCount: r.thread_count ?? 0,
+        threadLastReplyAt: r.thread_last_reply_at ?? null,
+      };
+    });
+
+    this.send(
+      ws,
+      WsServerEvents.THREAD_DATA,
+      {
+        channelId,
+        threadId,
+        messages: messages.reverse(),
         hasMore,
       },
       envelope.id,
@@ -2869,6 +3018,9 @@ export class GroupDO extends DurableObject<Env> {
             reactions: {},
             externalSource: 'discord',
             externalAvatarUrl: avatarUrl,
+            threadId: null,
+            threadCount: 0,
+            threadLastReplyAt: null,
           };
 
           this.broadcast(WsServerEvents.MSG_NEW, newEchoMsg);
