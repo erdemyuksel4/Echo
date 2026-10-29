@@ -1083,6 +1083,7 @@ Bu dosya her faz ve görev sonunda güncellenir.
   - ChannelList.tsx: Discord ses odaları ve katılımcıları canlı gösterimi.
   - MemberList.tsx: Discord çevrimiçi üyeleri ve oyun aktiviteleri gösterimi.
   - ChatMessageItem.tsx: Discord avatarları ve mor [DISCORD] rozeti ile mesaj gösterimi.
+  - websocket.ts: Discord senkronizasyonundan gelen mesajlar için ses ve Windows masaüstü bildirimleri sessize alındı (kullanıcıyı rahatsız etmez).
 - [x] **Test & Kalite Doğrulamaları:**
   - pnpm typecheck: Monorepo genelinde sıfır hata ile geçti.
   - pnpm lint: ESLint sıfır hata ile geçti.
