@@ -275,7 +275,7 @@ class EchoWebSocketService {
         const currentUserName = useAuthStore.getState().identity?.displayName;
 
         // Sound and notification if sent by another user
-        if (currentUserId && message.authorId !== currentUserId && message.externalSource !== 'discord') {
+        if (currentUserId && message.authorId !== currentUserId) {
           soundService.playNotification();
 
           const channel = chatStore.channels.find((c) => c.id === message.channelId);

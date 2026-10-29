@@ -39,16 +39,36 @@ export const ChatArea: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const dragCounterRef = useRef(0);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  const prevLastMsgIdRef = useRef<string | null>(null);
 
   const activeChannel = channels.find((c) => c.id === activeChannelId);
   const currentMessages = activeChannelId ? (messages[activeChannelId] ?? []) : [];
   const currentTyping = activeChannelId ? (typingUsers[activeChannelId] ?? []) : [];
   const myMember = members.find((m) => m.userId === identity?.userId);
 
-  // Auto scroll to bottom on new message
+  // Auto scroll to bottom only on new messages at the end
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (currentMessages.length > 0) {
+      const lastMsg = currentMessages[currentMessages.length - 1];
+      if (lastMsg && lastMsg.id !== prevLastMsgIdRef.current) {
+        prevLastMsgIdRef.current = lastMsg.id;
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      }
+    }
   }, [currentMessages]);
+
+  const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    const { scrollTop } = e.currentTarget;
+    if (scrollTop < 40 && !isLoadingHistory && currentMessages.length > 0 && activeChannelId) {
+      const oldestMsg = currentMessages[0];
+      if (oldestMsg) {
+        setIsLoadingHistory(true);
+        wsService.fetchHistory(activeChannelId, oldestMsg.id);
+        setTimeout(() => setIsLoadingHistory(false), 1500);
+      }
+    }
+  }, [isLoadingHistory, currentMessages, activeChannelId]);
 
   // Fetch channel history on channel change or connection
   useEffect(() => {
@@ -526,7 +546,12 @@ export const ChatArea: React.FC = () => {
       </div>
 
       {/* Message History */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div onScroll={handleScroll} className="flex-1 overflow-y-auto p-4 space-y-4">
+        {isLoadingHistory && (
+          <div className="flex justify-center py-2 text-xs text-indigo-400 font-medium animate-pulse">
+            Daha eski mesajlar yükleniyor...
+          </div>
+        )}
         {currentMessages.length === 0 ? (
           <div className="flex h-full flex-col justify-end p-6 pb-8 select-none">
             <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-800 border border-slate-700/60 text-white mb-4 shadow-lg shadow-slate-950/40">

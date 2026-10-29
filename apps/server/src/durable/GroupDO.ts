@@ -217,7 +217,9 @@ export class GroupDO extends DurableObject<Env> {
       CREATE TABLE IF NOT EXISTS discord_channel_mappings (
         echo_channel_id TEXT PRIMARY KEY,
         discord_channel_id TEXT NOT NULL,
-        last_discord_msg_id TEXT
+        last_discord_msg_id TEXT,
+        oldest_discord_msg_id TEXT,
+        has_more_discord INTEGER DEFAULT 1
       );
 
       CREATE TABLE IF NOT EXISTS discord_config (
@@ -272,6 +274,30 @@ export class GroupDO extends DurableObject<Env> {
       this.sql.exec(`ALTER TABLE discord_config ADD COLUMN sync_all_channels INTEGER DEFAULT 1`);
     } catch {
       // Column already exists
+    }
+
+    try {
+      this.sql.exec(`ALTER TABLE discord_channel_mappings ADD COLUMN oldest_discord_msg_id TEXT`);
+    } catch {
+      // Column already exists
+    }
+
+    try {
+      this.sql.exec(`ALTER TABLE discord_channel_mappings ADD COLUMN has_more_discord INTEGER DEFAULT 1`);
+    } catch {
+      // Column already exists
+    }
+
+    try {
+      this.sql.exec(`ALTER TABLE messages ADD COLUMN discord_message_id TEXT`);
+    } catch {
+      // Column already exists
+    }
+
+    try {
+      this.sql.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_discord_id ON messages (discord_message_id) WHERE discord_message_id IS NOT NULL`);
+    } catch {
+      // Index already exists
     }
 
     // Ensure at least one voice channel exists in existing groups
@@ -845,7 +871,7 @@ export class GroupDO extends DurableObject<Env> {
         this.handleReactRemove(ws, session, envelope);
         break;
       case WsClientEvents.HISTORY_FETCH:
-        this.handleHistoryFetch(ws, envelope);
+        await this.handleHistoryFetch(ws, envelope);
         break;
       case WsClientEvents.TYPING:
         this.handleTyping(session, envelope);
@@ -2553,6 +2579,131 @@ export class GroupDO extends DurableObject<Env> {
     }
   }
 
+  private async fetchDiscordChannelHistory(
+    echoChannelId: string,
+    mapping: {
+      echo_channel_id: string;
+      discord_channel_id: string;
+      last_discord_msg_id?: string | null;
+      oldest_discord_msg_id?: string | null;
+      has_more_discord?: number;
+    },
+    botToken: string,
+    limit = 25,
+  ): Promise<number> {
+    if (mapping.has_more_discord === 0) return 0;
+
+    try {
+      let url = `https://discord.com/api/v10/channels/${encodeURIComponent(mapping.discord_channel_id)}/messages?limit=${Math.min(limit, 50)}`;
+      if (mapping.oldest_discord_msg_id) {
+        url += `&before=${encodeURIComponent(mapping.oldest_discord_msg_id)}`;
+      }
+
+      const res = await fetch(url, {
+        headers: {
+          Authorization: `Bot ${botToken}`,
+          'User-Agent': 'Echo-App/1.0',
+        },
+      });
+
+      if (!res.ok) return 0;
+
+      const messages = (await res.json()) as Array<{
+        id: string;
+        content: string;
+        webhook_id?: string;
+        author: {
+          id: string;
+          username: string;
+          global_name?: string | null;
+          avatar?: string | null;
+          bot?: boolean;
+        };
+        attachments?: Array<{
+          id: string;
+          filename: string;
+          url: string;
+          size: number;
+          content_type?: string;
+          width?: number;
+          height?: number;
+        }>;
+        timestamp: string;
+      }>;
+
+      if (!Array.isArray(messages) || messages.length === 0) {
+        this.sql.exec(
+          `UPDATE discord_channel_mappings SET has_more_discord = 0 WHERE echo_channel_id = ?`,
+          echoChannelId,
+        );
+        return 0;
+      }
+
+      // Discord returns newest to oldest
+      const newestInBatch = messages[0]?.id;
+      const oldestInBatch = messages[messages.length - 1]?.id;
+
+      if (oldestInBatch) {
+        this.sql.exec(
+          `UPDATE discord_channel_mappings SET oldest_discord_msg_id = ? WHERE echo_channel_id = ?`,
+          oldestInBatch,
+          echoChannelId,
+        );
+      }
+
+      if (!mapping.last_discord_msg_id && newestInBatch) {
+        this.sql.exec(
+          `UPDATE discord_channel_mappings SET last_discord_msg_id = ? WHERE echo_channel_id = ?`,
+          newestInBatch,
+          echoChannelId,
+        );
+      }
+
+      for (const msg of messages) {
+        if (msg.webhook_id) continue;
+        if (msg.author.bot && msg.content.includes('[Echo]')) continue;
+
+        const createdAt = new Date(msg.timestamp).getTime() || Date.now();
+        const echoMsgId = ulid(createdAt);
+        const authorName = msg.author.global_name || msg.author.username;
+        const authorId = `discord-${msg.author.id}`;
+        const avatarUrl = msg.author.avatar
+          ? `https://cdn.discordapp.com/avatars/${msg.author.id}/${msg.author.avatar}.png?size=128`
+          : undefined;
+
+        const attachments: Attachment[] = (msg.attachments || []).map((att) => ({
+          id: ulid(createdAt),
+          name: att.filename,
+          size: att.size,
+          mimeType: att.content_type || 'application/octet-stream',
+          url: att.url,
+          type: att.content_type?.startsWith('image/gif') ? 'gif' : 'image',
+          width: att.width,
+          height: att.height,
+        }));
+
+        this.sql.exec(
+          `INSERT OR IGNORE INTO messages (id, channel_id, author_id, author_name, content, attachments_json, created_at, deleted, external_source, external_avatar_url, discord_message_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, 0, 'discord', ?, ?)`,
+          echoMsgId,
+          echoChannelId,
+          authorId,
+          authorName,
+          msg.content,
+          JSON.stringify(attachments),
+          createdAt,
+          avatarUrl || null,
+          msg.id,
+        );
+      }
+
+      return messages.length;
+    } catch (err) {
+      console.warn('[Discord History Fetch] Hata:', err);
+      return 0;
+    }
+  }
+
   private async syncDiscordMessages(config: {
     guildId: string;
     echoChannelId: string;
@@ -2579,10 +2730,14 @@ export class GroupDO extends DurableObject<Env> {
 
     for (const mapping of mappings) {
       try {
-        let url = `https://discord.com/api/v10/channels/${encodeURIComponent(mapping.discord_channel_id)}/messages?limit=10`;
-        if (mapping.last_discord_msg_id) {
-          url += `&after=${encodeURIComponent(mapping.last_discord_msg_id)}`;
+        // If channel hasn't loaded messages yet, pull the latest 25 messages silently as history
+        if (!mapping.last_discord_msg_id) {
+          await this.fetchDiscordChannelHistory(mapping.echo_channel_id, mapping, config.botToken, 25);
+          continue;
         }
+
+        // Channel already has a checkpoint: only query live new messages sent after last_discord_msg_id
+        const url = `https://discord.com/api/v10/channels/${encodeURIComponent(mapping.discord_channel_id)}/messages?limit=25&after=${encodeURIComponent(mapping.last_discord_msg_id)}`;
 
         const res = await fetch(url, {
           headers: {
@@ -2626,7 +2781,8 @@ export class GroupDO extends DurableObject<Env> {
           if (msg.webhook_id) continue;
           if (msg.author.bot && msg.content.includes('[Echo]')) continue;
 
-          const echoMsgId = ulid();
+          const createdAt = new Date(msg.timestamp).getTime() || Date.now();
+          const echoMsgId = ulid(createdAt);
           const authorName = msg.author.global_name || msg.author.username;
           const authorId = `discord-${msg.author.id}`;
           const avatarUrl = msg.author.avatar
@@ -2634,7 +2790,7 @@ export class GroupDO extends DurableObject<Env> {
             : undefined;
 
           const attachments: Attachment[] = (msg.attachments || []).map((att) => ({
-            id: ulid(),
+            id: ulid(createdAt),
             name: att.filename,
             size: att.size,
             mimeType: att.content_type || 'application/octet-stream',
@@ -2644,11 +2800,9 @@ export class GroupDO extends DurableObject<Env> {
             height: att.height,
           }));
 
-          const createdAt = new Date(msg.timestamp).getTime() || Date.now();
-
           this.sql.exec(
-            `INSERT INTO messages (id, channel_id, author_id, author_name, content, attachments_json, created_at, deleted, external_source, external_avatar_url)
-             VALUES (?, ?, ?, ?, ?, ?, ?, 0, 'discord', ?)`,
+            `INSERT OR IGNORE INTO messages (id, channel_id, author_id, author_name, content, attachments_json, created_at, deleted, external_source, external_avatar_url, discord_message_id)
+             VALUES (?, ?, ?, ?, ?, ?, ?, 0, 'discord', ?, ?)`,
             echoMsgId,
             mapping.echo_channel_id,
             authorId,
@@ -2657,6 +2811,7 @@ export class GroupDO extends DurableObject<Env> {
             JSON.stringify(attachments),
             createdAt,
             avatarUrl || null,
+            msg.id,
           );
 
           const newEchoMsg: Message = {

@@ -367,12 +367,19 @@ export const useChatStore = create<ChatState>((set) => ({
     })),
 
   setHistory: (channelId, messages) =>
-    set((state) => ({
-      messages: {
-        ...state.messages,
-        [channelId]: messages,
-      },
-    })),
+    set((state) => {
+      const existing = state.messages[channelId] ?? [];
+      const map = new Map();
+      for (const m of existing) map.set(m.id, m);
+      for (const m of messages) map.set(m.id, m);
+      const merged = Array.from(map.values()).sort((a, b) => a.id.localeCompare(b.id));
+      return {
+        messages: {
+          ...state.messages,
+          [channelId]: merged,
+        },
+      };
+    }),
 
   addChannel: (channel) =>
     set((state) => ({

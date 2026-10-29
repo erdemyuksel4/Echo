@@ -1083,7 +1083,9 @@ Bu dosya her faz ve görev sonunda güncellenir.
   - ChannelList.tsx: Discord ses odaları ve katılımcıları canlı gösterimi.
   - MemberList.tsx: Discord çevrimiçi üyeleri ve oyun aktiviteleri gösterimi.
   - ChatMessageItem.tsx: Discord avatarları ve mor [DISCORD] rozeti ile mesaj gösterimi.
-  - websocket.ts: Discord senkronizasyonundan gelen mesajlar için ses ve Windows masaüstü bildirimleri sessize alındı (kullanıcıyı rahatsız etmez).
+  - websocket.ts: Canlı gelen Discord mesajları için okunmadı sayacı ve bildirimler etkinleştirildi; geçmiş mesajlar sessizce arka planda yüklenir.
+  - GroupDO.ts: Geriye gittikçe dinamik geçmiş yükleme (history.fetch) eklendi. Kullanıcı yukarı kaydırdıkça Discord API'sinden önceki 50 mesaj peyderpey çekilir.
+  - ChatArea.tsx: Yukarı kaydırıldığında otomatik eski mesajları getiren infinite scroll entegrasyonu.
 - [x] **Test & Kalite Doğrulamaları:**
   - pnpm typecheck: Monorepo genelinde sıfır hata ile geçti.
   - pnpm lint: ESLint sıfır hata ile geçti.
