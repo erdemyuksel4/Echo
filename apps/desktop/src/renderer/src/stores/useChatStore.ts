@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Channel, GroupMember, Message, GroupMeta } from '@echo/shared';
+import type { Channel, GroupMember, Message, GroupMeta, DiscordState, ServerDiscordConfigPayload } from '@echo/shared';
 
 export interface GroupItem {
   id: string;
@@ -48,6 +48,8 @@ interface ChatState {
   replyingTo: Message | null;
   editingMessageId: string | null;
   unreadCounts: Record<string, number>; // channelId -> unread count
+  discordState: DiscordState | null;
+  discordConfig: ServerDiscordConfigPayload | null;
 
   setGroups: (groups: GroupItem[]) => void;
   addGroup: (group: GroupItem) => void;
@@ -81,6 +83,8 @@ interface ChatState {
   setMemberPresence: (userId: string, status: 'online' | 'idle' | 'offline') => void;
   setTypingUser: (channelId: string, displayName: string) => void;
   setDefaultInviteCode: (code: string | null) => void;
+  setDiscordState: (state: DiscordState | null) => void;
+  setDiscordConfig: (config: ServerDiscordConfigPayload | null) => void;
 }
 
 export const useChatStore = create<ChatState>((set) => ({
@@ -98,6 +102,11 @@ export const useChatStore = create<ChatState>((set) => ({
   replyingTo: null,
   editingMessageId: null,
   unreadCounts: {},
+  discordState: null,
+  discordConfig: null,
+
+  setDiscordState: (discordState) => set({ discordState }),
+  setDiscordConfig: (discordConfig) => set({ discordConfig }),
 
   setGroups: (groups) => {
     try {
@@ -141,6 +150,8 @@ export const useChatStore = create<ChatState>((set) => ({
           channels: [],
           members: [],
           defaultInviteCode: null,
+          discordState: null,
+          discordConfig: null,
         };
       }
 

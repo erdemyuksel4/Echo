@@ -483,10 +483,21 @@ export const ChatMessageItem: React.FC<Props> = ({
       <div
         onClick={handleOpenUserContextMenu}
         onContextMenu={handleOpenUserContextMenu}
-        className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full text-xs font-bold text-white shadow select-none cursor-pointer hover:opacity-90 transition-opacity"
-        style={{ backgroundColor: avatarColor }}
+        className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full text-xs font-bold text-white shadow select-none cursor-pointer hover:opacity-90 transition-opacity overflow-hidden"
+        style={{ backgroundColor: message.externalSource === 'discord' ? '#5865F2' : avatarColor }}
       >
-        {message.authorName.charAt(0).toUpperCase()}
+        {message.externalAvatarUrl ? (
+          <img
+            src={message.externalAvatarUrl}
+            alt={message.authorName}
+            className="h-full w-full object-cover"
+            onError={(e) => {
+              (e.target as HTMLElement).style.display = 'none';
+            }}
+          />
+        ) : (
+          message.authorName.charAt(0).toUpperCase()
+        )}
       </div>
 
       {/* Message Body */}
@@ -511,6 +522,11 @@ export const ChatMessageItem: React.FC<Props> = ({
           >
             {message.authorName}
           </span>
+          {message.externalSource === 'discord' && (
+            <span className="shrink-0 rounded bg-[#5865F2] px-1.5 py-0.2 text-[8px] font-black uppercase text-white tracking-wider shadow-sm select-none">
+              DISCORD
+            </span>
+          )}
           {message.authorId.startsWith('bot-') && (
             <span className="shrink-0 rounded bg-indigo-600 px-1.5 py-0.2 text-[8px] font-black uppercase text-white tracking-wider shadow-sm shadow-indigo-600/50 select-none">
               BOT

@@ -10,6 +10,7 @@ export * from './crypto/identity';
 export * from './markdown';
 export * from './schemas/media';
 export * from './schemas/music';
+export * from './schemas/discord';
 export * from './crypto/e2ee';
 export * from './schemas/bot';
 export * from './schemas/deviceLink';

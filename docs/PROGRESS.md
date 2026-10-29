@@ -19,6 +19,7 @@ Bu dosya her faz ve görev sonunda güncellenir.
 | Faz 10 | Gelişmiş İşbirliği & Güvenlik Özellikleri | Tamamlandı | `main`                    | Ekran kaydetme (.webm), Ekrana çizim/beyaz tahta, Uçtan Uca Şifreleme (E2EE), Uzaktan kontrol (TeamViewer tarzı)                       |
 | Faz 11 | Echo Mobil Versiyonu (Android & iOS)    | Tamamlandı | `main`                    | Flutter tabanlı, Ed25519 kimlik, WebRTC mesh ses & kamera, ekran izleme, DM, Markdown, Giphy, çizim tahtası, sıfır lint/hata             |
 | Faz 12 | Cihaz Eşleme (QR & Kod ile Oturum Açma) | Tamamlandı | `main`                    | X25519 Diffie-Hellman + AES-256-GCM E2EE kimlik transferi, QR Kod, 6 haneli eşleme kodu, OnboardingModal ve SettingsModal entegrasyonu |
+| Faz 13 | Discord Senkronizasyonu & Mesaj Köprüsü | Tamamlandı | `faz-13-discord-sync`     | Discord Sunucu Widget aktif kişiler & ses odaları gösterimi, çift yönlü Echo ↔ Discord sohbet köprüsü, DiscordSyncModal |
 
 ## Faz 0 — Kabul Kriterleri ve Gerçekleşenler
 
@@ -1058,4 +1059,35 @@ Bu dosya her faz ve görev sonunda güncellenir.
   - `.github/workflows/release.yml`: Hem `windows-latest` (NSIS .exe) hem `ubuntu-latest` (AppImage, deb, tar.gz) üzerinde otomatik derleme ve GitHub Releases yükleme iş akışı oluşturuldu.
   - `scripts/bump-version.mjs`: İşletim sistemine duyarlı derleme adımları eklendi, Linux dağıtım paketleri (`.AppImage`, `.deb`, `.tar.gz`, `latest-linux.yml`) GitHub Release varlıklarına dahil edildi.
   - `README.md`: Linux için önkoşullar, bağımlılıklar, AppImage çalıştırma izinleri ve Wayland notları eklendi.
+
+## Faz 13 — Discord Senkronizasyonu & Mesaj Köprüsü
+
+- [x] **Ortak Şemalar ve Protokol (`@echo/shared`):**
+  - `packages/shared/src/schemas/discord.ts`: `DiscordMemberSchema`, `DiscordVoiceChannelSchema`, `DiscordStateSchema`, `DiscordConfigSchema`, `ClientDiscordConfigSetPayloadSchema`, `ClientDiscordSyncNowPayloadSchema`, `ServerDiscordStatePayloadSchema`, `ServerDiscordConfigPayloadSchema`.
+  - `packages/shared/src/schemas/protocol.ts`: `DISCORD_CONFIG_SET`, `DISCORD_SYNC_NOW`, `DISCORD_STATE`, `DISCORD_CONFIG` protokol olayları tanımlandı.
+  - `packages/shared/src/schemas/message.ts`: `externalSource: 'discord'` ve `externalAvatarUrl` alanları eklendi.
+  - `packages/shared/src/__tests__/discord.test.ts`: Tüm şemalar ve yük doğrulamaları birim testleriyle doğrulandı (79/79 test geçti).
+- [x] **Sunucu Mimarisi & Cloudflare Free Hibernation (`apps/server`):**
+  - `GroupDO.ts`:
+    - SQLite `discord_config` tablosu (`guild_id`, `echo_channel_id`, `webhook_url`, `bot_token`, `discord_channel_id`, `last_discord_msg_id`, `enabled`).
+    - Discord Sunucu Widget API (`/api/guilds/{guildId}/widget.json`) entegrasyonu: Cloudflare Worker üzerinden engelsiz, sıfır token'lı aktif üye ve ses kanalları senkronizasyonu (15 sn akıllı önbellekleme, Cloudflare Free kotasını korur).
+    - Echo ➔ Discord Mesaj İletimi: Echo metin kanalına yazılan mesajların E2EE şifresini grup anahtarıyla çözüp yazarın Echo adıyla (`Erdem [Echo]`) Discord Webhook'a iletme.
+    - Discord ➔ Echo Mesaj Alma: Discord kanalında yazılan mesajları ve görselleri Cloudflare üzerinden çekip Echo'ya kaydetme, sonsuz döngü koruması (Echo webhook mesajlarını atlama) ve `[DISCORD]` rozetiyle anlık `msg.new` yayını.
+    - `apps/server/test/discord.spec.ts`: 3 yeni birim testi eklendi; toplam 32 sunucu testi hatasız geçti.
+- [x] **Masaüstü Arayüzü & Kullanıcı Deneyimi (`apps/desktop`):**
+  - `DiscordSyncModal.tsx`: Grup başlığındaki menüden açılan, Discord Sunucu ID (Guild ID), Webhook URL, Eşlenecek Echo Kanalı ve Bot Token/Kanal ID alanlarını içeren modern ayar modalı. Canlı bağlantı testi ve sunucu durumu göstergesi.
+  - `ChannelList.tsx`:
+    - Grup menüsüne Discord moruyla parlayan "Discord'la Eşle" butonu eklendi.
+    - Sol kanal listesinde ses kanallarının hemen altına "Discord Ses Odaları" paneli eklendi; Discord'daki hangi ses odasında kimlerin olduğunu, kullanıcı adlarını, avatarlarını, kulaklık/mikrofon durumlarını anlık listeler.
+  - `MemberList.tsx`:
+    - Sağ üye listesine "Discord'da Aktif — N" bölümü eklendi; Discord'da çevrimiçi, boşta veya rahatsız etmeyin durumundaki arkadaşlar, profil fotoğrafları ve oynadıkları oyun bilgisiyle (`🎮 Oyun Adı`) canlı görüntülenir.
+  - `ChatMessageItem.tsx`:
+    - Discord'dan gelen mesajlarda yazarın Discord profil fotoğrafı, adı ve yanında Discord morunda şık `[DISCORD]` rozetiyle sanki yerel bir mesaj gibi akması sağlandı.
+  - `useChatStore.ts` & `websocket.ts`: `discordState` ve `discordConfig` durum yönetimi bağlandı.
+- [x] **Test & Kalite Doğrulamaları:**
+  - `pnpm typecheck`: Monorepo genelinde sıfır hata ile geçti.
+  - `pnpm lint`: ESLint sıfır hata ile geçti.
+  - `pnpm test`: 21 test dosyası, 111 testin tamamı (%100) başarıyla geçti.
+  - `pnpm --filter @echo/desktop build`: Electron ve Vite derlemesi sıfır hata ile tamamlandı.
+
 

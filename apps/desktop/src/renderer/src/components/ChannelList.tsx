@@ -26,6 +26,7 @@ import { webrtcService } from '../services/webrtc';
 import { SettingsModal } from './SettingsModal';
 import { VoicePanel } from './VoicePanel';
 import { DeleteGroupModal } from './DeleteGroupModal';
+import { DiscordSyncModal } from './DiscordSyncModal';
 import { SERVER_HTTP_URL } from '../config';
 import { UserContextMenu, type ContextMenuUser } from './UserContextMenu';
 
@@ -39,6 +40,7 @@ export const ChannelList: React.FC = () => {
     setActiveChannel,
     defaultInviteCode,
     unreadCounts,
+    discordState,
   } = useChatStore();
 
   const { currentChannelId, channelParticipants, audioState } =
@@ -54,6 +56,7 @@ export const ChannelList: React.FC = () => {
   const [newChannelName, setNewChannelName] = useState('');
   const [newChannelType, setNewChannelType] = useState<'text' | 'voice'>('text');
   const [showSettings, setShowSettings] = useState(false);
+  const [showDiscordModal, setShowDiscordModal] = useState(false);
   const [settingsTab, setSettingsTab] = useState<'voice' | 'notifications' | 'about'>('voice');
 
   const openSettings = (tab: 'voice' | 'notifications' | 'about' = 'voice') => {
@@ -341,6 +344,18 @@ export const ChannelList: React.FC = () => {
             </div>
 
             <div className="h-px bg-slate-800/80 my-1" />
+
+            <button
+              type="button"
+              onClick={() => {
+                setShowGroupMenu(false);
+                setShowDiscordModal(true);
+              }}
+              className="flex w-full items-center justify-between rounded px-2.5 py-1.5 text-xs text-[#5865F2] hover:bg-slate-800 transition font-medium"
+            >
+              <span>Discord'la Eşle</span>
+              <Share2 className="h-3.5 w-3.5 text-[#5865F2]" />
+            </button>
 
             <button
               type="button"
@@ -650,6 +665,66 @@ export const ChannelList: React.FC = () => {
             })}
           </div>
         </div>
+
+        {/* Discord Voice Channels (Synchronized from Discord Server) */}
+        {discordState?.voiceChannels && discordState.voiceChannels.length > 0 && (
+          <div className="pt-3 border-t border-slate-800/60">
+            <div className="flex items-center justify-between px-2 text-[11px] font-bold uppercase tracking-wider text-[#5865F2] mb-1.5">
+              <span className="flex items-center gap-1.5">
+                <Share2 className="h-3 w-3" />
+                <span>Discord Ses Odaları</span>
+              </span>
+              <span className="text-[10px] text-slate-500 font-normal">
+                {discordState.voiceChannels.reduce((acc, c) => acc + c.members.length, 0)} kişi
+              </span>
+            </div>
+
+            <div className="space-y-1">
+              {discordState.voiceChannels.map((vc) => (
+                <div key={vc.id} className="space-y-0.5">
+                  <div className="flex items-center gap-2 rounded-md px-2 py-1 text-xs text-slate-300 bg-slate-950/40 border border-slate-800/40">
+                    <Volume2 className="h-3.5 w-3.5 text-[#5865F2] shrink-0" />
+                    <span className="truncate font-medium">{vc.name}</span>
+                    {vc.members.length > 0 && (
+                      <span className="ml-auto text-[10px] font-mono text-slate-400 bg-slate-800/80 px-1 rounded">
+                        {vc.members.length}
+                      </span>
+                    )}
+                  </div>
+
+                  {vc.members.length > 0 && (
+                    <div className="pl-4 pr-1 py-0.5 space-y-1">
+                      {vc.members.map((m) => (
+                        <div key={m.id} className="flex items-center gap-2 rounded px-1.5 py-0.5 text-xs text-slate-300">
+                          <div className="h-4 w-4 rounded-full bg-[#5865F2] overflow-hidden shrink-0 flex items-center justify-center text-[9px] font-bold text-white shadow-sm">
+                            {m.avatarUrl ? (
+                              <img src={m.avatarUrl} alt={m.username} className="h-full w-full object-cover" />
+                            ) : (
+                              m.username.charAt(0).toUpperCase()
+                            )}
+                          </div>
+                          <span className="truncate text-[11px]">{m.username}</span>
+                          <div className="ml-auto flex items-center gap-1">
+                            {m.mute && (
+                              <span title="Susturuldu">
+                                <MicOff className="h-2.5 w-2.5 text-rose-400" />
+                              </span>
+                            )}
+                            {m.deaf && (
+                              <span title="Sağırlaştırıldı">
+                                <VolumeX className="h-2.5 w-2.5 text-rose-400" />
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Voice Panel (Active Voice Connection controls) */}
@@ -682,6 +757,11 @@ export const ChannelList: React.FC = () => {
         isOpen={showSettings}
         onClose={() => setShowSettings(false)}
         initialTab={settingsTab}
+      />
+
+      <DiscordSyncModal
+        isOpen={showDiscordModal}
+        onClose={() => setShowDiscordModal(false)}
       />
 
       {activeGroupMeta && (

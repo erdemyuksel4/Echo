@@ -45,6 +45,15 @@ import {
   type Attachment,
   MusicActionSchema,
   type MusicPlaybackState,
+  ClientDiscordConfigSetPayloadSchema,
+  ClientDiscordSyncNowPayloadSchema,
+  type DiscordState,
+  type DiscordMember,
+  type DiscordVoiceChannel,
+  isE2EEMessage,
+  parseE2EEMessage,
+  deriveKeyFromSecret,
+  decryptText,
 } from '@echo/shared';
 import type { Env } from '../index';
 
@@ -87,6 +96,8 @@ interface SqlMessageRow {
   created_at: number;
   edited_at: number | null;
   deleted: number;
+  external_source?: string | null;
+  external_avatar_url?: string | null;
 }
 
 export class GroupDO extends DurableObject<Env> {
@@ -96,6 +107,8 @@ export class GroupDO extends DurableObject<Env> {
   private userVoiceChannel: Map<string, string> = new Map(); // userId -> channelId
   private screenShares: Map<string, Map<string, ScreenShareState>> = new Map(); // channelId -> (userId -> ScreenShareState)
   private musicStates: Map<string, MusicPlaybackState> = new Map(); // channelId -> MusicPlaybackState
+  private cachedDiscordState: DiscordState | null = null;
+  private lastDiscordSync: number = 0;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -197,6 +210,16 @@ export class GroupDO extends DurableObject<Env> {
         joined_at INTEGER NOT NULL,
         PRIMARY KEY(channel_id, user_id)
       );
+
+      CREATE TABLE IF NOT EXISTS discord_config (
+        guild_id TEXT PRIMARY KEY,
+        echo_channel_id TEXT,
+        webhook_url TEXT,
+        bot_token TEXT,
+        discord_channel_id TEXT,
+        last_discord_msg_id TEXT,
+        enabled INTEGER NOT NULL DEFAULT 1
+      );
     `);
 
     try {
@@ -213,6 +236,18 @@ export class GroupDO extends DurableObject<Env> {
 
     try {
       this.sql.exec(`ALTER TABLE messages ADD COLUMN attachments_json TEXT DEFAULT '[]'`);
+    } catch {
+      // Column already exists
+    }
+
+    try {
+      this.sql.exec(`ALTER TABLE messages ADD COLUMN external_source TEXT`);
+    } catch {
+      // Column already exists
+    }
+
+    try {
+      this.sql.exec(`ALTER TABLE messages ADD COLUMN external_avatar_url TEXT`);
     } catch {
       // Column already exists
     }
@@ -848,6 +883,12 @@ export class GroupDO extends DurableObject<Env> {
       case WsClientEvents.MUSIC_ACTION:
         this.handleMusicAction(ws, session, envelope);
         break;
+      case WsClientEvents.DISCORD_CONFIG_SET:
+        await this.handleDiscordConfigSet(ws, session, envelope);
+        break;
+      case WsClientEvents.DISCORD_SYNC_NOW:
+        await this.handleDiscordSyncNow(ws, session, envelope);
+        break;
       default:
         this.sendError(ws, 'UNKNOWN_EVENT', `Bilinmeyen olay: ${envelope.t}`);
         break;
@@ -922,8 +963,14 @@ export class GroupDO extends DurableObject<Env> {
     // Send active voice participants across all voice channels
     this.sendAllVoiceParticipants(ws);
 
+    // Send discord state & config if configured
+    this.sendDiscordInfo(ws);
+
     // Broadcast presence changed to online
     this.broadcast(WsServerEvents.PRESENCE_CHANGED, { userId, status: 'online' });
+
+    // Sync Discord state asynchronously
+    this.ctx.waitUntil(this.syncDiscordState().catch(() => {}));
   }
 
   private ensureVoiceRoomsLoaded(): void {
@@ -1073,6 +1120,11 @@ export class GroupDO extends DurableObject<Env> {
 
     // Broadcast to all connected group members with client nonce echo
     this.broadcast(WsServerEvents.MSG_NEW, message, envelope.id);
+
+    // Forward to Discord webhook if configured for this channel
+    this.ctx.waitUntil(
+      this.forwardToDiscordWebhook(channelId, session.displayName, content, attachments).catch(() => {}),
+    );
   }
 
   private handleMessageEdit(
@@ -1325,6 +1377,8 @@ export class GroupDO extends DurableObject<Env> {
         editedAt: r.edited_at,
         deleted: Boolean(r.deleted),
         reactions: reactionMap[r.id] ?? {},
+        externalSource: (r.external_source as 'discord') || undefined,
+        externalAvatarUrl: r.external_avatar_url || undefined,
       };
     });
 
@@ -2155,5 +2209,379 @@ export class GroupDO extends DurableObject<Env> {
 
   private sendRateLimited(ws: WebSocket, retryAfterMs: number): void {
     this.send(ws, WsServerEvents.RATE_LIMITED, { retryAfterMs });
+  }
+
+  // ── Discord Synchronization Handlers ─────────────────────────────────────
+
+  private getDiscordConfig(): {
+    guildId: string;
+    echoChannelId: string;
+    webhookUrl: string;
+    botToken: string;
+    discordChannelId: string;
+    lastDiscordMsgId: string;
+    enabled: boolean;
+  } | null {
+    const rows = [...this.sql.exec(`SELECT * FROM discord_config LIMIT 1`)] as {
+      guild_id: string;
+      echo_channel_id: string;
+      webhook_url: string;
+      bot_token: string;
+      discord_channel_id: string;
+      last_discord_msg_id: string;
+      enabled: number;
+    }[];
+    if (rows.length === 0 || !rows[0]) return null;
+    const r = rows[0];
+    return {
+      guildId: r.guild_id,
+      echoChannelId: r.echo_channel_id || '',
+      webhookUrl: r.webhook_url || '',
+      botToken: r.bot_token || '',
+      discordChannelId: r.discord_channel_id || '',
+      lastDiscordMsgId: r.last_discord_msg_id || '',
+      enabled: Boolean(r.enabled),
+    };
+  }
+
+  private sendDiscordInfo(ws: WebSocket): void {
+    const config = this.getDiscordConfig();
+    if (!config || !config.enabled) return;
+
+    this.send(ws, WsServerEvents.DISCORD_CONFIG, {
+      guildId: config.guildId,
+      echoChannelId: config.echoChannelId,
+      hasWebhook: Boolean(config.webhookUrl),
+      hasBotToken: Boolean(config.botToken),
+      discordChannelId: config.discordChannelId || undefined,
+      enabled: config.enabled,
+    });
+
+    if (this.cachedDiscordState) {
+      this.send(ws, WsServerEvents.DISCORD_STATE, this.cachedDiscordState);
+    }
+  }
+
+  private async handleDiscordConfigSet(
+    ws: WebSocket,
+    session: WsSessionAttachment,
+    envelope: WsEnvelope,
+  ): Promise<void> {
+    if (session.role !== 'owner' && session.role !== 'admin') {
+      this.sendError(ws, 'FORBIDDEN', 'Discord ayarlarını yalnızca grup yöneticileri değiştirebilir');
+      return;
+    }
+
+    const parse = ClientDiscordConfigSetPayloadSchema.safeParse(envelope.d);
+    if (!parse.success) {
+      this.sendError(ws, 'INVALID_PAYLOAD', 'Geçersiz Discord yapılandırma parametreleri');
+      return;
+    }
+
+    const { guildId, echoChannelId, webhookUrl, botToken, discordChannelId, enabled } = parse.data;
+
+    this.sql.exec(`DELETE FROM discord_config`);
+    if (guildId) {
+      this.sql.exec(
+        `INSERT INTO discord_config (guild_id, echo_channel_id, webhook_url, bot_token, discord_channel_id, last_discord_msg_id, enabled)
+         VALUES (?, ?, ?, ?, ?, '', ?)`,
+        guildId,
+        echoChannelId || '',
+        webhookUrl || '',
+        botToken || '',
+        discordChannelId || '',
+        enabled ? 1 : 0,
+      );
+    }
+
+    this.broadcast(WsServerEvents.DISCORD_CONFIG, {
+      guildId,
+      echoChannelId: echoChannelId || '',
+      hasWebhook: Boolean(webhookUrl),
+      hasBotToken: Boolean(botToken),
+      discordChannelId: discordChannelId || undefined,
+      enabled,
+    });
+
+    if (guildId && enabled) {
+      await this.syncDiscordState(true);
+    } else {
+      this.cachedDiscordState = null;
+    }
+  }
+
+  private async handleDiscordSyncNow(
+    _ws: WebSocket,
+    _session: WsSessionAttachment,
+    envelope: WsEnvelope,
+  ): Promise<void> {
+    ClientDiscordSyncNowPayloadSchema.safeParse(envelope.d);
+    await this.syncDiscordState(false);
+  }
+
+  private async syncDiscordState(force = false): Promise<void> {
+    const config = this.getDiscordConfig();
+    if (!config || !config.enabled || !config.guildId) return;
+
+    const now = Date.now();
+    if (!force && now - this.lastDiscordSync < 15_000 && this.cachedDiscordState) {
+      return;
+    }
+    this.lastDiscordSync = now;
+
+    try {
+      const widgetRes = await fetch(
+        `https://discord.com/api/guilds/${encodeURIComponent(config.guildId)}/widget.json`,
+        {
+          headers: { 'User-Agent': 'Echo-App/1.0' },
+        },
+      );
+
+      if (widgetRes.ok) {
+        const data = (await widgetRes.json()) as {
+          id?: string;
+          name?: string;
+          instant_invite?: string | null;
+          channels?: Array<{ id: string; name: string; position?: number }>;
+          members?: Array<{
+            id: string;
+            username: string;
+            discriminator?: string;
+            avatar?: string | null;
+            avatar_url?: string | null;
+            status?: 'online' | 'idle' | 'dnd' | 'offline';
+            game?: { name: string };
+            channel_id?: string | null;
+            mute?: boolean;
+            deaf?: boolean;
+            self_mute?: boolean;
+            self_deaf?: boolean;
+          }>;
+        };
+
+        const rawMembers = data.members || [];
+        const rawChannels = data.channels || [];
+
+        const onlineMembers: DiscordMember[] = [];
+        for (const m of rawMembers) {
+          onlineMembers.push({
+            id: m.id,
+            username: m.username,
+            discriminator: m.discriminator,
+            avatar: m.avatar,
+            avatarUrl: m.avatar_url,
+            status: m.status || 'online',
+            activity: m.game?.name || null,
+            channelId: m.channel_id || null,
+            mute: Boolean(m.mute),
+            deaf: Boolean(m.deaf),
+            selfMute: Boolean(m.self_mute),
+            selfDeaf: Boolean(m.self_deaf),
+          });
+        }
+
+        const voiceChannels: DiscordVoiceChannel[] = rawChannels.map((c) => ({
+          id: c.id,
+          name: c.name,
+          position: c.position || 0,
+          members: onlineMembers.filter((m) => m.channelId === c.id),
+        }));
+
+        this.cachedDiscordState = {
+          guildId: config.guildId,
+          guildName: data.name || 'Discord Sunucusu',
+          instantInvite: data.instant_invite || null,
+          onlineMembers,
+          voiceChannels,
+          lastSyncedAt: now,
+          error: null,
+        };
+
+        this.broadcast(WsServerEvents.DISCORD_STATE, this.cachedDiscordState);
+      } else if (widgetRes.status === 403 || widgetRes.status === 404) {
+        this.cachedDiscordState = {
+          guildId: config.guildId,
+          guildName: 'Discord Sunucusu',
+          instantInvite: null,
+          onlineMembers: [],
+          voiceChannels: [],
+          lastSyncedAt: now,
+          error:
+            "Discord sunucu ayarlarında 'Sunucu Widget'ı' henüz etkinleştirilmemiş. Lütfen Discord Sunucu Ayarları -> Widget menüsünden 'Sunucu Widget'ını Etkinleştir' seçeneğini açın.",
+        };
+        this.broadcast(WsServerEvents.DISCORD_STATE, this.cachedDiscordState);
+      }
+    } catch (err) {
+      console.warn('[Discord Sync] Widget sorgulama hatası:', err);
+    }
+
+    if (config.botToken && config.discordChannelId && config.echoChannelId) {
+      await this.syncDiscordMessages(config);
+    }
+  }
+
+  private async syncDiscordMessages(config: {
+    guildId: string;
+    echoChannelId: string;
+    webhookUrl: string;
+    botToken: string;
+    discordChannelId: string;
+    lastDiscordMsgId: string;
+    enabled: boolean;
+  }): Promise<void> {
+    try {
+      let url = `https://discord.com/api/v10/channels/${encodeURIComponent(config.discordChannelId)}/messages?limit=10`;
+      if (config.lastDiscordMsgId) {
+        url += `&after=${encodeURIComponent(config.lastDiscordMsgId)}`;
+      }
+
+      const res = await fetch(url, {
+        headers: {
+          Authorization: `Bot ${config.botToken}`,
+          'User-Agent': 'Echo-App/1.0',
+        },
+      });
+
+      if (!res.ok) return;
+
+      const messages = (await res.json()) as Array<{
+        id: string;
+        content: string;
+        webhook_id?: string;
+        author: {
+          id: string;
+          username: string;
+          global_name?: string | null;
+          avatar?: string | null;
+          bot?: boolean;
+        };
+        attachments?: Array<{
+          id: string;
+          filename: string;
+          url: string;
+          size: number;
+          content_type?: string;
+          width?: number;
+          height?: number;
+        }>;
+        timestamp: string;
+      }>;
+
+      if (!Array.isArray(messages) || messages.length === 0) return;
+
+      const sorted = messages.sort((a, b) => a.id.localeCompare(b.id));
+      let newestId = config.lastDiscordMsgId;
+
+      for (const msg of sorted) {
+        newestId = msg.id;
+        if (msg.webhook_id) continue;
+
+        const echoMsgId = ulid();
+        const authorName = msg.author.global_name || msg.author.username;
+        const authorId = `discord-${msg.author.id}`;
+        const avatarUrl = msg.author.avatar
+          ? `https://cdn.discordapp.com/avatars/${msg.author.id}/${msg.author.avatar}.png?size=128`
+          : undefined;
+
+        const attachments: Attachment[] = (msg.attachments || []).map((att) => ({
+          id: ulid(),
+          name: att.filename,
+          size: att.size,
+          mimeType: att.content_type || 'application/octet-stream',
+          url: att.url,
+          type: att.content_type?.startsWith('image/gif') ? 'gif' : 'image',
+          width: att.width,
+          height: att.height,
+        }));
+
+        const createdAt = new Date(msg.timestamp).getTime() || Date.now();
+
+        this.sql.exec(
+          `INSERT INTO messages (id, channel_id, author_id, author_name, content, attachments_json, created_at, deleted, external_source, external_avatar_url)
+           VALUES (?, ?, ?, ?, ?, ?, ?, 0, 'discord', ?)`,
+          echoMsgId,
+          config.echoChannelId,
+          authorId,
+          authorName,
+          msg.content,
+          JSON.stringify(attachments),
+          createdAt,
+          avatarUrl || null,
+        );
+
+        const newEchoMsg: Message = {
+          id: echoMsgId,
+          channelId: config.echoChannelId,
+          authorId,
+          authorName,
+          content: msg.content,
+          replyTo: null,
+          replyToAuthorName: null,
+          replyToContent: null,
+          attachments,
+          createdAt,
+          editedAt: null,
+          deleted: false,
+          reactions: {},
+          externalSource: 'discord',
+          externalAvatarUrl: avatarUrl,
+        };
+
+        this.broadcast(WsServerEvents.MSG_NEW, newEchoMsg);
+      }
+
+      if (newestId && newestId !== config.lastDiscordMsgId) {
+        this.sql.exec(
+          `UPDATE discord_config SET last_discord_msg_id = ? WHERE guild_id = ?`,
+          newestId,
+          config.guildId,
+        );
+      }
+    } catch (err) {
+      console.warn('[Discord Sync] Mesaj sorgulama hatası:', err);
+    }
+  }
+
+  private async forwardToDiscordWebhook(
+    channelId: string,
+    displayName: string,
+    content: string,
+    attachments: Attachment[],
+  ): Promise<void> {
+    const config = this.getDiscordConfig();
+    if (!config || !config.enabled || !config.webhookUrl) return;
+    if (config.echoChannelId && config.echoChannelId !== channelId) return;
+
+    let plainText = content;
+    if (isE2EEMessage(content)) {
+      try {
+        const key = await deriveKeyFromSecret(`Echo-Secret-Channel-${channelId}`);
+        const parsed = parseE2EEMessage(content);
+        if (parsed) {
+          plainText = await decryptText(parsed.cipherText, parsed.iv, key);
+        }
+      } catch {
+        // use original
+      }
+    }
+
+    if (!plainText && attachments.length === 0) return;
+    if (plainText.startsWith('!') || plainText.startsWith('/')) return;
+
+    try {
+      await fetch(config.webhookUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'User-Agent': 'Echo-App/1.0',
+        },
+        body: JSON.stringify({
+          content: plainText || (attachments.length > 0 ? '📷 [Görsel / Ek]' : ''),
+          username: `${displayName} [Echo]`,
+        }),
+      });
+    } catch (err) {
+      console.warn('[Discord Webhook] İletim başarısız:', err);
+    }
   }
 }

@@ -20,6 +20,9 @@ import {
   type ServerRemoteControlRequestPayload,
   type ServerRemoteControlResponsePayload,
   type ServerRemoteControlEventPayload,
+  type DiscordState,
+  type ServerDiscordConfigPayload,
+  type ClientDiscordConfigSetPayload,
 } from '@echo/shared';
 import { useChatStore } from '../stores/useChatStore';
 import { useAuthStore } from '../stores/useAuthStore';
@@ -599,6 +602,20 @@ class EchoWebSocketService {
         break;
       }
 
+      case WsServerEvents.DISCORD_STATE: {
+        if (isActive) {
+          useChatStore.getState().setDiscordState(envelope.d as DiscordState);
+        }
+        break;
+      }
+
+      case WsServerEvents.DISCORD_CONFIG: {
+        if (isActive) {
+          useChatStore.getState().setDiscordConfig(envelope.d as ServerDiscordConfigPayload);
+        }
+        break;
+      }
+
       case WsServerEvents.ERROR: {
         const data = envelope.d as { code: string; message: string };
         console.error(`Server error (${groupId}):`, data.code, data.message);
@@ -896,6 +913,14 @@ class EchoWebSocketService {
       }
     }
     this.sockets.delete(groupId);
+  }
+
+  setDiscordConfig(config: ClientDiscordConfigSetPayload): void {
+    this.send(WsClientEvents.DISCORD_CONFIG_SET, config);
+  }
+
+  syncDiscordNow(): void {
+    this.send(WsClientEvents.DISCORD_SYNC_NOW, {});
   }
 
   disconnect(): void {

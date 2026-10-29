@@ -39,6 +39,8 @@ export const MessageSchema = z.object({
   editedAt: z.number().int().positive().nullable().default(null),
   deleted: z.boolean().default(false),
   reactions: z.record(z.string(), z.array(z.string())).default({}),
+  externalSource: z.enum(['discord']).optional(),
+  externalAvatarUrl: z.string().optional(),
 });
 
 export type Message = z.infer<typeof MessageSchema>;

@@ -8,7 +8,7 @@ import { useDmStore } from '../stores/useDmStore';
 import { UserContextMenu, type ContextMenuUser } from './UserContextMenu';
 
 export const MemberList: React.FC = () => {
-  const { members, activeGroupId } = useChatStore();
+  const { members, activeGroupId, discordState } = useChatStore();
   const { identity } = useAuthStore();
   const { channelParticipants, audioState } = useVoiceStore();
   const [contextMenu, setContextMenu] = useState<{
@@ -135,6 +135,61 @@ export const MemberList: React.FC = () => {
             Çevrimdışı — {offlineMembers.length}
           </div>
           <div className="space-y-0.5">{offlineMembers.map(renderMember)}</div>
+        </div>
+      )}
+
+      {discordState?.onlineMembers && discordState.onlineMembers.length > 0 && (
+        <div className="mt-4 pt-3 border-t border-slate-800/60">
+          <div className="px-2 text-[11px] font-bold uppercase tracking-wider text-[#5865F2] mb-1.5 flex items-center justify-between">
+            <span>Discord'da Aktif — {discordState.onlineMembers.length}</span>
+          </div>
+          <div className="space-y-0.5">
+            {discordState.onlineMembers.map((m) => {
+              const statusColor =
+                m.status === 'online'
+                  ? 'bg-emerald-500'
+                  : m.status === 'idle'
+                    ? 'bg-amber-500'
+                    : m.status === 'dnd'
+                      ? 'bg-rose-500'
+                      : 'bg-slate-600';
+
+              return (
+                <div
+                  key={m.id}
+                  className="flex items-center gap-2.5 rounded-md px-2 py-1.5 transition hover:bg-slate-800/40 select-none"
+                  title={m.activity ? `${m.username} • ${m.activity}` : m.username}
+                >
+                  <div className="relative">
+                    <div className="flex h-7 w-7 items-center justify-center rounded-full text-[11px] font-bold text-white shadow bg-[#5865F2] overflow-hidden">
+                      {m.avatarUrl ? (
+                        <img src={m.avatarUrl} alt={m.username} className="h-full w-full object-cover" />
+                      ) : (
+                        m.username.charAt(0).toUpperCase()
+                      )}
+                    </div>
+                    <span className={`absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full ring-2 ring-slate-900 ${statusColor}`} />
+                  </div>
+
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1">
+                      <span className="truncate text-xs font-medium text-slate-200">
+                        {m.username}
+                      </span>
+                      <span className="shrink-0 rounded bg-[#5865F2]/20 border border-[#5865F2]/30 px-1 py-0.2 text-[8px] font-bold text-[#5865F2]">
+                        DC
+                      </span>
+                    </div>
+                    {m.activity && (
+                      <div className="truncate text-[10px] text-slate-400">
+                        🎮 {m.activity}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 

@@ -56,6 +56,8 @@ export const WsClientEvents = {
   MUSIC_ACTION: 'music.action',
   BOT_COMMAND_INVOKE: 'bot.command_invoke',
   BOT_STATE_UPDATE: 'bot.state_update',
+  DISCORD_CONFIG_SET: 'discord.config_set',
+  DISCORD_SYNC_NOW: 'discord.sync_now',
 } as const;
 
 // Server to Client Events
@@ -101,6 +103,8 @@ export const WsServerEvents = {
   MUSIC_STATE: 'music.state',
   BOT_COMMAND_INVOKE: 'bot.command_invoke',
   BOT_STATE_UPDATE: 'bot.state_update',
+  DISCORD_STATE: 'discord.state',
+  DISCORD_CONFIG: 'discord.config',
 } as const;
 
 // Event Payload Schemas
@@ -258,6 +262,7 @@ export const ServerDmReadPayloadSchema = z.object({
 
 export * from './screenshare';
 export * from './music';
+export * from './discord';
 
 export {
   AuthPayloadSchema,
