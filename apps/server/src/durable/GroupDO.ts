@@ -330,8 +330,23 @@ export class GroupDO extends DurableObject<Env> {
   }
 
   async alarm(): Promise<void> {
+    const config = this.getDiscordConfig();
+    if (config && config.enabled) {
+      try {
+        await this.syncDiscordState(false);
+      } catch (err) {
+        console.warn('[Discord Alarm Sync] Hata:', err);
+      }
+    }
+
+    // If there are connected clients and discord is enabled, schedule recurring background sync every 6 seconds
+    const hasSockets = this.ctx.getWebSockets().length > 0;
+    if (hasSockets && config && config.enabled) {
+      await this.ctx.storage.setAlarm(Date.now() + 6000);
+      return;
+    }
+
     const ninetyDaysAgo = Date.now() - 90 * 24 * 60 * 60 * 1000;
-    // 90-day retention cleanup
     this.sql.exec(`DELETE FROM messages WHERE created_at < ?`, ninetyDaysAgo);
     this.sql.exec(`DELETE FROM reactions WHERE message_id NOT IN (SELECT id FROM messages)`);
     this.sql.exec(
@@ -339,7 +354,6 @@ export class GroupDO extends DurableObject<Env> {
       ninetyDaysAgo,
     );
     this.sql.exec(`DELETE FROM attachments WHERE created_at < ?`, ninetyDaysAgo);
-    // Reschedule in 24 hours
     await this.ctx.storage.setAlarm(Date.now() + 24 * 60 * 60 * 1000);
   }
 
@@ -1019,8 +1033,9 @@ export class GroupDO extends DurableObject<Env> {
     // Broadcast presence changed to online
     this.broadcast(WsServerEvents.PRESENCE_CHANGED, { userId, status: 'online' });
 
-    // Sync Discord state asynchronously
+    // Sync Discord state asynchronously and trigger alarm loop
     this.ctx.waitUntil(this.syncDiscordState().catch(() => {}));
+    this.ctx.storage.setAlarm(Date.now() + 1000).catch(() => {});
   }
 
   private ensureVoiceRoomsLoaded(): void {
@@ -2365,6 +2380,7 @@ export class GroupDO extends DurableObject<Env> {
         await this.syncDiscordAllChannels(guildId, botToken);
       }
       await this.syncDiscordState(true);
+      this.ctx.storage.setAlarm(Date.now() + 1000).catch(() => {});
     } else {
       this.cachedDiscordState = null;
     }
@@ -2546,7 +2562,32 @@ export class GroupDO extends DurableObject<Env> {
 
         const chanType = dc.type === 2 ? 'voice' : 'text';
 
-        if (existing.length === 0) {
+        const nameMatch = [
+          ...this.sql.exec(
+            `SELECT id FROM channels WHERE LOWER(name) = LOWER(?) AND type = ? AND discord_channel_id IS NULL`,
+            dc.name,
+            chanType,
+          ),
+        ] as { id: string }[];
+
+        if (existing.length > 0 && existing[0]) {
+          this.sql.exec(`UPDATE channels SET name = ? WHERE id = ?`, dc.name, existing[0].id);
+        } else if (nameMatch.length > 0 && nameMatch[0]) {
+          const matchedId = nameMatch[0].id;
+          this.sql.exec(
+            `UPDATE channels SET discord_channel_id = ?, position = ? WHERE id = ?`,
+            dc.id,
+            dc.position || 0,
+            matchedId,
+          );
+          this.sql.exec(
+            `INSERT OR REPLACE INTO discord_channel_mappings (echo_channel_id, discord_channel_id)
+             VALUES (?, ?)`,
+            matchedId,
+            dc.id,
+          );
+          channelsChanged = true;
+        } else {
           const chanId = ulid();
           this.sql.exec(
             `INSERT INTO channels (id, name, type, position, created_at, discord_channel_id)
@@ -2565,8 +2606,6 @@ export class GroupDO extends DurableObject<Env> {
             dc.id,
           );
           channelsChanged = true;
-        } else if (existing[0]) {
-          this.sql.exec(`UPDATE channels SET name = ? WHERE id = ?`, dc.name, existing[0].id);
         }
       }
 
@@ -2861,7 +2900,16 @@ export class GroupDO extends DurableObject<Env> {
       ...this.sql.exec(`SELECT discord_channel_id FROM discord_channel_mappings WHERE echo_channel_id = ?`, channelId),
     ] as { discord_channel_id: string }[];
 
-    const discordChannelId = mappingRows[0]?.discord_channel_id || (config.echoChannelId === channelId ? config.discordChannelId : null);
+    let discordChannelId = mappingRows[0]?.discord_channel_id || (config.echoChannelId === channelId ? config.discordChannelId : null);
+
+    if (!discordChannelId) {
+      const chanRows = [
+        ...this.sql.exec(`SELECT discord_channel_id, name FROM channels WHERE id = ?`, channelId),
+      ] as { discord_channel_id?: string; name: string }[];
+      if (chanRows[0]?.discord_channel_id) {
+        discordChannelId = chanRows[0].discord_channel_id;
+      }
+    }
 
     let plainText = content;
     if (isE2EEMessage(content)) {
