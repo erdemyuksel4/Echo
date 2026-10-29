@@ -47,6 +47,7 @@ export const DiscordSyncModal: React.FC<DiscordSyncModalProps> = ({ isOpen, onCl
       if (discordConfig) {
         setGuildId(discordConfig.guildId || '');
         setBotToken(discordConfig.hasBotToken ? '••••••••••••••••' : '');
+        setWebhookUrl(discordConfig.hasWebhook ? '••••••••••••••••' : '');
         setSyncAllChannels(discordConfig.syncAllChannels !== false);
         setEchoChannelId(discordConfig.echoChannelId || '');
         setDiscordChannelId(discordConfig.discordChannelId || '');
@@ -74,11 +75,12 @@ export const DiscordSyncModal: React.FC<DiscordSyncModalProps> = ({ isOpen, onCl
     setFeedback(null);
 
     const actualBotToken = botToken.startsWith('••••') ? undefined : botToken.trim() || undefined;
+    const actualWebhookUrl = webhookUrl.startsWith('••••') ? undefined : webhookUrl.trim() || undefined;
 
     wsService.setDiscordConfig({
       guildId: guildId.trim(),
       echoChannelId: echoChannelId || (textChannels[0]?.id ?? ''),
-      webhookUrl: webhookUrl.trim() || undefined,
+      webhookUrl: actualWebhookUrl,
       botToken: actualBotToken,
       discordChannelId: discordChannelId.trim() || undefined,
       syncAllChannels,
@@ -237,6 +239,15 @@ export const DiscordSyncModal: React.FC<DiscordSyncModalProps> = ({ isOpen, onCl
               <p className="mt-1 text-[11px] text-slate-400 leading-tight">
                 Discord Developer Portal'dan aldığınız Bot Token. Discord sunucunuz özel/gizli kalsa bile tüm kanalları otomatik bağlar.
               </p>
+              <div className="mt-2.5 rounded-lg bg-indigo-950/40 border border-indigo-500/20 p-2.5 text-[11px] leading-relaxed text-slate-300">
+                <p className="font-semibold text-indigo-300 flex items-center gap-1.5 mb-1">
+                  <span>💡 Mesajların adınızla görünmesi için (Webhook İzni):</span>
+                </p>
+                <p className="text-slate-400">
+                  Discord sunucunuzda <b>Sunucu Ayarları → Roller → Bot Rolünüz → İzinler</b> sekmesine gidip <b>&quot;Webhook&apos;ları Yönet&quot; (Manage Webhooks)</b> iznini açık yapın.
+                  Böylece Echo&apos;dan yazdığınız mesajlar Discord&apos;da bot adı yerine otomatik olarak doğrudan kendi kullanıcı adınızla görünür.
+                </p>
+              </div>
             </div>
 
             {/* 3. Auto-sync All Channels Checkbox */}

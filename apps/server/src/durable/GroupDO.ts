@@ -115,6 +115,7 @@ export class GroupDO extends DurableObject<Env> {
   private screenShares: Map<string, Map<string, ScreenShareState>> = new Map(); // channelId -> (userId -> ScreenShareState)
   private musicStates: Map<string, MusicPlaybackState> = new Map(); // channelId -> MusicPlaybackState
   private cachedDiscordState: DiscordState | null = null;
+  private discordWebhookError: string | null = null;
   private lastDiscordSync: number = 0;
 
   constructor(ctx: DurableObjectState, env: Env) {
@@ -2505,34 +2506,41 @@ export class GroupDO extends DurableObject<Env> {
 
     const { guildId, echoChannelId, webhookUrl, botToken, discordChannelId, syncAllChannels, enabled } = parse.data;
 
+    const existing = this.getDiscordConfig();
+    const finalBotToken = botToken !== undefined ? botToken : (existing?.botToken || '');
+    const finalWebhookUrl = webhookUrl !== undefined ? webhookUrl : (existing?.webhookUrl || '');
+    const finalDiscordChannelId = discordChannelId !== undefined ? discordChannelId : (existing?.discordChannelId || '');
+    const finalEchoChannelId = echoChannelId !== undefined ? echoChannelId : (existing?.echoChannelId || '');
+    const finalSyncAll = syncAllChannels !== undefined ? syncAllChannels : (existing?.syncAllChannels ?? true);
+
     this.sql.exec(`DELETE FROM discord_config`);
     if (guildId) {
       this.sql.exec(
         `INSERT INTO discord_config (guild_id, echo_channel_id, webhook_url, bot_token, discord_channel_id, last_discord_msg_id, sync_all_channels, enabled)
          VALUES (?, ?, ?, ?, ?, '', ?, ?)`,
         guildId,
-        echoChannelId || '',
-        webhookUrl || '',
-        botToken || '',
-        discordChannelId || '',
-        syncAllChannels !== false ? 1 : 0,
+        finalEchoChannelId,
+        finalWebhookUrl,
+        finalBotToken,
+        finalDiscordChannelId,
+        finalSyncAll ? 1 : 0,
         enabled ? 1 : 0,
       );
     }
 
     this.broadcast(WsServerEvents.DISCORD_CONFIG, {
       guildId,
-      echoChannelId: echoChannelId || '',
-      hasWebhook: Boolean(webhookUrl),
-      hasBotToken: Boolean(botToken),
-      discordChannelId: discordChannelId || undefined,
-      syncAllChannels: syncAllChannels !== false,
+      echoChannelId: finalEchoChannelId || '',
+      hasWebhook: Boolean(finalWebhookUrl),
+      hasBotToken: Boolean(finalBotToken),
+      discordChannelId: finalDiscordChannelId || undefined,
+      syncAllChannels: finalSyncAll,
       enabled,
     });
 
     if (guildId && enabled) {
-      if (botToken && syncAllChannels !== false) {
-        await this.syncDiscordAllChannels(guildId, botToken);
+      if (finalBotToken && finalSyncAll) {
+        await this.syncDiscordAllChannels(guildId, finalBotToken);
       }
       await this.syncDiscordState(true);
       this.ctx.storage.setAlarm(Date.now() + 1000).catch(() => {});
@@ -2625,7 +2633,7 @@ export class GroupDO extends DurableObject<Env> {
           onlineMembers,
           voiceChannels,
           lastSyncedAt: now,
-          error: null,
+          error: this.discordWebhookError || null,
         };
 
         this.broadcast(WsServerEvents.DISCORD_STATE, this.cachedDiscordState);
@@ -2727,6 +2735,11 @@ export class GroupDO extends DurableObject<Env> {
 
         if (existing.length > 0 && existing[0]) {
           this.sql.exec(`UPDATE channels SET name = ? WHERE id = ?`, dc.name, existing[0].id);
+          this.sql.exec(
+            `INSERT OR IGNORE INTO discord_channel_mappings (echo_channel_id, discord_channel_id) VALUES (?, ?)`,
+            existing[0].id,
+            dc.id,
+          );
         } else if (nameMatch.length > 0 && nameMatch[0]) {
           const matchedId = nameMatch[0].id;
           this.sql.exec(
@@ -3107,14 +3120,30 @@ export class GroupDO extends DurableObject<Env> {
             webhookUrl,
             discordChannelId,
           );
+          const mapped = [...this.sql.exec(`SELECT echo_channel_id FROM discord_channel_mappings WHERE discord_channel_id = ?`, discordChannelId)];
+          if (mapped.length === 0) {
+            const chan = [...this.sql.exec(`SELECT id FROM channels WHERE discord_channel_id = ?`, discordChannelId)] as { id: string }[];
+            if (chan.length > 0 && chan[0]) {
+              this.sql.exec(
+                `INSERT OR REPLACE INTO discord_channel_mappings (echo_channel_id, discord_channel_id, webhook_url) VALUES (?, ?, ?)`,
+                chan[0].id,
+                discordChannelId,
+                webhookUrl,
+              );
+            }
+          }
+          this.discordWebhookError = null;
           return webhookUrl;
         }
       } else {
         const errText = await createRes.text();
         console.warn('[Discord Webhook Auto-Create Failed]:', createRes.status, errText);
-        if (createRes.status === 403 && this.cachedDiscordState) {
-          this.cachedDiscordState.error = "Bot'un Discord'da webhook oluşturma izni yok. Mesajların doğrudan adınızla görünmesi için Discord Sunucu Ayarları -> Roller kısmından Botunuza 'Webhook'ları Yönet' (Manage Webhooks) yetkisi verin.";
-          this.broadcast(WsServerEvents.DISCORD_STATE, this.cachedDiscordState);
+        if (createRes.status === 403) {
+          this.discordWebhookError = "Bot'un Discord'da webhook oluşturma izni yok. Mesajların doğrudan adınızla görünmesi için Discord Sunucu Ayarları -> Roller kısmından Botunuza 'Webhook'ları Yönet' (Manage Webhooks) yetkisi verin.";
+          if (this.cachedDiscordState) {
+            this.cachedDiscordState.error = this.discordWebhookError;
+            this.broadcast(WsServerEvents.DISCORD_STATE, this.cachedDiscordState);
+          }
         }
       }
     } catch (err) {
@@ -3146,6 +3175,10 @@ export class GroupDO extends DurableObject<Env> {
       if (chanRows[0]?.discord_channel_id) {
         discordChannelId = chanRows[0].discord_channel_id;
       }
+    }
+
+    if (!discordChannelId && config.discordChannelId) {
+      discordChannelId = config.discordChannelId;
     }
 
     let plainText = content;
@@ -3188,9 +3221,9 @@ export class GroupDO extends DurableObject<Env> {
     }
 
     // 2. Fallback: Manual webhook URL if configured
-    if (config.webhookUrl && config.echoChannelId === channelId) {
+    if (config.webhookUrl) {
       try {
-        await fetch(config.webhookUrl, {
+        const hookRes = await fetch(config.webhookUrl, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -3201,7 +3234,7 @@ export class GroupDO extends DurableObject<Env> {
             username: displayName,
           }),
         });
-        return;
+        if (hookRes.ok) return;
       } catch (err) {
         console.warn('[Discord Webhook] İletim başarısız:', err);
       }
